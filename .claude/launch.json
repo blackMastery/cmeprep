@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cmeprep-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "//": "autoPort must stay false: Supabase's additional_redirect_urls is an exact-match allow-list pinned to http://localhost:3000/auth/confirm, and NEXT_PUBLIC_SITE_URL matches. On any other port, email verification and password-reset links silently fall back to site_url and land on the wrong page.",
+      "autoPort": false
+    }
+  ]
+}

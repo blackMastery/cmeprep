@@ -1,26 +1,257 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-public-sans);
   --font-mono: var(--font-geist-mono);
+  /* Poppins carries the brand: wordmark, headings, and question stems.
+     Public Sans stays on body copy and dense UI. */
+  --font-heading: var(--font-poppins);
+  --font-display: var(--font-poppins);
+  --font-brand: var(--font-poppins);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* cmeprep.me brand */
+  --color-coral: var(--coral);
+  --color-coral-deep: var(--coral-deep);
+  --color-brand-surface: var(--brand-surface);
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-sun: var(--sun);
+  --color-ink: var(--ink);
+  --color-blush: var(--blush);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Brand primitives — cmeprep.me */
+  --coral: #e85d42; /* primary */
+  --coral-deep: #c8462e; /* hover / pressed */
+  --teal: #3ebfa0; /* success + gradient end */
+  --teal-deep: #2e9b80;
+  --sun: #ffd34e; /* headline + CTA accent */
+  --ink: #1f2226;
+  --blush: #feeee9; /* warm tinted sections */
+
+  /* Large brand fields (hero, CTA band) sit a shade below the button coral —
+     a full-bleed field of the button colour vibrates at that size. */
+  --brand-surface: #dc5138;
+
+  /* Semantic tokens */
+  --background: #fdfbfa;
+  --foreground: var(--ink);
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink);
+  --primary: var(--coral);
+  --primary-foreground: #ffffff;
+  --secondary: var(--blush);
+  --secondary-foreground: var(--coral-deep);
+  --muted: #f5f1ef;
+  --muted-foreground: #6c6a6e;
+  --accent: var(--blush);
+  --accent-foreground: var(--coral-deep);
+  /* Deliberately deeper than the coral primary. The brand palette is coral +
+     teal, so "incorrect" has no free hue of its own — this keeps a wrong
+     answer from reading as a primary-highlighted one. Correct/incorrect are
+     still carried by check/cross icons, never by colour alone. */
+  --destructive: #bf3320;
+  --destructive-foreground: #ffffff;
+  --success: var(--teal-deep);
+  --success-foreground: #ffffff;
+  --border: #ebe5e2;
+  --input: #ebe5e2;
+  --ring: var(--coral);
+  --chart-1: var(--coral);
+  --chart-2: var(--teal);
+  --chart-3: #f0a58f;
+  --chart-4: var(--ink);
+  --chart-5: #a9a29b;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--coral);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--blush);
+  --sidebar-accent-foreground: var(--coral-deep);
+  --sidebar-border: #ebe5e2;
+  --sidebar-ring: var(--coral);
+}
+
+.dark {
+  --coral: #f2775c; /* lifted for contrast on dark */
+  --coral-deep: #d85238;
+  --brand-surface: #b8402a;
+  --teal: #4ecdaa;
+  --teal-deep: #3bb492;
+  --sun: #ffd97a;
+  --ink: #1f2226;
+  --blush: #33241f;
+
+  --background: #16181b;
+  --foreground: #f3efec;
+  --card: #1e2125;
+  --card-foreground: #f3efec;
+  --popover: #1e2125;
+  --popover-foreground: #f3efec;
+  --primary: var(--coral);
+  --primary-foreground: #21100b;
+  --secondary: var(--blush);
+  --secondary-foreground: #f7b9a6;
+  --muted: #262a2e;
+  --muted-foreground: #a5a2a6;
+  --accent: var(--blush);
+  --accent-foreground: #f7b9a6;
+  --destructive: #f2604a;
+  --destructive-foreground: #21100b;
+  --success: var(--teal);
+  --success-foreground: #06231b;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 14%);
+  --ring: var(--coral);
+  --chart-1: var(--coral);
+  --chart-2: var(--teal);
+  --chart-3: #b3705c;
+  --chart-4: #d8d4cd;
+  --chart-5: #6f6a72;
+  --sidebar: #1e2125;
+  --sidebar-foreground: #f3efec;
+  --sidebar-primary: var(--coral);
+  --sidebar-primary-foreground: #21100b;
+  --sidebar-accent: #262a2e;
+  --sidebar-accent-foreground: #f7b9a6;
+  --sidebar-border: rgb(255 255 255 / 10%);
+  --sidebar-ring: var(--coral);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans antialiased;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--crimson) 18%, transparent);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Touch targets.
+   The `xs` button sizes are 24px, which clears WCAG 2.5.8 AA but is fiddly
+   under a thumb — and the admin reorder arrows sit next to each other. Grow
+   them on small screens and on any coarse pointer. Done by min-height rather
+   than an expanded ::after hit area, because phantom areas on adjacent
+   buttons would overlap and cause mis-taps.
+
+   Keyed off `data-size` rather than `data-slot="button"`: when a Button is
+   used `asChild` inside a Radix trigger, Slot overwrites data-slot (to
+   "dialog-trigger" and friends), so a data-slot selector silently misses
+   exactly the destructive buttons that most need the bigger target. */
+@media (max-width: 640px), (pointer: coarse) {
+  [data-size="xs"],
+  [data-size="icon-xs"],
+  [data-size="icon-sm"] {
+    min-height: 36px;
+  }
+  [data-size="icon-xs"],
+  [data-size="icon-sm"] {
+    min-width: 36px;
+  }
+}
+
+/* ── ECG motif ─────────────────────────────────────────────── */
+
+@keyframes ecg-draw {
+  0% {
+    stroke-dashoffset: var(--ecg-length, 600);
+    opacity: 0.4;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes ecg-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes ecg-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.ecg-animate {
+  stroke-dasharray: var(--ecg-length, 600);
+  animation: ecg-draw 2.4s ease-out infinite;
+}
+
+.ecg-pulse {
+  animation: ecg-pulse 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecg-animate,
+  .ecg-pulse {
+    animation: none;
+    stroke-dasharray: none;
+  }
 }
