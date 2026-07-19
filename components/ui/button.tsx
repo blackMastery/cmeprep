@@ -9,8 +9,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // coral-deep is darker than --coral in BOTH themes, so one hover
+        // class covers light and dark — no dark: override needed.
         default:
-          "bg-primary text-primary-foreground hover:bg-crimson-deep dark:hover:bg-[color-mix(in_oklch,var(--crimson),black_16%)]",
+          "bg-primary text-primary-foreground hover:bg-coral-deep",
         outline:
           "border-primary/50 text-primary bg-transparent hover:border-primary hover:bg-accent aria-expanded:bg-accent",
         "outline-muted":
@@ -19,8 +21,10 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+        // Derived from --destructive itself rather than a brand primitive, so
+        // renaming palette tokens can't silently kill the hover again.
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-crimson-deep focus-visible:border-destructive/40 focus-visible:ring-destructive/30 dark:hover:bg-[color-mix(in_oklch,var(--crimson),black_16%)]",
+          "bg-destructive text-destructive-foreground hover:bg-[color-mix(in_oklab,var(--destructive),black_14%)] focus-visible:border-destructive/40 focus-visible:ring-destructive/30",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

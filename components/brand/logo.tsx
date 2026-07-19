@@ -1,42 +1,24 @@
+import Image from "next/image";
 import Link from "next/link";
-import { Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const LOGO_SRC = "/logo.jpg";
+const LOGO_WIDTH = 1952;
+const LOGO_HEIGHT = 528;
 
 type LogoSize = "sm" | "md" | "lg";
 
-const SIZES: Record<
-  LogoSize,
-  { tile: string; icon: string; word: string; tagline: string; gap: string }
-> = {
-  sm: {
-    tile: "size-7 rounded-lg",
-    icon: "size-4",
-    word: "text-base",
-    tagline: "text-[0.45rem] tracking-[0.2em]",
-    gap: "gap-2",
-  },
-  md: {
-    tile: "size-10 rounded-xl",
-    icon: "size-6",
-    word: "text-2xl",
-    tagline: "text-[0.55rem] tracking-[0.22em]",
-    gap: "gap-2.5",
-  },
-  lg: {
-    tile: "size-14 rounded-2xl",
-    icon: "size-8",
-    word: "text-4xl sm:text-5xl",
-    tagline: "text-[0.7rem] tracking-[0.3em]",
-    gap: "gap-4",
-  },
+const SIZES: Record<LogoSize, { height: number; className: string }> = {
+  sm: { height: 28, className: "h-7 w-auto" },
+  md: { height: 40, className: "h-10 w-auto" },
+  lg: { height: 72, className: "h-16 w-auto sm:h-[4.5rem]" },
 };
 
 /**
- * The cmeprep.me lockup: a stethoscope tile beside the wordmark.
+ * The cmeprep.me lockup — brand mark, wordmark and tagline as a single asset.
  *
- * The wordmark's identity comes from its weight contrast — "cmeprep" bold,
- * ".me" light — set in the brand typeface (Poppins), not the body or display
- * faces. `onDark` switches it for the gradient hero and the ink footer.
+ * `withTagline`, `withMark` and `onDark` are kept for call-site compatibility;
+ * the image already includes the mark and tagline on its own coral field.
  */
 export function LogoMark({
   size = "md",
@@ -45,17 +27,25 @@ export function LogoMark({
   size?: LogoSize;
   className?: string;
 }) {
-  const s = SIZES[size];
+  // Crop to the left square of the banner (stethoscope tile).
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center bg-gradient-to-br from-[#ee7a55] to-[#bf4229] text-white shadow-[0_0_24px_-6px_rgba(232,93,66,0.75)]",
-        s.tile,
+        "relative inline-block shrink-0 overflow-hidden",
+        size === "sm" && "size-7 rounded-lg",
+        size === "md" && "size-10 rounded-xl",
+        size === "lg" && "size-14 rounded-2xl",
         className
       )}
       aria-hidden="true"
     >
-      <Stethoscope className={s.icon} strokeWidth={2} />
+      <Image
+        src={LOGO_SRC}
+        alt=""
+        fill
+        className="object-cover object-left"
+        sizes="56px"
+      />
     </span>
   );
 }
@@ -64,48 +54,29 @@ export function Logo({
   className,
   href = "/",
   size = "md",
-  withTagline = false,
-  withMark = true,
-  onDark = false,
 }: {
   className?: string;
   href?: string | null;
   size?: LogoSize;
+  /** @deprecated Included in the logo asset. */
   withTagline?: boolean;
+  /** @deprecated Included in the logo asset. */
   withMark?: boolean;
+  /** @deprecated Logo asset has its own background. */
   onDark?: boolean;
 }) {
   const s = SIZES[size];
 
   const lockup = (
-    <span className={cn("inline-flex flex-col", className)}>
-      <span className={cn("inline-flex items-center", s.gap)}>
-        {withMark && <LogoMark size={size} />}
-
-        <span
-          className={cn(
-            "font-brand leading-none tracking-tight",
-            s.word,
-            onDark ? "text-white" : "text-foreground"
-          )}
-        >
-          <span className="font-bold">cmeprep</span>
-          <span className="font-light">.me</span>
-        </span>
-      </span>
-
-      {withTagline && (
-        <span
-          className={cn(
-            "mt-2 font-brand font-light uppercase",
-            s.tagline,
-            onDark ? "text-[#f8d9bc]" : "text-muted-foreground"
-          )}
-        >
-          Smarter prep . Better outcomes
-        </span>
-      )}
-    </span>
+    <Image
+      src={LOGO_SRC}
+      alt="cmeprep.me — Smarter prep. Better outcomes"
+      width={LOGO_WIDTH}
+      height={LOGO_HEIGHT}
+      className={cn(s.className, "rounded-md object-contain", className)}
+      sizes={`(max-width: 640px) ${s.height * 4}px, ${Math.round((s.height * LOGO_WIDTH) / LOGO_HEIGHT)}px`}
+      priority={size === "lg"}
+    />
   );
 
   if (href === null) return lockup;

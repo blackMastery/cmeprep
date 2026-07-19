@@ -176,8 +176,13 @@
   html {
     @apply font-sans antialiased;
   }
+  /* Uses --coral, not the retired --crimson. A var() that resolves to
+     nothing is invalid at computed-value time, which makes `background`
+     compute to its initial value (transparent) rather than falling back to
+     the browser default — i.e. selection becomes invisible, not blue. */
   ::selection {
-    background: color-mix(in srgb, var(--crimson) 18%, transparent);
+    background: color-mix(in srgb, var(--coral) 28%, transparent);
+    color: var(--foreground);
   }
 }
 

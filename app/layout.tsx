@@ -30,6 +30,10 @@ export const metadata: Metadata = {
   },
   description:
     "Practice questions and timed mock exams for medical board and exit examinations. Unlimited questions across 7 question banks plus an OSCE station bank — CAMC, USMLE, PLAB, NCLEX, MBBS and MCDN.",
+  icons: {
+    icon: "/logo.jpg",
+    apple: "/logo.jpg",
+  },
 };
 
 export default function RootLayout({

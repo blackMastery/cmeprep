@@ -12,7 +12,7 @@ export default function AuthLayout({
       <main className="flex flex-1 items-center justify-center px-4 py-10 sm:py-16">
         <div className="w-full max-w-md">
           <div className="mb-8 flex flex-col items-center gap-3">
-            <Logo withTagline className="items-center text-center" />
+            <Logo withTagline size="lg" />
             <EcgLine className="h-4 w-24 text-primary/60" strokeWidth={2} />
           </div>
           {children}
