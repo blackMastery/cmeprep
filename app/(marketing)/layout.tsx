@@ -14,7 +14,7 @@ export default async function MarketingLayout({
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-4">
-          <Logo />
+          <Logo tagline="inline" />
           <nav className="ml-auto hidden items-center gap-1 sm:flex">
             <Button variant="ghost" size="sm" asChild>
               <Link href="#features">Features</Link>
@@ -51,7 +51,11 @@ export default async function MarketingLayout({
         <div className="mx-auto w-full max-w-6xl px-4 py-12">
           <div className="flex flex-wrap items-start justify-between gap-8">
             <div className="max-w-xs">
-              <Logo href={null} withTagline onDark />
+              <Logo
+                href={null}
+                tagline="stacked"
+                taglineClassName="text-[#a9a29b]"
+              />
               <p className="mt-4 text-sm text-[#a9a29b]">
                 Practice questions and timed mock exams for medical board and
                 exit examinations.

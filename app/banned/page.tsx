@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Account suspended" };
 export default function BannedPage() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 px-4 text-center">
-      <Logo />
+      <Logo tagline="stacked" />
       <span className="flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
         <ShieldAlert className="size-7" aria-hidden="true" />
       </span>

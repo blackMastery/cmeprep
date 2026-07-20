@@ -25,7 +25,7 @@ export function PhoneMockup() {
           <div className="bg-brand-surface px-5 pt-10 pb-8 text-white">
             <div className="flex items-center justify-between text-[0.7rem]">
               <span aria-hidden="true">☰</span>
-              <Logo href={null} size="sm" onDark />
+              <Logo href={null} size="sm" />
             </div>
 
             <h3 className="mt-6 font-display text-xl leading-snug font-semibold">

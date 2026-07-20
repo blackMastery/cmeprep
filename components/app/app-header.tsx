@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { LogOut, User as UserIcon } from "lucide-react";
 import { logout } from "@/app/(auth)/actions";
 import type { SessionUser } from "@/lib/auth";
+import { MobileNav } from "@/components/app/app-nav";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,22 +26,9 @@ export function AppHeader({ user }: { user: SessionUser }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4">
-        <Logo href="/dashboard" />
-
-        <nav className="ml-4 hidden items-center gap-1 sm:flex">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/dashboard">Dashboard</Link>
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/tests/new">New test</Link>
-          </Button>
-          {profile.role === "admin" && (
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/admin">Admin</Link>
-            </Button>
-          )}
-        </nav>
+      <div className="flex h-16 w-full items-center gap-2 px-4 sm:gap-4">
+        <MobileNav user={user} />
+        <Logo href="/dashboard" tagline="inline" />
 
         <div className="ml-auto flex items-center gap-2">
           <Badge

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
+import { AdminSidebar } from "@/components/admin/admin-nav";
 
 export const metadata: Metadata = {
   title: { default: "Admin", template: "%s · Admin · cmeprep.me" },
@@ -27,7 +28,10 @@ export default async function AdminLayout({
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <AdminHeader user={user} />
-      <main className="flex-1">{children}</main>
+      <div className="flex flex-1">
+        <AdminSidebar />
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { AppHeader } from "@/components/app/app-header";
 import { AppChrome } from "@/components/app/app-chrome";
+import { AppSidebar } from "@/components/app/app-nav";
 
 /**
  * Authoritative gate for the whole authenticated area. proxy.ts does a cheap
@@ -19,7 +20,12 @@ export default async function AppLayout({
       <AppChrome>
         <AppHeader user={user} />
       </AppChrome>
-      <main className="flex-1">{children}</main>
+      <div className="flex flex-1">
+        <AppChrome>
+          <AppSidebar user={user} />
+        </AppChrome>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }

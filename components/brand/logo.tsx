@@ -50,24 +50,29 @@ export function LogoMark({
   );
 }
 
+/** Expansion of the CME acronym, shown as text so it stays crisp and themed. */
+const TAGLINE = "Complete Medical Examinations Prep";
+
 export function Logo({
   className,
   href = "/",
   size = "md",
+  tagline,
+  taglineClassName,
 }: {
   className?: string;
   href?: string | null;
   size?: LogoSize;
-  /** @deprecated Included in the logo asset. */
-  withTagline?: boolean;
-  /** @deprecated Included in the logo asset. */
-  withMark?: boolean;
-  /** @deprecated Logo asset has its own background. */
-  onDark?: boolean;
+  /**
+   * Render "Complete Medical Examinations Prep" beside (`inline`, hidden on
+   * phones) or beneath (`stacked`) the banner. Omit for the image alone.
+   */
+  tagline?: "inline" | "stacked";
+  taglineClassName?: string;
 }) {
   const s = SIZES[size];
 
-  const lockup = (
+  const image = (
     <Image
       src={LOGO_SRC}
       alt="cmeprep.me — Smarter prep. Better outcomes"
@@ -77,6 +82,31 @@ export function Logo({
       sizes={`(max-width: 640px) ${s.height * 4}px, ${Math.round((s.height * LOGO_WIDTH) / LOGO_HEIGHT)}px`}
       priority={size === "lg"}
     />
+  );
+
+  const lockup = tagline ? (
+    <span
+      className={cn(
+        "inline-flex",
+        tagline === "stacked" ? "flex-col items-center gap-2" : "items-center"
+      )}
+    >
+      {image}
+      <span
+        className={cn(
+          "font-medium uppercase text-muted-foreground",
+          tagline === "inline" &&
+            "ml-3 hidden max-w-44 border-l border-border pl-3 text-[10px]/[1.4] tracking-[0.14em] sm:block",
+          tagline === "stacked" &&
+            "text-center text-[11px]/[1.4] tracking-[0.18em]",
+          taglineClassName
+        )}
+      >
+        {TAGLINE}
+      </span>
+    </span>
+  ) : (
+    image
   );
 
   if (href === null) return lockup;

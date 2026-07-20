@@ -96,7 +96,12 @@ export default function MarketingPage() {
 
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:py-24">
           <div className="max-w-2xl text-white">
-            <Logo href={null} size="lg" withTagline onDark />
+            <Logo
+              href={null}
+              size="lg"
+              tagline="stacked"
+              taglineClassName="text-white/90"
+            />
 
             <h1 className="mt-8 font-display text-4xl leading-[1.12] font-semibold tracking-tight sm:text-5xl lg:text-[3.4rem]">
               Pass your Medical Board
