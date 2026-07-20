@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import { listQuestions } from "@/lib/admin/questions";
 import { listTaxonomy } from "@/lib/admin/taxonomy";
 import type { Difficulty, QuestionType } from "@/lib/supabase/types";
@@ -55,12 +55,20 @@ export default async function AdminQuestionsPage(
             {result.total} question{result.total === 1 ? "" : "s"} matching.
           </p>
         </div>
-        <Button size="lg" asChild>
-          <Link href="/admin/questions/new">
-            <Plus data-icon="inline-start" />
-            New question
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="lg" variant="outline" asChild>
+            <Link href="/admin/questions/import">
+              <FileUp data-icon="inline-start" />
+              Import
+            </Link>
+          </Button>
+          <Button size="lg" asChild>
+            <Link href="/admin/questions/new">
+              <Plus data-icon="inline-start" />
+              New question
+            </Link>
+          </Button>
+        </div>
       </header>
 
       <QuestionFilters taxonomy={taxonomy} />

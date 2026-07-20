@@ -9,6 +9,7 @@ export type AuditAction =
   | "question.unpublish"
   | "question.delete"
   | "question.restore"
+  | "question.bulk_import"
   | "question.image.remove"
   | "option.correctness_change"
   | "subject.create"
