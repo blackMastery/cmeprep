@@ -5,13 +5,9 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { emailSchema, fullNameSchema, passwordSchema } from "@/lib/validation";
 
 export type AuthState = { error?: string; success?: string } | null;
-
-const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address");
-const passwordSchema = z
-  .string()
-  .min(8, "Password must be at least 8 characters");
 
 async function siteUrl() {
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -57,7 +53,7 @@ export async function register(
 ): Promise<AuthState> {
   const parsed = z
     .object({
-      fullName: z.string().trim().min(2, "Enter your full name"),
+      fullName: fullNameSchema,
       email: emailSchema,
       password: passwordSchema,
     })
@@ -145,6 +141,13 @@ export async function updatePassword(
   });
 
   if (error) return { error: error.message };
+
+  // From the profile page's Security card the user stays put; the email
+  // reset flow (no `stay` field) keeps its original landing.
+  if (formData.get("stay") === "1") {
+    revalidatePath("/profile");
+    return { success: "Password updated." };
+  }
 
   revalidatePath("/", "layout");
   redirect("/dashboard");

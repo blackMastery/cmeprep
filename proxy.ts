@@ -51,7 +51,8 @@ export async function proxy(request: NextRequest) {
   const isProtected =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/tests") ||
-    pathname.startsWith("/account") ||
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/bookmarks") ||
     pathname.startsWith("/admin");
 
   if (!user && isProtected) {

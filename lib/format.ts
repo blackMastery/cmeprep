@@ -6,6 +6,15 @@
  * and calling it server-side throws at render time.
  */
 
+import type { UserRole } from "@/lib/supabase/types";
+
+/** Display names for account roles, shared by header, cards and profile. */
+export const ROLE_LABEL: Record<UserRole, string> = {
+  trial: "Trial",
+  student: "Student",
+  admin: "Admin",
+};
+
 /** Seconds → `M:SS`, or `H:MM:SS` past an hour. */
 export function formatDuration(totalSec: number): string {
   const s = Math.max(0, Math.floor(totalSec));

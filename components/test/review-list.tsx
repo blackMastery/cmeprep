@@ -9,15 +9,21 @@ import { QuestionImage } from "@/components/test/question-image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnswerOption, type AnswerState } from "@/components/test/answer-option";
+import { BookmarkToggle } from "@/components/bookmark-toggle";
+import { QuestionNoteEditor } from "@/components/question-note-editor";
 
 const LETTERS = "ABCDEFGH".split("");
 
 export function ReviewList({
   questions,
   initialWrongOnly,
+  initialBookmarkedIds = [],
+  notesByQuestion = {},
 }: {
   questions: ReviewQuestion[];
   initialWrongOnly: boolean;
+  initialBookmarkedIds?: string[];
+  notesByQuestion?: Record<string, string>;
 }) {
   const [wrongOnly, setWrongOnly] = useState(initialWrongOnly);
 
@@ -56,7 +62,11 @@ export function ReviewList({
         <ol className="space-y-6">
           {visible.map((q) => (
             <li key={q.questionId}>
-              <ReviewCard question={q} />
+              <ReviewCard
+                question={q}
+                initialBookmarked={initialBookmarkedIds.includes(q.questionId)}
+                note={notesByQuestion[q.questionId] ?? null}
+              />
             </li>
           ))}
         </ol>
@@ -65,7 +75,15 @@ export function ReviewList({
   );
 }
 
-function ReviewCard({ question }: { question: ReviewQuestion }) {
+function ReviewCard({
+  question,
+  initialBookmarked,
+  note,
+}: {
+  question: ReviewQuestion;
+  initialBookmarked: boolean;
+  note: string | null;
+}) {
   return (
     <Card className="[--card-spacing:--spacing(6)]">
       <CardContent className="space-y-5">
@@ -96,6 +114,10 @@ function ReviewCard({ question }: { question: ReviewQuestion }) {
                 ? "Incorrect"
                 : "Not answered"}
           </span>
+          <BookmarkToggle
+            questionId={question.questionId}
+            initialBookmarked={initialBookmarked}
+          />
         </div>
 
         <p className="font-display text-lg leading-relaxed">{question.stem}</p>
@@ -137,6 +159,11 @@ function ReviewCard({ question }: { question: ReviewQuestion }) {
             {question.explanation}
           </p>
         </div>
+
+        <QuestionNoteEditor
+          questionId={question.questionId}
+          initialBody={note}
+        />
       </CardContent>
     </Card>
   );

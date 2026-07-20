@@ -1,14 +1,9 @@
 import Link from "next/link";
 import type { Profile } from "@/lib/supabase/types";
+import { ROLE_LABEL } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-const ROLE_LABEL: Record<Profile["role"], string> = {
-  trial: "Trial",
-  student: "Student",
-  admin: "Admin",
-};
 
 export function AccountPanel({ profile }: { profile: Profile }) {
   const isTrial = profile.role === "trial";

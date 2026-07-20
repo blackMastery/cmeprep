@@ -1,6 +1,13 @@
 "use client";
 
-import { FilePlus2, LayoutDashboard, ShieldCheck } from "lucide-react";
+import {
+  Bookmark,
+  FilePlus2,
+  History,
+  LayoutDashboard,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -12,6 +19,9 @@ import {
 const NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tests/new", label: "New test", icon: FilePlus2 },
+  { href: "/tests", label: "History", icon: History },
+  { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },
+  { href: "/profile", label: "Profile", icon: UserRound },
 ];
 
 const ADMIN_ITEM: SideNavItem = {

@@ -3,9 +3,9 @@ import Link from "next/link";
 import { Flame, Plus, Target, TrendingUp } from "lucide-react";
 import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { calculateStreak } from "@/lib/scoring";
+import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
-import type { Test, TopicAccuracy, UserStats } from "@/lib/supabase/types";
+import type { Test, TopicAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { WeakAreas } from "@/components/dashboard/weak-areas";
@@ -18,15 +18,11 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const supabase = await createClient();
 
-  // Each of these is one query against a view or table; RLS scopes them
-  // to this user automatically.
-  const [{ data: stats }, { data: topics }, { data: tests }, { data: days }] =
+  // One shared lifetime-stats read (also used by /profile) plus two page
+  // queries; RLS scopes everything to this user automatically.
+  const [{ stats: userStats, streak }, { data: topics }, { data: tests }] =
     await Promise.all([
-      supabase
-        .from("user_stats")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle(),
+      getLifetimeStats(user.id),
       supabase
         .from("topic_accuracy")
         .select("*")
@@ -40,19 +36,7 @@ export default async function DashboardPage() {
         .eq("user_id", user.id)
         .order("started_at", { ascending: false })
         .limit(8),
-      supabase
-        .from("user_daily_activity")
-        .select("day")
-        .eq("user_id", user.id)
-        .order("day", { ascending: false })
-        .limit(400),
     ]);
-
-  const userStats = (stats as UserStats | null) ?? null;
-  const streak = calculateStreak(
-    (days ?? []).map((d) => d.day as string),
-    new Date().toISOString().slice(0, 10)
-  );
 
   const greetingName = firstName(user.profile.full_name);
 

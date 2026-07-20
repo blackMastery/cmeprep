@@ -144,3 +144,21 @@ export function parseQuestionForm(fd: FormData): unknown {
     options,
   };
 }
+
+/* ── Account / auth ─────────────────────────────────────────────── */
+
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email("Enter a valid email address");
+
+export const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters");
+
+export const fullNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Enter your full name")
+  .max(120, "That name is too long");

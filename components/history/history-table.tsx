@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowRight, ClipboardList } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import type { Test } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,55 +20,40 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
-export function PastTests({ tests }: { tests: Test[] }) {
-  if (tests.length === 0) {
-    return (
-      <Card className="[--card-spacing:--spacing(5)]">
-        <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-          <span className="flex size-12 items-center justify-center rounded-full bg-accent text-primary">
-            <ClipboardList className="size-6" aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="font-display text-lg">No tests yet</h2>
-            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-              Your first mock exam is a few clicks away. Pick a subject and
-              we&apos;ll build it for you.
-            </p>
-          </div>
-          <Button asChild>
-            <Link href="/tests/new">Start your first test</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
+const STATUS_BADGE: Record<
+  Test["status"],
+  { label: string; variant: "default" | "secondary" | "outline" }
+> = {
+  in_progress: { label: "In progress", variant: "secondary" },
+  submitted: { label: "Completed", variant: "default" },
+  abandoned: { label: "Abandoned", variant: "outline" },
+};
 
+/**
+ * Full-history table. A past-deadline test can still read `in_progress`
+ * here — it displays as stored, and opening it runs finalizeIfExpired on
+ * the take/results pages, which fixes the row (existing behavior).
+ */
+export function HistoryTable({ tests }: { tests: Test[] }) {
   return (
     <Card className="[--card-spacing:--spacing(5)]">
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="font-display text-lg">Past tests</h2>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/tests">
-              View all
-              <ArrowRight data-icon="inline-end" />
-            </Link>
-          </Button>
-        </div>
-
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead>Questions</TableHead>
               <TableHead>Score</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tests.map((test) => {
               const inProgress = test.status === "in_progress";
-              const score = test.score == null ? null : Math.round(Number(test.score));
+              const score =
+                test.score == null ? null : Math.round(Number(test.score));
+              const badge = STATUS_BADGE[test.status];
 
               return (
                 <TableRow key={test.id}>
@@ -78,22 +64,21 @@ export function PastTests({ tests }: { tests: Test[] }) {
                     {test.total_questions}
                   </TableCell>
                   <TableCell>
-                    {inProgress ? (
-                      <span className="text-xs font-medium text-muted-foreground">
-                        In progress
-                      </span>
+                    {score == null ? (
+                      <span className="text-muted-foreground">—</span>
                     ) : (
                       <span
                         className={cn(
                           "font-semibold tabular-nums",
-                          score != null && score >= 50
-                            ? "text-foreground"
-                            : "text-destructive"
+                          score >= 50 ? "text-foreground" : "text-destructive"
                         )}
                       >
-                        {score ?? "—"}%
+                        {score}%
                       </span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" asChild>

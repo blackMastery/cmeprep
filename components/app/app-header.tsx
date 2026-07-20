@@ -1,6 +1,8 @@
-import { LogOut, User as UserIcon } from "lucide-react";
+import Link from "next/link";
+import { LogOut, User as UserIcon, UserRound } from "lucide-react";
 import { logout } from "@/app/(auth)/actions";
 import type { SessionUser } from "@/lib/auth";
+import { ROLE_LABEL } from "@/lib/format";
 import { MobileNav } from "@/components/app/app-nav";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -14,12 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
-
-const ROLE_LABEL: Record<string, string> = {
-  trial: "Trial",
-  student: "Student",
-  admin: "Admin",
-};
 
 export function AppHeader({ user }: { user: SessionUser }) {
   const { profile } = user;
@@ -61,6 +57,12 @@ export function AppHeader({ user }: { user: SessionUser }) {
                   Trials used: {profile.trials_used}/{profile.trials_limit}
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem asChild>
+                <Link href="/profile" className="flex items-center gap-2">
+                  <UserRound className="size-4" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <form action={logout} className="w-full">
                   <button
