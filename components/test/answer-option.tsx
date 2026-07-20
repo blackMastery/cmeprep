@@ -8,8 +8,9 @@ export type AnswerState = "idle" | "correct" | "incorrect" | "missed";
 /**
  * A single answer choice. Large tap target for one-handed phone use.
  *
- * Colour is never the only signal: correct is teal + check, incorrect is
- * crimson + cross, so the two stay distinguishable without colour vision.
+ * Colour is never the only signal: correct is green + check, incorrect is
+ * red + cross, and the missed-correct row adds a "Correct answer" label — so
+ * the states stay distinguishable without relying on colour vision.
  */
 export function AnswerOption({
   id,

@@ -72,10 +72,13 @@ export default function MarketingPage() {
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────── */}
-      <section className="relative isolate overflow-hidden bg-brand-surface">
-        {/* Photograph sits under a near-opaque brand scrim: it adds warmth and
-            context without ever competing with the headline. Contrast is
-            carried by the scrim, not by luck with the image. */}
+      <section className="relative isolate overflow-hidden bg-coral">
+        {/* Photograph under a near-opaque brand scrim: warmth and context
+            without competing with the headline. This uses the vivid --coral
+            rather than --brand-surface because the ink layer below supplies
+            the extra darkening — measured at 4.62:1 for white text against a
+            worst-case white photo. A flat band with no scrim can't rely on
+            that, which is why the CTA section still uses --brand-surface. */}
         <Image
           src={unsplashUrl(HERO_IMAGE.src, 2000)}
           alt=""
@@ -87,7 +90,7 @@ export default function MarketingPage() {
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-brand-surface/88"
+          className="absolute inset-0 -z-10 bg-coral/88"
         />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-ink/25" />
 

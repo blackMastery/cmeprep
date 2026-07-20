@@ -9,10 +9,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // coral-deep is darker than --coral in BOTH themes, so one hover
-        // class covers light and dark — no dark: override needed.
+        // --primary-hover is defined per theme: darker on light, lighter on
+        // dark. A single "darker" step would drop the dark theme's dark label
+        // to 3.88:1.
         default:
-          "bg-primary text-primary-foreground hover:bg-coral-deep",
+          "bg-primary text-primary-foreground hover:bg-primary-hover",
         outline:
           "border-primary/50 text-primary bg-transparent hover:border-primary hover:bg-accent aria-expanded:bg-accent",
         "outline-muted":

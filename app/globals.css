@@ -46,8 +46,14 @@
   --color-card: var(--card);
   /* cmeprep.me brand */
   --color-coral: var(--coral);
+  --color-coral-light: var(--coral-light);
   --color-coral-deep: var(--coral-deep);
+  --color-coral-deeper: var(--coral-deeper);
+  --color-primary-hover: var(--primary-hover);
   --color-brand-surface: var(--brand-surface);
+  --color-teal-light: var(--teal-light);
+  --color-sun-deep: var(--sun-deep);
+  --color-ink-soft: var(--ink-soft);
   --color-teal: var(--teal);
   --color-teal-deep: var(--teal-deep);
   --color-sun: var(--sun);
@@ -65,102 +71,129 @@
 }
 
 :root {
-  /* Brand primitives — cmeprep.me */
-  --coral: #e85d42; /* primary */
-  --coral-deep: #c8462e; /* hover / pressed */
-  --teal: #3ebfa0; /* success + gradient end */
-  --teal-deep: #2e9b80;
-  --sun: #ffd34e; /* headline + CTA accent */
-  --ink: #1f2226;
-  --blush: #feeee9; /* warm tinted sections */
+  /* Brand primitives — taken from CMEPrep_Mockups.html v1. */
+  /* #E85D24 is the brand coral, but white-on-coral is only 3.49:1 — fine for
+     large display text (>=3:1), short of AA for button labels. So the filled
+     steps below carry text, and --coral stays for headings, icons, borders
+     and decorative fills. Every value here is from the mockup except
+     --coral-deeper, which extends the same ramp for hover/badge text. */
+  --coral: #e85d24;
+  --coral-light: #f37844;
+  --coral-deep: #c44a18; /* mockup --coral-dark; button fill, 4.84:1 on white */
+  --coral-deeper: #a63d12; /* hover fill + text on blush */
+  --teal: #1d9e75;
+  --teal-light: #2bb888;
+  --teal-deep: #167a5b;
+  --sun: #f5c944; /* mockup --yellow */
+  --sun-deep: #e0b22e;
+  --ink: #1a1a1a;
+  --ink-soft: #2c2c2c;
+  --blush: #f5efe6; /* mockup --bg-warm: warm tinted sections */
 
-  /* Large brand fields (hero, CTA band) sit a shade below the button coral —
-     a full-bleed field of the button colour vibrates at that size. */
-  --brand-surface: #dc5138;
+  /* Full-bleed brand fields (hero, CTA band). Body copy sits on these, so
+     they use the text-safe step rather than the vivid --coral. */
+  --brand-surface: #c44a18;
 
   /* Semantic tokens */
-  --background: #fdfbfa;
+  --background: #faf6f1; /* warm cream, not near-white */
   --foreground: var(--ink);
   --card: #ffffff;
   --card-foreground: var(--ink);
   --popover: #ffffff;
   --popover-foreground: var(--ink);
-  --primary: var(--coral);
+  --primary: var(--coral-deep);
   --primary-foreground: #ffffff;
+  /* Hover darkens on light, lightens on dark — a single 'deeper' step would
+     fail contrast against the dark theme's dark label. */
+  --primary-hover: var(--coral-deeper);
   --secondary: var(--blush);
-  --secondary-foreground: var(--coral-deep);
-  --muted: #f5f1ef;
-  --muted-foreground: #6c6a6e;
+  --secondary-foreground: var(--coral-deeper);
+  --muted: #f0ebe3; /* mockup --border-soft, as a subtle fill */
+  --muted-foreground: #6b6b6b;
   --accent: var(--blush);
-  --accent-foreground: var(--coral-deep);
-  /* Deliberately deeper than the coral primary. The brand palette is coral +
-     teal, so "incorrect" has no free hue of its own — this keeps a wrong
-     answer from reading as a primary-highlighted one. Correct/incorrect are
-     still carried by check/cross icons, never by colour alone. */
-  --destructive: #bf3320;
+  --accent-foreground: var(--coral-deeper);
+  /* Answer correctness needs to read as green/red at a glance, so these are
+     true green (hue 142°) and true red (hue 0°) rather than brand hues. The
+     old values sat at 161° (teal) and 8° (rust) — the rust was only 9° from
+     the coral primary, so "incorrect" looked like brand highlighting rather
+     than an error. Icons (check/cross) still carry the meaning for anyone
+     who can't separate the two by colour. */
+  --destructive: #bc2626;
   --destructive-foreground: #ffffff;
-  --success: var(--teal-deep);
+  --success: #15803d;
   --success-foreground: #ffffff;
-  --border: #ebe5e2;
-  --input: #ebe5e2;
+  --border: #e8e2d8;
+  --input: #e8e2d8;
   --ring: var(--coral);
   --chart-1: var(--coral);
   --chart-2: var(--teal);
-  --chart-3: #f0a58f;
+  --chart-3: var(--sun);
   --chart-4: var(--ink);
-  --chart-5: #a9a29b;
-  --radius: 0.75rem;
+  --chart-5: #9b9b9b;
+  --radius: 0.625rem; /* mockup --radius: 10px */
   --sidebar: #ffffff;
   --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--coral);
+  --sidebar-primary: var(--coral-deep);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: var(--blush);
-  --sidebar-accent-foreground: var(--coral-deep);
-  --sidebar-border: #ebe5e2;
+  --sidebar-accent-foreground: var(--coral-deeper);
+  --sidebar-border: #e8e2d8;
   --sidebar-ring: var(--coral);
 }
 
+/* The mockup ships light only, so dark is derived from the same hues: the
+   lighter brand steps (--coral-light, --teal-light) become the dark-mode
+   base, and the neutrals carry the palette's warmth rather than going
+   blue-grey, so the two themes read as one brand. */
 .dark {
-  --coral: #f2775c; /* lifted for contrast on dark */
-  --coral-deep: #d85238;
-  --brand-surface: #b8402a;
-  --teal: #4ecdaa;
-  --teal-deep: #3bb492;
-  --sun: #ffd97a;
-  --ink: #1f2226;
-  --blush: #33241f;
+  --coral: #f37844; /* mockup --coral-light */
+  --coral-light: #f79268;
+  --coral-deep: #e85d24; /* mockup --coral, darker than the lifted base */
+  --coral-deeper: #c44a18;
+  --brand-surface: #c44a18;
+  --teal: #2bb888; /* mockup --teal-light */
+  --teal-light: #46cfa0;
+  --teal-deep: #1d9e75;
+  --sun: #f5c944;
+  --sun-deep: #e0b22e;
+  --ink: #1a1a1a;
+  --ink-soft: #2c2c2c;
+  --blush: #33261b;
 
-  --background: #16181b;
-  --foreground: #f3efec;
-  --card: #1e2125;
-  --card-foreground: #f3efec;
-  --popover: #1e2125;
-  --popover-foreground: #f3efec;
+  --background: #1a1815; /* warm dark, echoing the cream light theme */
+  --foreground: #f6f1ea;
+  --card: #221f1a;
+  --card-foreground: #f6f1ea;
+  --popover: #221f1a;
+  --popover-foreground: #f6f1ea;
   --primary: var(--coral);
-  --primary-foreground: #21100b;
+  --primary-foreground: #1f0d05;
+  --primary-hover: var(--coral-light);
   --secondary: var(--blush);
-  --secondary-foreground: #f7b9a6;
-  --muted: #262a2e;
-  --muted-foreground: #a5a2a6;
+  --secondary-foreground: #f8c3a6;
+  --muted: #292521;
+  --muted-foreground: #a8a29a;
   --accent: var(--blush);
-  --accent-foreground: #f7b9a6;
-  --destructive: #f2604a;
-  --destructive-foreground: #21100b;
-  --success: var(--teal);
-  --success-foreground: #06231b;
+  --accent-foreground: #f8c3a6;
+  /* Lifted for dark surfaces. The red also has to stay separable from the
+     dark-mode coral (#F37844, hue 18°) — at hue 0° it reads clearly red. */
+  --destructive: #ff6b6b;
+  --destructive-foreground: #1f0d05;
+  --success: #3dbe6b;
+  --success-foreground: #04231a;
   --border: rgb(255 255 255 / 10%);
   --input: rgb(255 255 255 / 14%);
   --ring: var(--coral);
   --chart-1: var(--coral);
   --chart-2: var(--teal);
-  --chart-3: #b3705c;
-  --chart-4: #d8d4cd;
-  --chart-5: #6f6a72;
-  --sidebar: #1e2125;
-  --sidebar-foreground: #f3efec;
+  --chart-3: var(--sun);
+  --chart-4: #d8d2c8;
+  --chart-5: #6f6a62;
+  --sidebar: #221f1a;
+  --sidebar-foreground: #f6f1ea;
   --sidebar-primary: var(--coral);
-  --sidebar-primary-foreground: #21100b;
-  --sidebar-accent: #262a2e;
+  --sidebar-primary-foreground: #1f0d05;
+  --sidebar-accent: #292521;
   --sidebar-accent-foreground: #f7b9a6;
   --sidebar-border: rgb(255 255 255 / 10%);
   --sidebar-ring: var(--coral);
