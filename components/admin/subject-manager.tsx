@@ -23,10 +23,20 @@ import { FormMessage } from "@/components/auth/form-parts";
 import { AdminSubmit } from "@/components/admin/form-parts";
 import { ConfirmSubmit } from "@/components/confirm-dialog";
 
+/** Cross-specialty move destinations: "{specialty} › {subject}" groups. */
+export type MoveGroup = {
+  label: string;
+  topics: { id: string; name: string }[];
+};
+
 export function SubjectManager({
   subjects,
+  specialtyId,
+  moveGroups,
 }: {
   subjects: SubjectWithTopics[];
+  specialtyId: string;
+  moveGroups: MoveGroup[];
 }) {
   const [createState, createAction] = useActionState<AdminState, FormData>(
     createSubject,
@@ -40,6 +50,7 @@ export function SubjectManager({
           <h2 className="font-display text-lg">Add a subject</h2>
           <FormMessage error={createState?.error} success={createState?.success} />
           <form action={createAction} className="flex flex-wrap gap-2">
+            <input type="hidden" name="specialtyId" value={specialtyId} />
             <Input
               name="name"
               placeholder="e.g. Ophthalmology"
@@ -68,7 +79,7 @@ export function SubjectManager({
                 subject={subject}
                 isFirst={index === 0}
                 isLast={index === subjects.length - 1}
-                allSubjects={subjects}
+                moveGroups={moveGroups}
               />
             </li>
           ))}
@@ -82,12 +93,12 @@ function SubjectCard({
   subject,
   isFirst,
   isLast,
-  allSubjects,
+  moveGroups,
 }: {
   subject: SubjectWithTopics;
   isFirst: boolean;
   isLast: boolean;
-  allSubjects: SubjectWithTopics[];
+  moveGroups: MoveGroup[];
 }) {
   const [renameState, renameAction] = useActionState<AdminState, FormData>(
     renameSubject,
@@ -177,7 +188,7 @@ function SubjectCard({
                     subjectName={subject.name}
                     isFirst={i === 0}
                     isLast={i === subject.topics.length - 1}
-                    allSubjects={allSubjects}
+                    moveGroups={moveGroups}
                   />
                 </li>
               ))}
@@ -208,13 +219,13 @@ function TopicRow({
   subjectName,
   isFirst,
   isLast,
-  allSubjects,
+  moveGroups,
 }: {
   topic: SubjectWithTopics["topics"][number];
   subjectName: string;
   isFirst: boolean;
   isLast: boolean;
-  allSubjects: SubjectWithTopics[];
+  moveGroups: MoveGroup[];
 }) {
   const [renameState, renameAction] = useActionState<AdminState, FormData>(
     renameTopic,
@@ -313,7 +324,7 @@ function TopicRow({
         <MoveQuestions
           fromTopicId={topic.id}
           count={topic.questionCount}
-          allSubjects={allSubjects}
+          moveGroups={moveGroups}
         />
       )}
     </div>
@@ -323,11 +334,11 @@ function TopicRow({
 function MoveQuestions({
   fromTopicId,
   count,
-  allSubjects,
+  moveGroups,
 }: {
   fromTopicId: string;
   count: number;
-  allSubjects: SubjectWithTopics[];
+  moveGroups: MoveGroup[];
 }) {
   const [state, action] = useActionState<AdminState, FormData>(
     moveTopicQuestions,
@@ -353,9 +364,9 @@ function MoveQuestions({
           <option value="" disabled>
             Move to…
           </option>
-          {allSubjects.map((s) => (
-            <optgroup key={s.id} label={s.name}>
-              {s.topics
+          {moveGroups.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.topics
                 .filter((t) => t.id !== fromTopicId)
                 .map((t) => (
                   <option key={t.id} value={t.id}>

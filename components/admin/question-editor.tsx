@@ -19,7 +19,12 @@ import { QuestionPreview } from "@/components/admin/question-preview";
 import { ImageUpload } from "@/components/admin/image-upload";
 import { ConfirmAction } from "@/components/confirm-dialog";
 
-type TopicOption = { id: string; name: string; subjectName: string };
+type TopicOption = {
+  id: string;
+  name: string;
+  subjectName: string;
+  specialtyName: string;
+};
 
 /** Client-only row key, distinct from the DB id (absent on new rows). */
 type Row = { key: string; id?: string; label: string; isCorrect: boolean };
@@ -144,7 +149,7 @@ export function QuestionEditor({
                 </option>
                 {topics.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.subjectName} › {t.name}
+                    {t.specialtyName} › {t.subjectName} › {t.name}
                   </option>
                 ))}
               </AdminSelect>

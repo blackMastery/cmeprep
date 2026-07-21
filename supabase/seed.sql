@@ -4,11 +4,13 @@
 --   update profiles set role = 'admin' where id = '<your-uuid>';
 
 -- ── Subjects ────────────────────────────────────────────────
-insert into subjects (id, name, position) values
-  ('11111111-1111-1111-1111-111111111111', 'Medicine', 1),
-  ('22222222-2222-2222-2222-222222222222', 'Surgery', 2),
-  ('33333333-3333-3333-3333-333333333333', 'Obstetrics & Gynaecology', 3),
-  ('44444444-4444-4444-4444-444444444444', 'Paediatrics', 4);
+-- The default exam/specialty rows come from the migration
+-- (20260721000001_exams_specialties.sql), which runs before seed.
+insert into subjects (id, name, position, specialty_id) values
+  ('11111111-1111-1111-1111-111111111111', 'Medicine', 1, '5c000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'Surgery', 2, '5c000000-0000-0000-0000-000000000001'),
+  ('33333333-3333-3333-3333-333333333333', 'Obstetrics & Gynaecology', 3, '5c000000-0000-0000-0000-000000000001'),
+  ('44444444-4444-4444-4444-444444444444', 'Paediatrics', 4, '5c000000-0000-0000-0000-000000000001');
 
 -- ── Topics ──────────────────────────────────────────────────
 insert into topics (id, subject_id, name, position) values

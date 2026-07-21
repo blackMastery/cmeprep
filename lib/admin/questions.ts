@@ -13,6 +13,8 @@ export const PAGE_SIZE = 20;
 
 export type QuestionListFilters = {
   search?: string;
+  examId?: string;
+  specialtyId?: string;
   subjectId?: string;
   topicId?: string;
   difficulty?: Difficulty;
@@ -32,6 +34,7 @@ export type QuestionListRow = {
   updated_at: string | null;
   topicName: string;
   subjectName: string;
+  specialtyName: string;
   optionCount: number;
   correctCount: number;
   /** Non-zero means editing the answer key rewrites history. */
@@ -53,7 +56,12 @@ type EmbeddedRow = {
     id: string;
     name: string;
     subject_id: string;
-    subjects: { id: string; name: string } | null;
+    subjects: {
+      id: string;
+      name: string;
+      specialty_id: string;
+      specialties: { id: string; name: string; exam_id: string } | null;
+    } | null;
   } | null;
 };
 
@@ -71,17 +79,22 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
     .from("questions")
     .select(
       "id, stem, type, difficulty, is_published, deleted_at, updated_at, topic_id, " +
-        "topics!inner(id, name, subject_id, subjects!inner(id, name))",
+        "topics!inner(id, name, subject_id, subjects!inner(id, name, specialty_id, " +
+        "specialties!inner(id, name, exam_id)))",
       { count: "exact" }
     )
     .order("updated_at", { ascending: false, nullsFirst: false })
     .range(from, from + PAGE_SIZE - 1);
 
   if (!filters.includeDeleted) query = query.is("deleted_at", null);
+  // Most-specific level wins; the !inner joins above make parent filters work.
   if (filters.topicId) query = query.eq("topic_id", filters.topicId);
-  // The !inner join above is what makes filtering on the parent possible.
   else if (filters.subjectId)
     query = query.eq("topics.subject_id", filters.subjectId);
+  else if (filters.specialtyId)
+    query = query.eq("topics.subjects.specialty_id", filters.specialtyId);
+  else if (filters.examId)
+    query = query.eq("topics.subjects.specialties.exam_id", filters.examId);
   if (filters.difficulty) query = query.eq("difficulty", filters.difficulty);
   if (filters.type) query = query.eq("type", filters.type);
   if (filters.published !== undefined)
@@ -139,6 +152,7 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
       updated_at: r.updated_at,
       topicName: r.topics?.name ?? "",
       subjectName: r.topics?.subjects?.name ?? "",
+      specialtyName: r.topics?.subjects?.specialties?.name ?? "",
       optionCount: optionCount.get(r.id) ?? 0,
       correctCount: correctCount.get(r.id) ?? 0,
       usageCount: usageCount.get(r.id) ?? 0,
@@ -201,22 +215,27 @@ export async function getQuestionForEdit(
 export async function contentCounts() {
   const admin = createAdminClient();
 
-  const [subjects, topics, published, drafts] = await Promise.all([
-    admin.from("subjects").select("id", { count: "exact", head: true }),
-    admin.from("topics").select("id", { count: "exact", head: true }),
-    admin
-      .from("questions")
-      .select("id", { count: "exact", head: true })
-      .is("deleted_at", null)
-      .eq("is_published", true),
-    admin
-      .from("questions")
-      .select("id", { count: "exact", head: true })
-      .is("deleted_at", null)
-      .eq("is_published", false),
-  ]);
+  const [exams, specialties, subjects, topics, published, drafts] =
+    await Promise.all([
+      admin.from("exams").select("id", { count: "exact", head: true }),
+      admin.from("specialties").select("id", { count: "exact", head: true }),
+      admin.from("subjects").select("id", { count: "exact", head: true }),
+      admin.from("topics").select("id", { count: "exact", head: true }),
+      admin
+        .from("questions")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .eq("is_published", true),
+      admin
+        .from("questions")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .eq("is_published", false),
+    ]);
 
   return {
+    exams: exams.count ?? 0,
+    specialties: specialties.count ?? 0,
     subjects: subjects.count ?? 0,
     topics: topics.count ?? 0,
     published: published.count ?? 0,

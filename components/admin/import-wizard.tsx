@@ -415,11 +415,17 @@ function SuccessPanel({
             Imported {result.imported} draft
             {result.imported === 1 ? "" : "s"}
           </h2>
-          {(result.createdSubjects.length > 0 ||
+          {(result.createdExams.length > 0 ||
+            result.createdSpecialties.length > 0 ||
+            result.createdSubjects.length > 0 ||
             result.createdTopics.length > 0) && (
             <p className="mx-auto max-w-md text-sm text-muted-foreground">
               Created{" "}
               {[
+                result.createdExams.length > 0 &&
+                  `exams: ${result.createdExams.join(", ")}`,
+                result.createdSpecialties.length > 0 &&
+                  `specialties: ${result.createdSpecialties.join(", ")}`,
                 result.createdSubjects.length > 0 &&
                   `subjects: ${result.createdSubjects.join(", ")}`,
                 result.createdTopics.length > 0 &&

@@ -8,7 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 
-type Subject = { id: string; name: string; topics: { id: string; name: string }[] };
+type WizardTopic = { id: string; name: string };
+type WizardSubject = { id: string; name: string; topics: WizardTopic[] };
+type WizardSpecialty = { id: string; name: string; subjects: WizardSubject[] };
+export type WizardExam = {
+  id: string;
+  name: string;
+  specialties: WizardSpecialty[];
+};
 
 const COUNTS = [10, 20, 40, 60];
 const DIFFICULTIES = [
@@ -18,11 +25,23 @@ const DIFFICULTIES = [
   { value: "hard", label: "Hard" },
 ] as const;
 
-const STEPS = ["Subjects", "Topics", "Format"] as const;
-
-export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
+export function NewTestWizard({ exams }: { exams: WizardExam[] }) {
   const router = useRouter();
-  const [step, setStep] = useState(0);
+
+  // With a single exam the Exam step disappears entirely — the flow looks
+  // exactly like the original three-step wizard until a second exam exists.
+  const steps = useMemo(
+    () =>
+      exams.length > 1
+        ? (["Exam", "Subjects", "Topics", "Format"] as const)
+        : (["Subjects", "Topics", "Format"] as const),
+    [exams.length]
+  );
+
+  const [stepIndex, setStepIndex] = useState(0);
+  const [examId, setExamId] = useState<string | null>(
+    exams.length === 1 ? exams[0].id : null
+  );
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
   const [topicIds, setTopicIds] = useState<string[]>([]);
   const [numQuestions, setNumQuestions] = useState(20);
@@ -32,12 +51,30 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const currentStep = steps[stepIndex];
+
+  const selectedExam = useMemo(
+    () => exams.find((e) => e.id === examId) ?? null,
+    [exams, examId]
+  );
+
+  /** Subjects of the chosen exam, grouped by specialty for the headings. */
+  const specialtyGroups = useMemo(
+    () =>
+      (selectedExam?.specialties ?? []).filter((sp) => sp.subjects.length > 0),
+    [selectedExam]
+  );
+  const examSubjects = useMemo(
+    () => specialtyGroups.flatMap((sp) => sp.subjects),
+    [specialtyGroups]
+  );
+
   const availableTopics = useMemo(
     () =>
-      subjects
+      examSubjects
         .filter((s) => subjectIds.includes(s.id))
-        .flatMap((s) => s.topics.map((t) => ({ ...t, subject: s.name }))),
-    [subjectIds, subjects]
+        .flatMap((s) => s.topics),
+    [subjectIds, examSubjects]
   );
 
   function toggle(list: string[], id: string) {
@@ -52,6 +89,7 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          examId,
           subjectIds,
           topicIds,
           difficulty,
@@ -73,7 +111,11 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
   }
 
   const canAdvance =
-    (step === 0 && subjectIds.length > 0) || step === 1 || step === 2;
+    currentStep === "Exam"
+      ? examId !== null
+      : currentStep === "Subjects"
+        ? subjectIds.length > 0
+        : true;
 
   return (
     <div>
@@ -82,27 +124,33 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
           Start a new test
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Three quick steps — you&apos;ll be answering in under a minute.
+          {steps.length === 3
+            ? "Three quick steps — you'll be answering in under a minute."
+            : "Four quick steps — you'll be answering in under a minute."}
         </p>
       </header>
 
       <ol className="mb-6 flex items-center justify-center gap-2 text-xs">
-        {STEPS.map((label, i) => (
+        {steps.map((label, i) => (
           <li key={label} className="flex items-center gap-2">
             <span
               className={cn(
                 "flex size-6 items-center justify-center rounded-full font-semibold",
-                i <= step
+                i <= stepIndex
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground"
               )}
             >
               {i + 1}
             </span>
-            <span className={cn(i === step ? "font-medium" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                i === stepIndex ? "font-medium" : "text-muted-foreground"
+              )}
+            >
               {label}
             </span>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <span className="mx-1 h-px w-6 bg-border" aria-hidden="true" />
             )}
           </li>
@@ -111,41 +159,86 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
 
       <Card className="[--card-spacing:--spacing(6)]">
         <CardContent className="space-y-6">
-          {step === 0 && (
+          {currentStep === "Exam" && (
             <fieldset className="space-y-3">
               <legend className="mb-3 font-display text-lg">
-                Which subjects?
+                Which examination are you preparing for?
               </legend>
               <div className="flex flex-wrap gap-2">
-                {subjects.map((s) => (
+                {exams.map((e) => (
                   <Chip
-                    key={s.id}
-                    label={s.name}
-                    selected={subjectIds.includes(s.id)}
+                    key={e.id}
+                    label={e.name}
+                    selected={examId === e.id}
                     onClick={() => {
-                      const next = toggle(subjectIds, s.id);
-                      setSubjectIds(next);
-                      // Drop topics whose subject was just removed.
-                      setTopicIds((prev) =>
-                        prev.filter((tid) =>
-                          subjects
-                            .filter((x) => next.includes(x.id))
-                            .some((x) => x.topics.some((t) => t.id === tid))
-                        )
-                      );
+                      if (examId !== e.id) {
+                        setExamId(e.id);
+                        // Selections belong to the previous exam's tree.
+                        setSubjectIds([]);
+                        setTopicIds([]);
+                      }
                     }}
                   />
                 ))}
               </div>
-              {subjects.length === 0 && (
+            </fieldset>
+          )}
+
+          {currentStep === "Subjects" && (
+            <fieldset className="space-y-3">
+              <legend className="mb-3 font-display text-lg">
+                Which subjects?
+              </legend>
+
+              {specialtyGroups.length > 1 ? (
+                <div className="space-y-4">
+                  {specialtyGroups.map((sp) => (
+                    <div key={sp.id}>
+                      <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                        {sp.name}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {sp.subjects.map((s) => (
+                          <SubjectChip
+                            key={s.id}
+                            subject={s}
+                            subjectIds={subjectIds}
+                            setSubjectIds={setSubjectIds}
+                            setTopicIds={setTopicIds}
+                            examSubjects={examSubjects}
+                            toggle={toggle}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {examSubjects.map((s) => (
+                    <SubjectChip
+                      key={s.id}
+                      subject={s}
+                      subjectIds={subjectIds}
+                      setSubjectIds={setSubjectIds}
+                      setTopicIds={setTopicIds}
+                      examSubjects={examSubjects}
+                      toggle={toggle}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {examSubjects.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No subjects have been published yet.
+                  No subjects have been published yet
+                  {selectedExam ? ` for ${selectedExam.name}` : ""}.
                 </p>
               )}
             </fieldset>
           )}
 
-          {step === 1 && (
+          {currentStep === "Topics" && (
             <fieldset className="space-y-3">
               <legend className="mb-1 font-display text-lg">
                 Narrow to topics?
@@ -166,7 +259,7 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
             </fieldset>
           )}
 
-          {step === 2 && (
+          {currentStep === "Format" && (
             <div className="space-y-6">
               <fieldset>
                 <legend className="mb-3 font-display text-lg">
@@ -239,10 +332,10 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
           )}
 
           <div className="flex items-center gap-3 border-t border-border pt-5">
-            {step > 0 && (
+            {stepIndex > 0 && (
               <Button
                 variant="outline-muted"
-                onClick={() => setStep(step - 1)}
+                onClick={() => setStepIndex(stepIndex - 1)}
                 disabled={submitting}
               >
                 <ArrowLeft data-icon="inline-start" />
@@ -250,10 +343,10 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
               </Button>
             )}
 
-            {step < STEPS.length - 1 ? (
+            {stepIndex < steps.length - 1 ? (
               <Button
                 className="ml-auto"
-                onClick={() => setStep(step + 1)}
+                onClick={() => setStepIndex(stepIndex + 1)}
                 disabled={!canAdvance}
               >
                 Continue
@@ -264,7 +357,7 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
                 className="ml-auto"
                 size="lg"
                 onClick={start}
-                disabled={submitting || subjectIds.length === 0}
+                disabled={submitting || examId === null || subjectIds.length === 0}
               >
                 {submitting ? (
                   <>
@@ -280,6 +373,41 @@ export function NewTestWizard({ subjects }: { subjects: Subject[] }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function SubjectChip({
+  subject,
+  subjectIds,
+  setSubjectIds,
+  setTopicIds,
+  examSubjects,
+  toggle,
+}: {
+  subject: WizardSubject;
+  subjectIds: string[];
+  setSubjectIds: (ids: string[]) => void;
+  setTopicIds: React.Dispatch<React.SetStateAction<string[]>>;
+  examSubjects: WizardSubject[];
+  toggle: (list: string[], id: string) => string[];
+}) {
+  return (
+    <Chip
+      label={subject.name}
+      selected={subjectIds.includes(subject.id)}
+      onClick={() => {
+        const next = toggle(subjectIds, subject.id);
+        setSubjectIds(next);
+        // Drop topics whose subject was just removed.
+        setTopicIds((prev) =>
+          prev.filter((tid) =>
+            examSubjects
+              .filter((x) => next.includes(x.id))
+              .some((x) => x.topics.some((t) => t.id === tid))
+          )
+        );
+      }}
+    />
   );
 }
 

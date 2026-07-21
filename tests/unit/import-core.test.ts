@@ -16,24 +16,59 @@ import {
 const HEADERS = COLUMNS.map((c) => c.header);
 const COL = new Map(COLUMNS.map((c, i) => [c.key, i]));
 
+// Default exam/specialty plus a SECOND exam containing a subject that shares
+// its name with one in the default tree — exercising composite resolution.
 const TAXONOMY: TaxonomySnapshot = {
-  subjects: [
+  exams: [
     {
-      id: "11111111-1111-1111-1111-111111111111",
-      name: "Medicine",
-      topics: [
-        { id: "a1000000-0000-0000-0000-000000000001", name: "Cardiology" },
-        { id: "a1000000-0000-0000-0000-000000000002", name: "Endocrinology" },
+      id: "e0000000-0000-0000-0000-000000000001",
+      name: "Medical Board Exam",
+      specialties: [
+        {
+          id: "5c000000-0000-0000-0000-000000000001",
+          name: "General",
+          subjects: [
+            {
+              id: "11111111-1111-1111-1111-111111111111",
+              name: "Medicine",
+              topics: [
+                { id: "a1000000-0000-0000-0000-000000000001", name: "Cardiology" },
+                { id: "a1000000-0000-0000-0000-000000000002", name: "Endocrinology" },
+              ],
+            },
+            {
+              id: "22222222-2222-2222-2222-222222222222",
+              name: "Surgery",
+              topics: [
+                { id: "a2000000-0000-0000-0000-000000000001", name: "Trauma" },
+              ],
+            },
+          ],
+        },
       ],
     },
     {
-      id: "22222222-2222-2222-2222-222222222222",
-      name: "Surgery",
-      topics: [
-        { id: "a2000000-0000-0000-0000-000000000001", name: "Trauma" },
+      id: "e0000000-0000-0000-0000-000000000002",
+      name: "USMLE",
+      specialties: [
+        {
+          id: "5c000000-0000-0000-0000-000000000002",
+          name: "Internal Medicine",
+          subjects: [
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              name: "Medicine", // same name as the default tree's subject
+              topics: [
+                { id: "a9000000-0000-0000-0000-000000000001", name: "Cardiology" },
+              ],
+            },
+          ],
+        },
       ],
     },
   ],
+  defaultExamName: "Medical Board Exam",
+  defaultSpecialtyName: "General",
 };
 
 /** Build a cells array aligned to the canonical header order. */
@@ -65,7 +100,12 @@ function goodRow(overrides: Record<string, unknown> = {}): Record<string, unknow
 
 function run(
   rows: Record<string, unknown>[],
-  opts: { autoCreate?: boolean; header?: unknown[]; startRow?: number } = {}
+  opts: {
+    autoCreate?: boolean;
+    header?: unknown[];
+    startRow?: number;
+    taxonomy?: TaxonomySnapshot;
+  } = {}
 ): ImportAnalysis {
   const startRow = opts.startRow ?? 2;
   return parseMatrix(
@@ -73,8 +113,28 @@ function run(
       header: opts.header ?? HEADERS,
       rows: rows.map((r, i) => ({ rowNumber: startRow + i, cells: cells(r) })),
     },
-    TAXONOMY,
+    opts.taxonomy ?? TAXONOMY,
     { autoCreateTaxonomy: opts.autoCreate ?? true }
+  );
+}
+
+// A sheet from BEFORE the Exam/Specialty columns existed.
+const LEGACY_COLUMNS = COLUMNS.filter(
+  (c) => c.key !== "exam" && c.key !== "specialty"
+);
+const LEGACY_HEADERS = LEGACY_COLUMNS.map((c) => c.header);
+
+function runLegacy(rows: Record<string, unknown>[]): ImportAnalysis {
+  return parseMatrix(
+    {
+      header: LEGACY_HEADERS,
+      rows: rows.map((r, i) => ({
+        rowNumber: 2 + i,
+        cells: LEGACY_COLUMNS.map((c) => r[c.key] ?? ""),
+      })),
+    },
+    TAXONOMY,
+    { autoCreateTaxonomy: true }
   );
 }
 
@@ -97,6 +157,9 @@ describe("header handling", () => {
     expect(a.fileErrors.some((e) => e.includes('"Stem"'))).toBe(true);
     expect(a.fileErrors.some((e) => e.includes('"Correct"'))).toBe(true);
     expect(a.fileErrors.some((e) => e.includes('"Option A"'))).toBe(true);
+    // Exam and Specialty columns are OPTIONAL — never demanded.
+    expect(a.fileErrors.some((e) => e.includes('"Exam"'))).toBe(false);
+    expect(a.fileErrors.some((e) => e.includes('"Specialty"'))).toBe(false);
   });
 
   it("rejects a duplicate known header", () => {
@@ -364,8 +427,18 @@ describe("taxonomy", () => {
       }),
     ]);
     expect(a.creationPlan.topics).toEqual([
-      { subjectName: "Medicine", name: "Emergencies" },
-      { subjectName: "Surgery", name: "Emergencies" },
+      {
+        examName: "Medical Board Exam",
+        specialtyName: "General",
+        subjectName: "Medicine",
+        name: "Emergencies",
+      },
+      {
+        examName: "Medical Board Exam",
+        specialtyName: "General",
+        subjectName: "Surgery",
+        name: "Emergencies",
+      },
     ]);
   });
 
@@ -378,6 +451,138 @@ describe("taxonomy", () => {
 
     const b = run([goodRow({ topic: "Neurocardiology" })], { autoCreate: false });
     expect(errorsOf(b, 2)[0]).toMatch(/Topic "Neurocardiology" doesn't exist under "Medicine"/);
+  });
+});
+
+// ── Exam / Specialty levels ─────────────────────────────────
+
+describe("exam and specialty resolution", () => {
+  it("blank Exam and Specialty resolve to the defaults before keying", () => {
+    const a = run([goodRow()]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].examName).toBe("Medical Board Exam");
+    expect(a.validRows[0].specialtyName).toBe("General");
+    expect(a.validRows[0].input.topicId).toBe(
+      "a1000000-0000-0000-0000-000000000001"
+    );
+  });
+
+  it("explicit default exam name with blank Specialty resolves to the default specialty", () => {
+    const a = run([goodRow({ exam: "medical board exam" })]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].specialtyName).toBe("General");
+  });
+
+  it("blank Specialty under a non-default exam is a row error", () => {
+    const a = run([goodRow({ exam: "USMLE" })]);
+    expect(errorsOf(a, 2)[0]).toMatch(/Specialty is required when Exam is not the default/);
+  });
+
+  it("blank Exam is a row error when the snapshot has no default exam", () => {
+    const a = run([goodRow()], {
+      taxonomy: { ...TAXONOMY, defaultExamName: null },
+    });
+    expect(errorsOf(a, 2)[0]).toMatch(/no default exam exists/);
+  });
+
+  it("unknown exam with auto-create on plans exam, specialty, subject and topic exactly once", () => {
+    const rows = [
+      goodRow({ exam: "PLAB", specialty: "Clinical", subject: "Anatomy", topic: "Thorax" }),
+      goodRow({
+        exam: "plab",
+        specialty: "CLINICAL",
+        subject: "anatomy",
+        topic: "THORAX",
+        stem: "A second question about thoracic anatomy, padded for length rules.",
+      }),
+    ];
+    const a = run(rows);
+    expect(a.counts.valid).toBe(2);
+    expect(a.creationPlan.exams).toEqual([{ name: "PLAB" }]);
+    expect(a.creationPlan.specialties).toEqual([
+      { examName: "PLAB", name: "Clinical" },
+    ]);
+    expect(a.creationPlan.subjects).toHaveLength(1);
+    expect(a.creationPlan.topics).toHaveLength(1);
+  });
+
+  it("unknown exam with auto-create off is a row error naming the exam", () => {
+    const a = run(
+      [goodRow({ exam: "PLAB", specialty: "Clinical" })],
+      { autoCreate: false }
+    );
+    expect(errorsOf(a, 2)[0]).toMatch(/Exam "PLAB" doesn't exist/);
+  });
+
+  it("unknown specialty under an existing exam plans only specialty, subject and topic", () => {
+    const a = run([
+      goodRow({ exam: "USMLE", specialty: "Surgery Shelf", subject: "Anatomy", topic: "Abdomen" }),
+    ]);
+    expect(a.creationPlan.exams).toEqual([]);
+    expect(a.creationPlan.specialties).toEqual([
+      { examName: "USMLE", name: "Surgery Shelf" },
+    ]);
+    expect(a.creationPlan.subjects).toHaveLength(1);
+    expect(a.creationPlan.topics).toHaveLength(1);
+  });
+
+  it("the same subject name under two different specialties resolves to distinct ids", () => {
+    const a = run([
+      goodRow(), // defaults → General › Medicine › Cardiology
+      goodRow({
+        exam: "USMLE",
+        specialty: "Internal Medicine",
+        subject: "Medicine",
+        topic: "Cardiology",
+        stem: "A USMLE-style cardiology question with a distinct stem for this test.",
+      }),
+    ]);
+    expect(a.counts.valid).toBe(2);
+    expect(a.validRows[0].input.topicId).toBe(
+      "a1000000-0000-0000-0000-000000000001"
+    );
+    expect(a.validRows[1].input.topicId).toBe(
+      "a9000000-0000-0000-0000-000000000001"
+    );
+  });
+
+  it("the same NEW subject name under two specialties plans two distinct creations", () => {
+    const a = run([
+      goodRow({ subject: "Pharmacology", topic: "Antibiotics" }),
+      goodRow({
+        exam: "USMLE",
+        specialty: "Internal Medicine",
+        subject: "Pharmacology",
+        topic: "Antibiotics",
+        stem: "A second pharmacology stem so the duplicate-stem warning stays out of the way.",
+      }),
+    ]);
+    expect(a.creationPlan.subjects).toHaveLength(2);
+    expect(a.creationPlan.topics).toHaveLength(2);
+  });
+});
+
+describe("legacy sheets without Exam/Specialty columns", () => {
+  it("parses with default fallback (old template keeps importing)", () => {
+    const a = runLegacy([goodRow()]);
+    expect(a.fileErrors).toEqual([]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].examName).toBe("Medical Board Exam");
+    expect(a.validRows[0].specialtyName).toBe("General");
+    expect(a.validRows[0].input.topicId).toBe(
+      "a1000000-0000-0000-0000-000000000001"
+    );
+  });
+
+  it("still skips untouched old-template example rows", () => {
+    // The old template's example rows have no exam/specialty fields at all;
+    // isExampleRow must ignore columns absent from the sheet.
+    const legacyExample = Object.fromEntries(
+      LEGACY_COLUMNS.map((c) => [c.key, EXAMPLE_ROWS[0][c.key] ?? ""])
+    );
+    const a = runLegacy([legacyExample, goodRow()]);
+    expect(a.counts.skipped).toBe(1);
+    expect(a.counts.valid).toBe(1);
   });
 });
 

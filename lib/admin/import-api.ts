@@ -31,6 +31,8 @@ export type ImportCommitResponse =
   | {
       ok: true;
       imported: number;
+      createdExams: string[];
+      createdSpecialties: string[];
       createdSubjects: string[];
       createdTopics: string[];
     }

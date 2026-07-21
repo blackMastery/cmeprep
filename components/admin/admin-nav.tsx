@@ -1,6 +1,12 @@
 "use client";
 
-import { FileUp, FolderTree, Gauge, ListChecks } from "lucide-react";
+import {
+  FileUp,
+  FolderTree,
+  Gauge,
+  GraduationCap,
+  ListChecks,
+} from "lucide-react";
 import {
   MobileNavSheet,
   Sidebar,
@@ -15,6 +21,7 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin", label: "Overview", icon: Gauge },
   { href: "/admin/questions", label: "Questions", icon: ListChecks },
   { href: "/admin/questions/import", label: "Import", icon: FileUp },
+  { href: "/admin/exams", label: "Exams & specialties", icon: GraduationCap },
   { href: "/admin/subjects", label: "Subjects & topics", icon: FolderTree },
 ];
 

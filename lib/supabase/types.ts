@@ -18,6 +18,8 @@ export type TestConfig = {
   difficulty: Difficulty | "mixed";
   num_questions: number;
   duration_sec: number;
+  /** Absent on tests created before the exam level existed. */
+  exam_id?: string;
 };
 
 type Timestamps = { created_at: string };
@@ -32,8 +34,23 @@ export type Profile = Timestamps & {
   updated_at: string | null;
 };
 
+export type Exam = Timestamps & {
+  id: string;
+  name: string;
+  code: string | null;
+  position: number;
+};
+
+export type Specialty = Timestamps & {
+  id: string;
+  exam_id: string;
+  name: string;
+  position: number;
+};
+
 export type Subject = Timestamps & {
   id: string;
+  specialty_id: string;
   name: string;
   position: number;
 };
@@ -150,6 +167,10 @@ export type TopicAccuracy = {
   topic_name: string;
   subject_id: string;
   subject_name: string;
+  specialty_id: string;
+  specialty_name: string;
+  exam_id: string;
+  exam_name: string;
   attempts: number;
   correct: number;
   accuracy_pct: number;
@@ -173,6 +194,8 @@ export type Database = {
   public: {
     Tables: {
       profiles: Table<Profile>;
+      exams: Table<Exam>;
+      specialties: Table<Specialty>;
       subjects: Table<Subject>;
       topics: Table<Topic>;
       questions: Table<Question>;

@@ -49,10 +49,24 @@ export type ColumnDef = {
 /** Single source of truth for the parser AND the downloadable template. */
 export const COLUMNS: readonly ColumnDef[] = [
   {
+    key: "exam",
+    header: "Exam",
+    required: false,
+    note: "Optional. Exam name — leave blank to use the default exam. Unknown names are created automatically when auto-create is enabled.",
+    width: 20,
+  },
+  {
+    key: "specialty",
+    header: "Specialty",
+    required: false,
+    note: "Optional. Specialty within the exam — leave blank to use the default specialty (only allowed for the default exam).",
+    width: 20,
+  },
+  {
     key: "subject",
     header: "Subject",
     required: true,
-    note: "Required. Subject name. Unknown names are created automatically when auto-create is enabled.",
+    note: "Required. Subject name within the specialty. Unknown names are created automatically when auto-create is enabled.",
     width: 18,
   },
   {
@@ -124,6 +138,8 @@ export const COLUMNS: readonly ColumnDef[] = [
  */
 export const EXAMPLE_ROWS: readonly Record<string, string>[] = [
   {
+    exam: "Medical Board Exam",
+    specialty: "General",
     subject: "Medicine",
     topic: "Cardiology",
     type: "single",
@@ -137,6 +153,8 @@ export const EXAMPLE_ROWS: readonly Record<string, string>[] = [
     correct: "A",
   },
   {
+    exam: "Medical Board Exam",
+    specialty: "General",
     subject: "Medicine",
     topic: "Endocrinology",
     type: "multi",
@@ -162,6 +180,9 @@ export type ReportLine = {
 
 export type ValidRow = {
   rowNumber: number;
+  /** Resolved display names, post default-fallback — always populated. */
+  examName: string;
+  specialtyName: string;
   subjectName: string;
   topicName: string;
   /** Ready for questionSchema/insert; topicId may be the placeholder. */
@@ -170,9 +191,17 @@ export type ValidRow = {
   stemNorm: string;
 };
 
+/** Entities to create at commit, each qualified by its full parent chain. */
 export type CreationPlan = {
-  subjects: { name: string }[];
-  topics: { subjectName: string; name: string }[];
+  exams: { name: string }[];
+  specialties: { examName: string; name: string }[];
+  subjects: { examName: string; specialtyName: string; name: string }[];
+  topics: {
+    examName: string;
+    specialtyName: string;
+    subjectName: string;
+    name: string;
+  }[];
 };
 
 export type ImportAnalysis = {
@@ -191,11 +220,22 @@ export type ImportAnalysis = {
 };
 
 export type TaxonomySnapshot = {
-  subjects: {
+  exams: {
     id: string;
     name: string;
-    topics: { id: string; name: string }[];
+    specialties: {
+      id: string;
+      name: string;
+      subjects: {
+        id: string;
+        name: string;
+        topics: { id: string; name: string }[];
+      }[];
+    }[];
   }[];
+  /** Display names of the default exam/specialty; null if deleted. */
+  defaultExamName: string | null;
+  defaultSpecialtyName: string | null;
 };
 
 // ── Normalisation helpers ───────────────────────────────────
@@ -320,9 +360,16 @@ const TYPE_ALIASES: Record<string, "mcq_single" | "mcq_multi" | "image"> = {
   "image based": "image",
 };
 
-function isExampleRow(fields: Map<string, string>): boolean {
+function isExampleRow(
+  fields: Map<string, string>,
+  headerMap: Map<string, number>
+): boolean {
   return EXAMPLE_ROWS.some((example) =>
     COLUMNS.every((column) => {
+      // Compare only columns present in THIS sheet: an old template without
+      // the Exam/Specialty columns must still have its untouched example
+      // rows recognised — otherwise they'd import as junk questions.
+      if (!headerMap.has(column.key)) return true;
       const expected = normalizeKey(example[column.key] ?? "");
       const actual = normalizeKey(fields.get(column.key) ?? "");
       return expected === actual;
@@ -340,7 +387,12 @@ export function parseMatrix(
 ): ImportAnalysis {
   const lines: ReportLine[] = [];
   const validRows: ValidRow[] = [];
-  const creationPlan: CreationPlan = { subjects: [], topics: [] };
+  const creationPlan: CreationPlan = {
+    exams: [],
+    specialties: [],
+    subjects: [],
+    topics: [],
+  };
   const counts = {
     dataRows: 0,
     valid: 0,
@@ -360,12 +412,21 @@ export function parseMatrix(
     };
   }
 
-  // Taxonomy lookups, casefolded once.
-  const subjectsByName = new Map(
-    taxonomy.subjects.map((s) => [normalizeKey(s.name), s])
+  // Taxonomy lookups, casefolded once. All plan keys are FULLY QUALIFIED
+  // (exam::specialty::subject::topic) — blank cells fall back to the default
+  // names before keying, so identical names under different parents never
+  // collide.
+  const examsByName = new Map(
+    taxonomy.exams.map((e) => [normalizeKey(e.name), e])
   );
-  const plannedSubjects = new Map<string, string>(); // norm -> display name
-  const plannedTopics = new Map<string, { subjectName: string; name: string }>();
+  const defaultExamNorm =
+    taxonomy.defaultExamName === null
+      ? null
+      : normalizeKey(taxonomy.defaultExamName);
+  const plannedExams = new Set<string>();
+  const plannedSpecialties = new Set<string>();
+  const plannedSubjects = new Set<string>();
+  const plannedTopics = new Set<string>();
 
   const stemFirstRow = new Map<string, number>();
 
@@ -423,7 +484,7 @@ export function parseMatrix(
     const rowWarnings: string[] = [];
 
     // Untouched template example rows are skipped, never imported.
-    if (rowErrors.length === 0 && isExampleRow(fields)) {
+    if (rowErrors.length === 0 && isExampleRow(fields, headerMap)) {
       counts.skipped += 1;
       lines.push({
         row: rowNumber,
@@ -437,6 +498,35 @@ export function parseMatrix(
     const topicName = fields.get("topic") ?? "";
     if (subjectName === "") rowErrors.push("Subject is required.");
     if (topicName === "") rowErrors.push("Topic is required.");
+
+    // Exam/Specialty fall back to the defaults BEFORE any keying, so every
+    // downstream lookup and plan key is fully qualified.
+    let examName = fields.get("exam") ?? "";
+    let specialtyName = fields.get("specialty") ?? "";
+    if (examName === "") {
+      if (taxonomy.defaultExamName === null) {
+        rowErrors.push(
+          "Exam is required — no default exam exists. Fill in the Exam column."
+        );
+      } else {
+        examName = taxonomy.defaultExamName;
+      }
+    }
+    if (specialtyName === "" && examName !== "") {
+      const isDefaultExam =
+        defaultExamNorm !== null && normalizeKey(examName) === defaultExamNorm;
+      if (isDefaultExam && taxonomy.defaultSpecialtyName !== null) {
+        specialtyName = taxonomy.defaultSpecialtyName;
+      } else if (isDefaultExam) {
+        rowErrors.push(
+          "Specialty is required — the default specialty no longer exists."
+        );
+      } else {
+        // Silently attaching a named exam's rows to the default "General"
+        // would scatter content; make the sheet say where it belongs.
+        rowErrors.push("Specialty is required when Exam is not the default.");
+      }
+    }
 
     // Type
     let type: "mcq_single" | "mcq_multi" = "mcq_single";
@@ -520,12 +610,27 @@ export function parseMatrix(
       }
     }
 
-    // Taxonomy resolution
+    // Taxonomy resolution: walk exam → specialty → subject → topic. Only
+    // runs once the names above resolved (fallback applied, nothing blank).
     let topicId = PLACEHOLDER_TOPIC_ID;
-    if (subjectName !== "" && topicName !== "") {
-      const subjectNorm = normalizeKey(subjectName);
+    if (
+      examName !== "" &&
+      specialtyName !== "" &&
+      subjectName !== "" &&
+      topicName !== ""
+    ) {
+      const examNorm = normalizeKey(examName);
+      const specNorm = normalizeKey(specialtyName);
+      const subjNorm = normalizeKey(subjectName);
       const topicNorm = normalizeKey(topicName);
-      const existingSubject = subjectsByName.get(subjectNorm);
+
+      const existingExam = examsByName.get(examNorm);
+      const existingSpec = existingExam?.specialties.find(
+        (s) => normalizeKey(s.name) === specNorm
+      );
+      const existingSubject = existingSpec?.subjects.find(
+        (s) => normalizeKey(s.name) === subjNorm
+      );
       const existingTopic = existingSubject?.topics.find(
         (t) => normalizeKey(t.name) === topicNorm
       );
@@ -533,29 +638,71 @@ export function parseMatrix(
       if (existingTopic) {
         topicId = existingTopic.id;
       } else if (!opts.autoCreateTaxonomy) {
-        rowErrors.push(
-          existingSubject
-            ? `Topic "${topicName}" doesn't exist under "${subjectName}". Create it first, or enable auto-create.`
-            : `Subject "${subjectName}" doesn't exist. Create it first, or enable auto-create.`
-        );
+        // Name the FIRST missing level — that's the one to create.
+        if (!existingExam) {
+          rowErrors.push(
+            `Exam "${examName}" doesn't exist. Create it first, or enable auto-create.`
+          );
+        } else if (!existingSpec) {
+          rowErrors.push(
+            `Specialty "${specialtyName}" doesn't exist under "${examName}". Create it first, or enable auto-create.`
+          );
+        } else if (!existingSubject) {
+          rowErrors.push(
+            `Subject "${subjectName}" doesn't exist under "${examName} › ${specialtyName}". Create it first, or enable auto-create.`
+          );
+        } else {
+          rowErrors.push(
+            `Topic "${topicName}" doesn't exist under "${subjectName}". Create it first, or enable auto-create.`
+          );
+        }
       } else {
-        if (!existingSubject && !plannedSubjects.has(subjectNorm)) {
-          plannedSubjects.set(subjectNorm, subjectName);
-          creationPlan.subjects.push({ name: subjectName });
+        if (!existingExam && !plannedExams.has(examNorm)) {
+          plannedExams.add(examNorm);
+          creationPlan.exams.push({ name: examName });
           lines.push({
             row: rowNumber,
             severity: "info",
-            message: `Will create subject "${subjectName}".`,
+            message: `Will create exam "${examName}".`,
           });
         }
-        const topicPlanKey = `${subjectNorm}::${topicNorm}`;
-        if (!plannedTopics.has(topicPlanKey)) {
-          plannedTopics.set(topicPlanKey, { subjectName, name: topicName });
-          creationPlan.topics.push({ subjectName, name: topicName });
+        const specKey = `${examNorm}::${specNorm}`;
+        if (!existingSpec && !plannedSpecialties.has(specKey)) {
+          plannedSpecialties.add(specKey);
+          creationPlan.specialties.push({ examName, name: specialtyName });
           lines.push({
             row: rowNumber,
             severity: "info",
-            message: `Will create topic "${topicName}" under "${subjectName}".`,
+            message: `Will create specialty "${specialtyName}" under "${examName}".`,
+          });
+        }
+        const subjKey = `${specKey}::${subjNorm}`;
+        if (!existingSubject && !plannedSubjects.has(subjKey)) {
+          plannedSubjects.add(subjKey);
+          creationPlan.subjects.push({
+            examName,
+            specialtyName,
+            name: subjectName,
+          });
+          lines.push({
+            row: rowNumber,
+            severity: "info",
+            message: `Will create subject "${subjectName}" in "${examName} › ${specialtyName}".`,
+          });
+        }
+        const topicKey = `${subjKey}::${topicNorm}`;
+        if (!plannedTopics.has(topicKey)) {
+          plannedTopics.add(topicKey);
+          creationPlan.topics.push({
+            examName,
+            specialtyName,
+            subjectName,
+            name: topicName,
+          });
+          lines.push({
+            row: rowNumber,
+            severity: "info",
+            message: `Will create topic "${topicName}" under "${specialtyName} › ${subjectName}".`,
           });
         }
       }
@@ -624,6 +771,8 @@ export function parseMatrix(
     counts.valid += 1;
     validRows.push({
       rowNumber,
+      examName,
+      specialtyName,
       subjectName,
       topicName,
       input: candidate,

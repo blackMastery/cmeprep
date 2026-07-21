@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
-import type { SubjectWithTopics } from "@/lib/admin/taxonomy";
+import type { ExamHierarchy } from "@/lib/admin/taxonomy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -15,12 +15,16 @@ const SELECT_CLASS =
  * shareable by URL, and working without JS.
  */
 export function QuestionFilters({
-  taxonomy,
+  hierarchy,
 }: {
-  taxonomy: SubjectWithTopics[];
+  hierarchy: ExamHierarchy[];
 }) {
   const sp = useSearchParams();
   const get = (k: string) => sp.get(k) ?? "";
+
+  const specialties = hierarchy.flatMap((exam) =>
+    exam.specialties.map((s) => ({ ...s, examName: exam.name }))
+  );
 
   return (
     <form
@@ -43,6 +47,44 @@ export function QuestionFilters({
         />
       </div>
 
+      {/* Only rendered once a second exam/specialty exists — with a single
+          one they filter nothing and just widen the bar. */}
+      {hierarchy.length > 1 && (
+        <select
+          name="exam"
+          defaultValue={get("exam")}
+          aria-label="Exam"
+          className={SELECT_CLASS}
+        >
+          <option value="">All exams</option>
+          {hierarchy.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {specialties.length > 1 && (
+        <select
+          name="specialty"
+          defaultValue={get("specialty")}
+          aria-label="Specialty"
+          className={SELECT_CLASS}
+        >
+          <option value="">All specialties</option>
+          {hierarchy.map((e) => (
+            <optgroup key={e.id} label={e.name}>
+              {e.specialties.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      )}
+
       <select
         name="subject"
         defaultValue={get("subject")}
@@ -50,10 +92,19 @@ export function QuestionFilters({
         className={SELECT_CLASS}
       >
         <option value="">All subjects</option>
-        {taxonomy.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
+        {specialties.map((s) => (
+          <optgroup
+            key={s.id}
+            label={
+              hierarchy.length > 1 ? `${s.examName} › ${s.name}` : s.name
+            }
+          >
+            {s.subjects.map((subject) => (
+              <option key={subject.id} value={subject.id}>
+                {subject.name}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
 
@@ -64,15 +115,24 @@ export function QuestionFilters({
         className={SELECT_CLASS}
       >
         <option value="">All topics</option>
-        {taxonomy.map((s) => (
-          <optgroup key={s.id} label={s.name}>
-            {s.topics.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </optgroup>
-        ))}
+        {specialties.flatMap((s) =>
+          s.subjects.map((subject) => (
+            <optgroup
+              key={subject.id}
+              label={
+                specialties.length > 1
+                  ? `${s.name} › ${subject.name}`
+                  : subject.name
+              }
+            >
+              {subject.topics.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        )}
       </select>
 
       <select

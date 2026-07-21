@@ -56,17 +56,24 @@ export async function createSubject(
 ): Promise<AdminState> {
   const user = await requireAdmin();
 
-  const parsed = subjectSchema.safeParse({ name: formData.get("name") });
+  const parsed = subjectSchema.safeParse({
+    specialtyId: formData.get("specialtyId"),
+    name: formData.get("name"),
+  });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const admin = createAdminClient();
-  const { data: existing } = await admin.from("subjects").select("position");
+  const { data: siblings } = await admin
+    .from("subjects")
+    .select("position")
+    .eq("specialty_id", parsed.data.specialtyId);
 
   const { data, error } = await admin
     .from("subjects")
     .insert({
+      specialty_id: parsed.data.specialtyId,
       name: parsed.data.name,
-      position: nextPosition(existing ?? []),
+      position: nextPosition(siblings ?? []),
     })
     .select("id")
     .single();
@@ -75,12 +82,15 @@ export async function createSubject(
     return {
       error:
         error.code === UNIQUE_VIOLATION
-          ? "A subject with that name already exists."
+          ? "That specialty already has a subject with this name."
           : "Could not create the subject.",
     };
   }
 
-  await audit(user.id, "subject.create", data.id, { name: parsed.data.name });
+  await audit(user.id, "subject.create", data.id, {
+    name: parsed.data.name,
+    specialtyId: parsed.data.specialtyId,
+  });
   revalidatePath("/admin/subjects");
   return { success: `Created ${parsed.data.name}.` };
 }
@@ -92,7 +102,8 @@ export async function renameSubject(
   const user = await requireAdmin();
 
   const id = uuid().safeParse(formData.get("id"));
-  const parsed = subjectSchema.safeParse({ name: formData.get("name") });
+  // Rename never moves the subject, so only the name field is parsed.
+  const parsed = subjectSchema.shape.name.safeParse(formData.get("name"));
   if (!id.success) return { error: "Unknown subject." };
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -105,21 +116,21 @@ export async function renameSubject(
 
   const { error } = await admin
     .from("subjects")
-    .update({ name: parsed.data.name })
+    .update({ name: parsed.data })
     .eq("id", id.data);
 
   if (error) {
     return {
       error:
         error.code === UNIQUE_VIOLATION
-          ? "A subject with that name already exists."
+          ? "That specialty already has a subject with this name."
           : "Could not rename the subject.",
     };
   }
 
   await audit(user.id, "subject.rename", id.data, {
     before: before?.name,
-    after: parsed.data.name,
+    after: parsed.data,
   });
   revalidatePath("/admin/subjects");
   return { success: "Renamed." };
@@ -355,7 +366,18 @@ export async function reorder(
       .eq("subject_id", row.subject_id);
     siblings = data ?? [];
   } else {
-    const { data } = await admin.from("subjects").select("id, name, position");
+    // Subjects order within their specialty, mirroring the topics branch.
+    const { data: row } = await admin
+      .from("subjects")
+      .select("specialty_id")
+      .eq("id", id.data)
+      .maybeSingle();
+    if (!row) return { error: "Unknown subject." };
+
+    const { data } = await admin
+      .from("subjects")
+      .select("id, name, position")
+      .eq("specialty_id", row.specialty_id);
     siblings = data ?? [];
   }
 

@@ -9,6 +9,7 @@ export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 export const uuid = () => z.guid();
 
 export const createTestSchema = z.object({
+  examId: uuid(),
   subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
   topicIds: z.array(uuid()).default([]),
   difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
@@ -104,7 +105,18 @@ export const questionSchema = z
 
 export type QuestionInput = z.infer<typeof questionSchema>;
 
+export const examSchema = z.object({
+  name: z.string().trim().min(2, "Exam name is too short").max(80),
+  code: z.string().trim().max(20, "Code is too long").optional(),
+});
+
+export const specialtySchema = z.object({
+  examId: uuid(),
+  name: z.string().trim().min(2, "Specialty name is too short").max(80),
+});
+
 export const subjectSchema = z.object({
+  specialtyId: uuid(),
   name: z.string().trim().min(2, "Subject name is too short").max(80),
 });
 

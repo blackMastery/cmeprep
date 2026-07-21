@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FileUp, Plus } from "lucide-react";
 import { listQuestions, PAGE_SIZE } from "@/lib/admin/questions";
-import { listTaxonomy } from "@/lib/admin/taxonomy";
+import { listHierarchy } from "@/lib/admin/taxonomy";
 import { pageWindow } from "@/lib/pagination";
 import type { Difficulty, QuestionType } from "@/lib/supabase/types";
 import { DIFFICULTIES, QUESTION_TYPES } from "@/lib/validation";
@@ -26,9 +26,11 @@ export default async function AdminQuestionsPage(
   const type = one(sp.type);
   const published = one(sp.published);
 
-  const [result, taxonomy] = await Promise.all([
+  const [result, hierarchy] = await Promise.all([
     listQuestions({
       search: one(sp.q),
+      examId: one(sp.exam),
+      specialtyId: one(sp.specialty),
       subjectId: one(sp.subject),
       topicId: one(sp.topic),
       difficulty: DIFFICULTIES.includes(difficulty as Difficulty)
@@ -42,7 +44,7 @@ export default async function AdminQuestionsPage(
       includeDeleted: one(sp.includeDeleted) === "1",
       page: Number(one(sp.page) ?? 1) || 1,
     }),
-    listTaxonomy(),
+    listHierarchy(),
   ]);
 
   return (
@@ -72,7 +74,7 @@ export default async function AdminQuestionsPage(
         </div>
       </header>
 
-      <QuestionFilters taxonomy={taxonomy} />
+      <QuestionFilters hierarchy={hierarchy} />
 
       <div className="mt-6">
         <QuestionsTable rows={result.rows} />

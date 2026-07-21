@@ -14,7 +14,11 @@ import {
   type ValidRow,
 } from "@/lib/admin/import-core";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listTaxonomy } from "@/lib/admin/taxonomy";
+import { listHierarchy } from "@/lib/admin/taxonomy";
+import {
+  DEFAULT_EXAM_ID,
+  DEFAULT_SPECIALTY_ID,
+} from "@/lib/taxonomy-defaults";
 
 /**
  * The exceljs boundary of the bulk importer. Everything with rules lives in
@@ -147,13 +151,32 @@ export async function analyzeUpload(
 }
 
 async function taxonomySnapshot(): Promise<TaxonomySnapshot> {
-  const subjects = await listTaxonomy();
+  const hierarchy = await listHierarchy();
+
+  // Default names resolved by FIXED id, never by name — admins may rename
+  // the default exam/specialty and blank cells must keep following them.
+  const defaultExam = hierarchy.find((e) => e.id === DEFAULT_EXAM_ID) ?? null;
+  const defaultSpecialty =
+    hierarchy
+      .flatMap((e) => e.specialties)
+      .find((s) => s.id === DEFAULT_SPECIALTY_ID) ?? null;
+
   return {
-    subjects: subjects.map((s) => ({
-      id: s.id,
-      name: s.name,
-      topics: s.topics.map((t) => ({ id: t.id, name: t.name })),
+    exams: hierarchy.map((exam) => ({
+      id: exam.id,
+      name: exam.name,
+      specialties: exam.specialties.map((sp) => ({
+        id: sp.id,
+        name: sp.name,
+        subjects: sp.subjects.map((s) => ({
+          id: s.id,
+          name: s.name,
+          topics: s.topics.map((t) => ({ id: t.id, name: t.name })),
+        })),
+      })),
     })),
+    defaultExamName: defaultExam?.name ?? null,
+    defaultSpecialtyName: defaultSpecialty?.name ?? null,
   };
 }
 
@@ -198,7 +221,7 @@ export async function dbDuplicateWarnings(
       warnings.push({
         row: row.rowNumber,
         severity: "warning",
-        message: `A question with this stem already exists in ${row.subjectName} › ${row.topicName}.`,
+        message: `A question with this stem already exists in ${row.specialtyName} › ${row.subjectName} › ${row.topicName}.`,
       });
     }
   }

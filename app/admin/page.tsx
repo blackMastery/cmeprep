@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { FileText, FolderTree, ListChecks, Plus } from "lucide-react";
+import {
+  FileText,
+  FolderTree,
+  GraduationCap,
+  ListChecks,
+  Plus,
+} from "lucide-react";
 import { contentCounts } from "@/lib/admin/questions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +16,8 @@ export default async function AdminOverviewPage() {
   const stats = [
     { icon: ListChecks, label: "Published questions", value: counts.published },
     { icon: FileText, label: "Drafts", value: counts.drafts },
+    { icon: GraduationCap, label: "Exams", value: counts.exams },
+    { icon: GraduationCap, label: "Specialties", value: counts.specialties },
     { icon: FolderTree, label: "Subjects", value: counts.subjects },
     { icon: FolderTree, label: "Topics", value: counts.topics },
   ];

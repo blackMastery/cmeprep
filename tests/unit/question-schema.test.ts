@@ -250,13 +250,22 @@ describe("parseQuestionForm", () => {
 
 describe("subjectSchema / topicSchema", () => {
   it("accepts valid names", () => {
-    expect(subjectSchema.safeParse({ name: "Medicine" }).success).toBe(true);
+    expect(
+      subjectSchema.safeParse({ specialtyId: SEED_TOPIC, name: "Medicine" })
+        .success
+    ).toBe(true);
     expect(
       topicSchema.safeParse({ subjectId: SEED_TOPIC, name: "Cardiology" }).success
     ).toBe(true);
   });
 
+  it("requires a specialty for subjects", () => {
+    expect(subjectSchema.safeParse({ name: "Medicine" }).success).toBe(false);
+  });
+
   it("trims and rejects names that are too short", () => {
-    expect(subjectSchema.safeParse({ name: " M " }).success).toBe(false);
+    expect(
+      subjectSchema.safeParse({ specialtyId: SEED_TOPIC, name: " M " }).success
+    ).toBe(false);
   });
 });

@@ -9,12 +9,18 @@ const V4 = "9f1c2b3e-7a4d-4c8b-9e2f-1a2b3c4d5e6f";
 
 describe("createTestSchema", () => {
   const valid = {
+    examId: "e0000000-0000-0000-0000-000000000001",
     subjectIds: [SEED_SUBJECT],
     topicIds: [],
     difficulty: "mixed",
     numQuestions: 10,
     durationMin: 15,
   };
+
+  it("requires an exam id", () => {
+    const { examId: _omitted, ...withoutExam } = valid;
+    expect(createTestSchema.safeParse(withoutExam).success).toBe(false);
+  });
 
   it("accepts seed-style uuids that are not RFC v4", () => {
     expect(createTestSchema.safeParse(valid).success).toBe(true);

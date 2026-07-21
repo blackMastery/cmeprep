@@ -30,9 +30,30 @@ export async function POST(request: Request) {
     );
   }
 
-  const { subjectIds, topicIds, difficulty, numQuestions, durationMin } =
+  const { examId, subjectIds, topicIds, difficulty, numQuestions, durationMin } =
     parsed.data;
   const admin = createAdminClient();
+
+  // ── Integrity: every chosen subject must belong to the chosen exam.
+  // Checked BEFORE the trial claim so no refund path is needed.
+  const { data: examSubjects, error: examCheckError } = await admin
+    .from("subjects")
+    .select("id, specialties!inner(exam_id)")
+    .in("id", subjectIds)
+    .eq("specialties.exam_id", examId);
+
+  if (examCheckError) {
+    return NextResponse.json({ error: "Could not start test" }, { status: 500 });
+  }
+  if ((examSubjects?.length ?? 0) !== subjectIds.length) {
+    return NextResponse.json(
+      {
+        error: "exam_mismatch",
+        message: "Those subjects don't belong to the chosen exam.",
+      },
+      { status: 400 }
+    );
+  }
 
   // ── Trial quota: one atomic statement, so two concurrent requests can
   // never both consume the final credit.
@@ -139,6 +160,7 @@ export async function POST(request: Request) {
     difficulty,
     num_questions: picked.length,
     duration_sec: durationMin * 60,
+    exam_id: examId,
   };
 
   const expiresAt = new Date(Date.now() + durationMin * 60_000).toISOString();
