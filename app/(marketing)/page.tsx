@@ -14,16 +14,22 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { PhoneMockup } from "@/components/marketing/phone-mockup";
 import { PricingCards } from "@/components/marketing/pricing-cards";
+import { listActivePlans, paidPlans } from "@/lib/plans";
+import { priceLabel } from "@/lib/format";
 
-const STATS = [
-  { value: "700+", label: "Doctors", note: "using cmeprep.me" },
-  {
-    value: "UNLIMITED",
-    label: "Questions across 7 question banks",
-    note: "+ 1 OSCE station bank",
-  },
-  { value: "$144", label: "starting plans", note: "subscribe today!" },
-];
+function stats(startingPrice: string | null) {
+  return [
+    { value: "700+", label: "Doctors", note: "using cmeprep.me" },
+    {
+      value: "UNLIMITED",
+      label: "Questions across 7 question banks",
+      note: "+ 1 OSCE station bank",
+    },
+    startingPrice
+      ? { value: startingPrice, label: "starting plans", note: "subscribe today!" }
+      : { value: "FREE", label: "to start", note: "sign up today!" },
+  ];
+}
 
 const FEATURES = [
   {
@@ -68,7 +74,15 @@ const EXAMINATIONS = [
   { code: "MCDN", name: "Nigerian Medical Board Exams" },
 ];
 
-export default function MarketingPage() {
+export default async function MarketingPage() {
+  const plans = await listActivePlans();
+  const paid = paidPlans(plans);
+  const startingPrice =
+    paid.length > 0
+      ? priceLabel(Math.min(...paid.map((p) => p.price_cents)))
+      : null;
+  const STATS = stats(startingPrice);
+
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────── */}
@@ -235,19 +249,23 @@ export default function MarketingPage() {
       </section>
 
       {/* ── Pricing ──────────────────────────────────────── */}
-      <section id="pricing" className="border-t border-border py-16 sm:py-20">
-        <div className="mx-auto w-full max-w-6xl px-4">
-          <div className="text-center">
-            <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              Plans start at $144
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Start free, subscribe when you&apos;re ready.
-            </p>
+      {plans.length > 0 && (
+        <section id="pricing" className="border-t border-border py-16 sm:py-20">
+          <div className="mx-auto w-full max-w-6xl px-4">
+            <div className="text-center">
+              <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+                {startingPrice
+                  ? `Plans start at ${startingPrice}`
+                  : "Start free today"}
+              </h2>
+              <p className="mt-3 text-muted-foreground">
+                Start free, subscribe when you&apos;re ready.
+              </p>
+            </div>
+            <PricingCards plans={plans} />
           </div>
-          <PricingCards />
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── Start today ──────────────────────────────────── */}
       <section className="bg-brand-surface">

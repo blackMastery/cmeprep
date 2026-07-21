@@ -181,6 +181,37 @@ export type UserDailyActivity = {
   day: string;
 };
 
+export type Subscription = Timestamps & {
+  id: string;
+  user_id: string;
+  paypal_subscription_id: string | null;
+  /** Free text snapshot; presets come from the plans table. */
+  plan: string;
+  status: SubStatus;
+  current_period_end: string;
+};
+
+export type Plan = Timestamps & {
+  id: string;
+  name: string;
+  price_cents: number;
+  period: string;
+  description: string | null;
+  features: string[];
+  /** Months of access a grant defaults to; null = pick the date manually. */
+  duration_months: number | null;
+  featured: boolean;
+  is_active: boolean;
+  position: number;
+  updated_at: string | null;
+};
+
+/** auth.users bridge (public.user_emails view) — service-role read only. */
+export type UserEmail = {
+  id: string;
+  email: string | null;
+};
+
 type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Row: Row;
   Insert: Insert;
@@ -207,12 +238,15 @@ export type Database = {
       bookmarks: Table<Bookmark>;
       notes: Table<Note>;
       audit_logs: Table<AuditLog>;
+      subscriptions: Table<Subscription>;
+      plans: Table<Plan>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;
       user_stats: View<UserStats>;
       topic_accuracy: View<TopicAccuracy>;
       user_daily_activity: View<UserDailyActivity>;
+      user_emails: View<UserEmail>;
     };
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };

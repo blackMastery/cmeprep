@@ -1,11 +1,21 @@
 import Link from "next/link";
 import { Lock } from "lucide-react";
-import type { Profile } from "@/lib/supabase/types";
+import type { Plan, Profile } from "@/lib/supabase/types";
+import { priceLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 
-export function TrialLimitCard({ profile }: { profile: Profile }) {
+/** `plans` = active PAID plans (first two shown), from the plans table. */
+export function TrialLimitCard({
+  profile,
+  plans,
+}: {
+  profile: Profile;
+  plans: Plan[];
+}) {
+  const shown = plans.slice(0, 2);
+
   return (
     <Card className="[--card-spacing:--spacing(7)]">
       <CardContent className="space-y-5 text-center">
@@ -23,21 +33,26 @@ export function TrialLimitCard({ profile }: { profile: Profile }) {
           </p>
         </div>
 
-        <EcgDivider className="text-primary/30" />
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <PlanSummary
-            name="1 month"
-            price="$144"
-            note="Full access, billed once"
-          />
-          <PlanSummary
-            name="3 months"
-            price="$216"
-            note="Best value — save 50%"
-            featured
-          />
-        </div>
+        {shown.length > 0 && (
+          <>
+            <EcgDivider className="text-primary/30" />
+            <div
+              className={
+                shown.length > 1 ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"
+              }
+            >
+              {shown.map((plan) => (
+                <PlanSummary
+                  key={plan.id}
+                  name={plan.name}
+                  price={priceLabel(plan.price_cents)}
+                  note={plan.description ?? plan.period}
+                  featured={plan.featured}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Button size="lg" asChild>

@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  CreditCard,
   FileUp,
   FolderTree,
   Gauge,
   GraduationCap,
   ListChecks,
+  Users,
 } from "lucide-react";
 import {
   MobileNavSheet,
@@ -23,6 +25,8 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin/questions/import", label: "Import", icon: FileUp },
   { href: "/admin/exams", label: "Exams & specialties", icon: GraduationCap },
   { href: "/admin/subjects", label: "Subjects & topics", icon: FolderTree },
+  { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/plans", label: "Plans", icon: CreditCard },
 ];
 
 export function AdminSidebar() {

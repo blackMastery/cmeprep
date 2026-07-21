@@ -15,6 +15,14 @@ export const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Admin",
 };
 
+/** Cents → "$144" (whole dollars) or "$19.50" (cents only when non-zero). */
+export function priceLabel(cents: number): string {
+  const dollars = cents / 100;
+  return Number.isInteger(dollars)
+    ? `$${dollars}`
+    : `$${dollars.toFixed(2)}`;
+}
+
 /** Seconds → `M:SS`, or `H:MM:SS` past an hour. */
 export function formatDuration(totalSec: number): string {
   const s = Math.max(0, Math.floor(totalSec));

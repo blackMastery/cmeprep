@@ -1,10 +1,12 @@
 import Link from "next/link";
 import {
+  CreditCard,
   FileText,
   FolderTree,
   GraduationCap,
   ListChecks,
   Plus,
+  Users,
 } from "lucide-react";
 import { contentCounts } from "@/lib/admin/questions";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,8 @@ export default async function AdminOverviewPage() {
     { icon: GraduationCap, label: "Specialties", value: counts.specialties },
     { icon: FolderTree, label: "Subjects", value: counts.subjects },
     { icon: FolderTree, label: "Topics", value: counts.topics },
+    { icon: Users, label: "Users", value: counts.users },
+    { icon: CreditCard, label: "Plans", value: counts.plans },
   ];
 
   return (

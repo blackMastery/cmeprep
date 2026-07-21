@@ -215,8 +215,10 @@ export async function getQuestionForEdit(
 export async function contentCounts() {
   const admin = createAdminClient();
 
-  const [exams, specialties, subjects, topics, published, drafts] =
+  const [users, plans, exams, specialties, subjects, topics, published, drafts] =
     await Promise.all([
+      admin.from("profiles").select("id", { count: "exact", head: true }),
+      admin.from("plans").select("id", { count: "exact", head: true }),
       admin.from("exams").select("id", { count: "exact", head: true }),
       admin.from("specialties").select("id", { count: "exact", head: true }),
       admin.from("subjects").select("id", { count: "exact", head: true }),
@@ -234,6 +236,8 @@ export async function contentCounts() {
     ]);
 
   return {
+    users: users.count ?? 0,
+    plans: plans.count ?? 0,
     exams: exams.count ?? 0,
     specialties: specialties.count ?? 0,
     subjects: subjects.count ?? 0,

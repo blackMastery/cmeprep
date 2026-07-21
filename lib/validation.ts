@@ -157,6 +157,67 @@ export function parseQuestionForm(fd: FormData): unknown {
   };
 }
 
+/* ── Admin: users & subscriptions ──────────────────────────────── */
+
+export const USER_ROLES = ["trial", "student", "admin"] as const;
+export const userRoleSchema = z.enum(USER_ROLES);
+
+/**
+ * NOTE: z.coerce turns "" into 0 — actions must reject empty input BEFORE
+ * parsing, or an empty field silently zeroes the limit.
+ */
+export const trialsLimitSchema = z.coerce
+  .number()
+  .int("Whole numbers only")
+  .min(0, "Cannot be negative")
+  .max(1000, "That's more than anyone needs");
+
+export const SUB_STATUSES = ["active", "expired", "cancelled"] as const;
+
+/** Textarea → feature list: one per line, trimmed, empties dropped. */
+export function parseFeatureLines(raw: string): string[] {
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+}
+
+export const planSchema = z.object({
+  name: z.string().trim().min(2, "Plan name is too short").max(40),
+  // Dollars in the form, cents in the database.
+  priceDollars: z.coerce
+    .number()
+    .min(0, "Price cannot be negative")
+    .max(10000, "That price looks wrong"),
+  period: z.string().trim().min(2, "Add a billing period line").max(60),
+  description: z.string().trim().max(200, "Keep the description short"),
+  // Optional; actions convert "" to null BEFORE parsing (coerce footgun).
+  durationMonths: z.coerce
+    .number()
+    .int("Whole months only")
+    .min(1, "At least one month")
+    .max(36, "That's too long")
+    .nullable(),
+  features: z
+    .array(z.string().trim().min(1).max(80, "Feature lines are capped at 80 characters"))
+    .max(8, "Eight feature lines at most"),
+});
+
+export const subscriptionSchema = z.object({
+  plan: z
+    .string()
+    .trim()
+    .min(2, "Plan name is too short")
+    .max(40, "Plan name is too long"),
+  status: z.enum(SUB_STATUSES),
+  // <input type="date"> value; the action converts to `${d}T23:59:59Z` —
+  // end-of-day UTC so the chosen date is the last day WITH access.
+  currentPeriodEnd: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick an end date")
+    .refine((d) => !Number.isNaN(Date.parse(d)), "Invalid date"),
+});
+
 /* ── Account / auth ─────────────────────────────────────────────── */
 
 export const emailSchema = z

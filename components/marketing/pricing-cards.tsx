@@ -1,62 +1,17 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
+import type { Plan } from "@/lib/supabase/types";
+import { priceLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const PLANS = [
-  {
-    name: "Trial",
-    price: "$0",
-    period: "free forever",
-    description: "See the question quality before paying anything.",
-    features: [
-      "10 questions from the bank",
-      "2 timed practice tests",
-      "Full explanations",
-    ],
-
-    cta: "Start free",
-    href: "/register",
-    featured: false,
-  },
-  {
-    name: "1 month",
-    price: "$144",
-    period: "one month access",
-    description: "Everything, for the month before your exam.",
-    features: [
-      "Unlimited questions, 7 question banks",
-      "1 OSCE station bank",
-      "Timed mock exams with instant scoring",
-      "Real-time analytics & study plans",
-    ],
-    cta: "Choose 1 month",
-    href: "/register",
-    featured: false,
-  },
-  {
-    name: "3 months",
-    price: "$216",
-    period: "three months access",
-    description: "The full run-up, at half the monthly rate.",
-    features: [
-      "Everything in 1 month",
-      "Three full months of access",
-      "Adaptive bank that evolves with you",
-      "New questions as they're added",
-    ],
-    cta: "Choose 3 months",
-    href: "/register",
-    featured: true,
-  },
-];
-
-export function PricingCards() {
+/** Plans come from the DB (managed at /admin/plans); active ones only. */
+export function PricingCards({ plans }: { plans: Plan[] }) {
   return (
     <div className="mt-12 grid gap-6 lg:grid-cols-3">
-      {PLANS.map((plan) => (
+      {plans.map((plan) => (
         <div
-          key={plan.name}
+          key={plan.id}
           className={cn(
             "flex flex-col rounded-2xl p-7",
             plan.featured
@@ -74,7 +29,7 @@ export function PricingCards() {
 
           <p className="mt-3">
             <span className="font-display text-4xl font-semibold">
-              {plan.price}
+              {priceLabel(plan.price_cents)}
             </span>
           </p>
           <p
@@ -121,7 +76,9 @@ export function PricingCards() {
             className="mt-8 w-full"
             asChild
           >
-            <Link href={plan.href}>{plan.cta}</Link>
+            <Link href="/register">
+              {plan.price_cents === 0 ? "Start free" : `Choose ${plan.name}`}
+            </Link>
           </Button>
         </div>
       ))}

@@ -28,7 +28,19 @@ export type AuditAction =
   | "topic.rename"
   | "topic.delete"
   | "topic.reorder"
-  | "topic.move_questions";
+  | "topic.move_questions"
+  | "user.role_change"
+  | "user.trials_change"
+  | "user.reset_trials"
+  | "user.ban"
+  | "user.unban"
+  | "subscription.create"
+  | "subscription.update"
+  | "subscription.cancel"
+  | "plan.create"
+  | "plan.update"
+  | "plan.delete"
+  | "plan.reorder";
 
 /**
  * Append an admin action to `audit_logs`.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { listActivePlans, paidPlans } from "@/lib/plans";
 import { NewTestWizard } from "@/components/test/new-test-wizard";
 import { TrialLimitCard } from "@/components/app/trial-limit-card";
 
@@ -10,6 +11,15 @@ export default async function NewTestPage() {
   const user = await requireUser();
   const supabase = await createClient();
 
+  if (!hasTrialsRemaining(user.profile)) {
+    const plans = paidPlans(await listActivePlans());
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-12">
+        <TrialLimitCard profile={user.profile} plans={plans} />
+      </div>
+    );
+  }
+
   const [{ data: exams }, { data: specialties }, { data: subjects }, { data: topics }] =
     await Promise.all([
       supabase.from("exams").select("id, name").order("position"),
@@ -17,14 +27,6 @@ export default async function NewTestPage() {
       supabase.from("subjects").select("id, name, specialty_id").order("position"),
       supabase.from("topics").select("id, name, subject_id").order("position"),
     ]);
-
-  if (!hasTrialsRemaining(user.profile)) {
-    return (
-      <div className="mx-auto w-full max-w-2xl px-4 py-12">
-        <TrialLimitCard profile={user.profile} />
-      </div>
-    );
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
