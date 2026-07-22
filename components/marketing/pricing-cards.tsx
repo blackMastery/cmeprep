@@ -76,7 +76,16 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
             className="mt-8 w-full"
             asChild
           >
-            <Link href="/register">
+            {/* Paid plans with a known duration go to PayPal checkout
+                (proxy bounces logged-out visitors through /login?next=…);
+                free and admin-granted plans start at registration. */}
+            <Link
+              href={
+                plan.price_cents > 0 && plan.duration_months !== null
+                  ? `/checkout/${plan.id}`
+                  : "/register"
+              }
+            >
               {plan.price_cents === 0 ? "Start free" : `Choose ${plan.name}`}
             </Link>
           </Button>

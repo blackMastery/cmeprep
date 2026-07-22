@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import { syncRoleFromSubscriptions } from "@/lib/subscriptions";
 import {
   subscriptionSchema,
   trialsLimitSchema,
@@ -36,44 +37,6 @@ async function getTargetProfile(
     .eq("id", userId)
     .maybeSingle();
   return (data as Profile | null) ?? null;
-}
-
-/**
- * Entitlement rule: ANY subscription row with status='active' AND
- * current_period_end > now() ⇒ 'student'; otherwise ⇒ 'trial'.
- * Admins are never auto-changed; manual role edits stand until the next
- * subscription mutation for that user runs this sync again.
- */
-async function syncRoleFromSubscriptions(
-  admin: AdminClient,
-  actorId: string,
-  userId: string
-): Promise<void> {
-  const target = await getTargetProfile(admin, userId);
-  if (!target || target.role === "admin") return;
-
-  const { count } = await admin
-    .from("subscriptions")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .gt("current_period_end", new Date().toISOString());
-
-  const next = (count ?? 0) > 0 ? "student" : "trial";
-  if (next === target.role) return;
-
-  const { error } = await admin
-    .from("profiles")
-    .update({ role: next, updated_at: new Date().toISOString() })
-    .eq("id", userId);
-
-  if (!error) {
-    await audit(actorId, "user.role_change", userId, {
-      before: target.role,
-      after: next,
-      via: "subscription_sync",
-    });
-  }
 }
 
 export async function updateUserRole(

@@ -191,6 +191,16 @@ export type Subscription = Timestamps & {
   current_period_end: string;
 };
 
+/** PayPal webhook deliveries — unique event id is the idempotency key. */
+export type PaymentEvent = {
+  id: string;
+  paypal_event_id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  processed_at: string | null;
+  created_at: string;
+};
+
 export type Plan = Timestamps & {
   id: string;
   name: string;
@@ -239,6 +249,7 @@ export type Database = {
       notes: Table<Note>;
       audit_logs: Table<AuditLog>;
       subscriptions: Table<Subscription>;
+      payment_events: Table<PaymentEvent>;
       plans: Table<Plan>;
     };
     Views: {
