@@ -64,8 +64,9 @@ export function Logo({
   href?: string | null;
   size?: LogoSize;
   /**
-   * Render "Complete Medical Examinations Prep" beside (`inline`, hidden on
-   * phones) or beneath (`stacked`) the banner. Omit for the image alone.
+   * Render "Complete Medical Examinations Prep" beside (`inline`, dropping
+   * beneath the banner on phones) or beneath (`stacked`). Omit for the image
+   * alone.
    */
   tagline?: "inline" | "stacked";
   taglineClassName?: string;
@@ -78,7 +79,14 @@ export function Logo({
       alt="cmeprep.me — Smarter prep. Better outcomes"
       width={LOGO_WIDTH}
       height={LOGO_HEIGHT}
-      className={cn(s.className, "rounded-md object-contain", className)}
+      className={cn(
+        s.className,
+        // Compact lockup on phones: smaller banner so the one-line tagline
+        // beneath it keeps the inline header within its 64px height.
+        tagline === "inline" && "max-sm:h-7",
+        "rounded-md object-contain",
+        className
+      )}
       sizes={`(max-width: 640px) ${s.height * 4}px, ${Math.round((s.height * LOGO_WIDTH) / LOGO_HEIGHT)}px`}
       priority={size === "lg"}
     />
@@ -88,7 +96,9 @@ export function Logo({
     <span
       className={cn(
         "inline-flex",
-        tagline === "stacked" ? "flex-col items-center gap-2" : "items-center"
+        tagline === "stacked"
+          ? "flex-col items-center gap-2"
+          : "flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-0"
       )}
     >
       {image}
@@ -96,7 +106,7 @@ export function Logo({
         className={cn(
           "font-medium uppercase text-muted-foreground",
           tagline === "inline" &&
-            "ml-3 hidden max-w-44 border-l border-border pl-3 text-[10px]/[1.4] tracking-[0.14em] sm:block",
+            "text-[7px]/[1.3] tracking-[0.08em] whitespace-nowrap sm:ml-3 sm:max-w-44 sm:border-l sm:border-border sm:pl-3 sm:text-[10px]/[1.4] sm:tracking-[0.14em] sm:whitespace-normal",
           tagline === "stacked" &&
             "text-center text-[11px]/[1.4] tracking-[0.18em]",
           taglineClassName
