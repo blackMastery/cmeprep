@@ -263,6 +263,21 @@ export default async function MarketingPage() {
               </p>
             </div>
             <PricingCards plans={plans} />
+            <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl bg-secondary/50 p-6 ring-1 ring-foreground/10 sm:flex-row sm:px-8">
+              <div>
+                <p className="font-display font-semibold">
+                  Teams &amp; Enterprises
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Org accounts, SSO, private question banks and shared
+                  analytics for hospitals, schools and training programs.
+                  Coming soon.
+                </p>
+              </div>
+              <Button variant="outline" asChild>
+                <Link href="/teams">Learn more</Link>
+              </Button>
+            </div>
           </div>
         </section>
       )}

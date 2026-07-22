@@ -17,13 +17,16 @@ export default async function MarketingLayout({
           <Logo tagline="inline" />
           <nav className="ml-auto hidden items-center gap-1 sm:flex">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="#features">Features</Link>
+              <Link href="/#features">Features</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="#examinations">Examinations</Link>
+              <Link href="/#examinations">Examinations</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="#pricing">Pricing</Link>
+              <Link href="/#pricing">Pricing</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/teams">Teams</Link>
             </Button>
           </nav>
           <div className="ml-auto flex items-center gap-2 sm:ml-0">
@@ -64,8 +67,11 @@ export default async function MarketingLayout({
             <div className="flex gap-12 text-sm">
               <div className="space-y-2">
                 <p className="font-medium text-white">Product</p>
-                <Link href="#pricing" className="block text-[#a9a29b] hover:text-white">
+                <Link href="/#pricing" className="block text-[#a9a29b] hover:text-white">
                   Pricing
+                </Link>
+                <Link href="/teams" className="block text-[#a9a29b] hover:text-white">
+                  Teams &amp; Enterprises
                 </Link>
                 <Link href="/register" className="block text-[#a9a29b] hover:text-white">
                   Start free
