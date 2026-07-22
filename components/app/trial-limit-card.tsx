@@ -48,6 +48,11 @@ export function TrialLimitCard({
                   price={priceLabel(plan.price_cents)}
                   note={plan.description ?? plan.period}
                   featured={plan.featured}
+                  href={
+                    plan.duration_months !== null
+                      ? `/checkout/${plan.id}`
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -72,20 +77,17 @@ function PlanSummary({
   price,
   note,
   featured = false,
+  href,
 }: {
   name: string;
   price: string;
   note: string;
   featured?: boolean;
+  /** Checkout link; admin-granted plans (no duration) render as plain tiles. */
+  href?: string;
 }) {
-  return (
-    <div
-      className={
-        featured
-          ? "rounded-xl bg-primary px-4 py-4 text-primary-foreground"
-          : "rounded-xl border border-border px-4 py-4"
-      }
-    >
+  const body = (
+    <>
       <p className="text-sm font-medium">{name}</p>
       <p className="font-display text-2xl font-semibold">{price}</p>
       <p
@@ -97,6 +99,18 @@ function PlanSummary({
       >
         {note}
       </p>
-    </div>
+    </>
+  );
+
+  const className = featured
+    ? "block rounded-xl bg-primary px-4 py-4 text-primary-foreground"
+    : "block rounded-xl border border-border px-4 py-4";
+
+  return href ? (
+    <Link href={href} className={`${className} transition hover:opacity-90`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }

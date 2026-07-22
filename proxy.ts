@@ -53,6 +53,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/tests") ||
     pathname.startsWith("/profile") ||
     pathname.startsWith("/bookmarks") ||
+    pathname.startsWith("/checkout") ||
     pathname.startsWith("/admin");
 
   if (!user && isProtected) {

@@ -218,6 +218,11 @@ export const subscriptionSchema = z.object({
     .refine((d) => !Number.isNaN(Date.parse(d)), "Invalid date"),
 });
 
+/** POST /api/paypal/orders — the amount comes from the DB, never the body. */
+export const createPaypalOrderSchema = z.object({
+  planId: uuid(),
+});
+
 /* ── Account / auth ─────────────────────────────────────────────── */
 
 export const emailSchema = z
