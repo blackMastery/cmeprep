@@ -5,12 +5,17 @@ import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
+import {
+  expiryWarning,
+  type SubscriptionLike,
+} from "@/lib/subscriptions-core";
 import type { Test, TopicAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { WeakAreas } from "@/components/dashboard/weak-areas";
 import { PastTests } from "@/components/dashboard/past-tests";
 import { AccountPanel } from "@/components/dashboard/account-panel";
+import { ExpiryBanner } from "@/components/subscriptions/expiry-banner";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -18,26 +23,35 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const supabase = await createClient();
 
-  // One shared lifetime-stats read (also used by /profile) plus two page
+  // One shared lifetime-stats read (also used by /profile) plus three page
   // queries; RLS scopes everything to this user automatically.
-  const [{ stats: userStats, streak }, { data: topics }, { data: tests }] =
-    await Promise.all([
-      getLifetimeStats(user.id),
-      supabase
-        .from("topic_accuracy")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("attempts", 5)
-        .order("accuracy_pct", { ascending: true })
-        .limit(5),
-      supabase
-        .from("tests")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("started_at", { ascending: false })
-        .limit(8),
-    ]);
+  const [
+    { stats: userStats, streak },
+    { data: topics },
+    { data: tests },
+    { data: subs },
+  ] = await Promise.all([
+    getLifetimeStats(user.id),
+    supabase
+      .from("topic_accuracy")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("attempts", 5)
+      .order("accuracy_pct", { ascending: true })
+      .limit(5),
+    supabase
+      .from("tests")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("started_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("subscriptions")
+      .select("status, current_period_end")
+      .eq("user_id", user.id),
+  ]);
 
+  const warning = expiryWarning((subs ?? []) as SubscriptionLike[], new Date());
   const greetingName = firstName(user.profile.full_name);
 
   return (
@@ -60,6 +74,13 @@ export default async function DashboardPage() {
           </Button>
         )}
       </header>
+
+      {warning && (
+        <ExpiryBanner
+          periodEnd={warning.periodEnd}
+          daysLeft={warning.daysLeft}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard

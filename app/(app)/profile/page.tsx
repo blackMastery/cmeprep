@@ -1,17 +1,35 @@
 import type { Metadata } from "next";
 import { Flame, Target, TrendingUp } from "lucide-react";
 import { requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
+import { expiryWarning } from "@/lib/subscriptions-core";
+import type { Subscription } from "@/lib/supabase/types";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { IdentityCard } from "@/components/profile/identity-card";
 import { PlanCard } from "@/components/profile/plan-card";
+import { SubscriptionCard } from "@/components/profile/subscription-card";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
+import { ExpiryBanner } from "@/components/subscriptions/expiry-banner";
 
 export const metadata: Metadata = { title: "Profile" };
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const { stats, streak } = await getLifetimeStats(user.id);
+  const supabase = await createClient();
+
+  // RLS scopes the subscriptions read to this user; one query serves the
+  // expiry banner, current status and history.
+  const [{ stats, streak }, { data: subs }] = await Promise.all([
+    getLifetimeStats(user.id),
+    supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
+  const subscriptions = (subs ?? []) as Subscription[];
+  const warning = expiryWarning(subscriptions, new Date());
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
@@ -23,6 +41,13 @@ export default async function ProfilePage() {
           Your account details, plan and lifetime progress.
         </p>
       </header>
+
+      {warning && (
+        <ExpiryBanner
+          periodEnd={warning.periodEnd}
+          daysLeft={warning.daysLeft}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -55,6 +80,7 @@ export default async function ProfilePage() {
         </div>
         <div className="space-y-6">
           <PlanCard profile={user.profile} />
+          <SubscriptionCard subscriptions={subscriptions} />
         </div>
       </div>
     </div>
