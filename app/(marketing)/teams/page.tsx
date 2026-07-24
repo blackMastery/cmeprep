@@ -34,6 +34,7 @@ const CONTACT_HREF =
 
 type OrgPlan = {
   name: string;
+  price: string;
   seats: string;
   description: string;
   features: string[];
@@ -43,23 +44,14 @@ type OrgPlan = {
 const ORG_PLANS: OrgPlan[] = [
   {
     name: "Team",
-    seats: "Up to 15 users",
-    description:
-      "For residency programs and small departments getting a cohort exam-ready together.",
-    features: [
-      "Up to 15 users",
-      "Full access to every question bank and mock exams",
-      "Shared analytics for program directors",
-    ],
-  },
-  {
-    name: "Enterprise",
+    price: "$1,200/year",
     seats: "Up to 90 users",
     description:
-      "For schools and companies that need identity, compliance and branding controls.",
+      "One flat price for schools and companies getting a cohort exam-ready together.",
     features: [
       "Up to 90 users",
-      "Everything in Team",
+      "Full access to every question bank and mock exams",
+      "Shared analytics for program directors",
       "SSO / SAML login",
       "Audit logs",
       "Custom branding",
@@ -103,7 +95,7 @@ const ORG_MANAGEMENT: Feature[] = [
   {
     icon: Users,
     title: "Org accounts up to 90 seats",
-    body: "One organisation-level account covering your whole team — 15 seats on Team, 90 on Enterprise.",
+    body: "One organisation-level account covering your whole team — up to 90 users on the Team plan.",
   },
   {
     icon: UserCog,
@@ -163,8 +155,8 @@ const SUPPORT_TERMS: Feature[] = [
   },
   {
     icon: Percent,
-    title: "Volume pricing",
-    body: "Seat-based discount tiers, so the per-seat price falls as your organisation grows.",
+    title: "One flat annual price",
+    body: "A single flat price covers your whole organisation — up to 90 users, no per-seat surprises.",
   },
 ];
 
@@ -335,14 +327,14 @@ export default function TeamsPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:py-20">
           <div className="text-center">
             <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              Plans for every organisation
+              One flat price for your whole organisation
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Pricing coming soon. Contact us for early access or custom terms.
+              Coming soon. Contact us for early access or custom terms.
             </p>
           </div>
 
-          <div className="mx-auto mt-12 grid max-w-4xl gap-6 sm:grid-cols-2">
+          <div className="mx-auto mt-12 grid max-w-md gap-6">
             {ORG_PLANS.map((plan) => (
               <div
                 key={plan.name}
@@ -363,8 +355,18 @@ export default function TeamsPage() {
                   {plan.name}
                 </h3>
 
-                <p className="mt-3">
+                <p className="mt-3 flex items-baseline gap-3">
                   <span className="font-display text-4xl font-semibold">
+                    {plan.price}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium tracking-wide uppercase",
+                      plan.featured
+                        ? "bg-white/15 text-primary-foreground"
+                        : "bg-secondary text-primary"
+                    )}
+                  >
                     Coming soon
                   </span>
                 </p>
@@ -376,7 +378,7 @@ export default function TeamsPage() {
                       : "text-muted-foreground"
                   )}
                 >
-                  {plan.seats}
+                  {plan.seats}, one flat price
                 </p>
 
                 <p
