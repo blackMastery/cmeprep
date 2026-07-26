@@ -123,10 +123,22 @@ export async function listHierarchy(): Promise<ExamHierarchy[]> {
   }));
 }
 
+export type TopicOption = {
+  id: string;
+  name: string;
+  subjectName: string;
+  specialtyName: string;
+  /**
+   * A question's exam is only ever implied — questions → topics → subjects →
+   * specialties → exams. The editor still has to *show* it, so carry it down
+   * with the topic rather than making the picker re-derive it.
+   */
+  examId: string;
+  examName: string;
+};
+
 /** Flat topic list for the editor's picker. */
-export async function listTopicOptions(): Promise<
-  { id: string; name: string; subjectName: string; specialtyName: string }[]
-> {
+export async function listTopicOptions(): Promise<TopicOption[]> {
   const hierarchy = await listHierarchy();
   return hierarchy.flatMap((exam) =>
     exam.specialties.flatMap((sp) =>
@@ -136,6 +148,8 @@ export async function listTopicOptions(): Promise<
           name: t.name,
           subjectName: s.name,
           specialtyName: sp.name,
+          examId: exam.id,
+          examName: exam.name,
         }))
       )
     )

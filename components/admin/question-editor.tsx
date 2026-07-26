@@ -6,6 +6,7 @@ import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Difficulty, Question, QuestionType } from "@/lib/supabase/types";
 import type { ExistingOption } from "@/lib/admin/option-diff";
+import type { TopicOption } from "@/lib/admin/taxonomy";
 import { saveQuestion, type QuestionState } from "@/app/admin/questions/actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,13 +19,6 @@ import { AdminSelect, AdminSubmit } from "@/components/admin/form-parts";
 import { QuestionPreview } from "@/components/admin/question-preview";
 import { ImageUpload } from "@/components/admin/image-upload";
 import { ConfirmAction } from "@/components/confirm-dialog";
-
-type TopicOption = {
-  id: string;
-  name: string;
-  subjectName: string;
-  specialtyName: string;
-};
 
 /** Client-only row key, distinct from the DB id (absent on new rows). */
 type Row = { key: string; id?: string; label: string; isCorrect: boolean };
@@ -44,6 +38,36 @@ export function QuestionEditor({
     saveQuestion,
     null
   );
+
+  // Exam is chosen, but never submitted: the question stores only `topic_id`,
+  // and the exam is whatever that topic hangs off. The select is here so the
+  // choice is explicit rather than buried in a flat list of every topic in
+  // every exam.
+  const exams = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const t of topics) if (!seen.has(t.examId)) seen.set(t.examId, t.examName);
+    return [...seen].map(([id, name]) => ({ id, name }));
+  }, [topics]);
+
+  const [examId, setExamId] = useState(
+    () =>
+      topics.find((t) => t.id === question?.topic_id)?.examId ??
+      exams[0]?.id ??
+      ""
+  );
+  const [topicId, setTopicId] = useState(question?.topic_id ?? "");
+
+  const examTopics = useMemo(
+    () => topics.filter((t) => t.examId === examId),
+    [topics, examId]
+  );
+
+  function changeExam(next: string) {
+    setExamId(next);
+    // The topic list is about to be replaced wholesale; a topic from the old
+    // exam would submit fine and silently file the question under it.
+    if (!topics.some((t) => t.id === topicId && t.examId === next)) setTopicId("");
+  }
 
   const [type, setType] = useState<QuestionType>(question?.type ?? "mcq_single");
   const [imagePath, setImagePath] = useState<string | null>(
@@ -136,24 +160,42 @@ export function QuestionEditor({
 
         <Card className="[--card-spacing:--spacing(5)]">
           <CardContent className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {exams.length > 1 && (
+                <AdminSelect
+                  label="Exam"
+                  name="examId"
+                  value={examId}
+                  onChange={(e) => changeExam(e.target.value)}
+                >
+                  {exams.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name}
+                    </option>
+                  ))}
+                </AdminSelect>
+              )}
+
               <AdminSelect
                 label="Topic"
                 name="topicId"
                 required
-                defaultValue={question?.topic_id ?? ""}
+                value={topicId}
+                onChange={(e) => setTopicId(e.target.value)}
                 error={fieldError("topicId")}
               >
                 <option value="" disabled>
                   Choose a topic…
                 </option>
-                {topics.map((t) => (
+                {examTopics.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.specialtyName} › {t.subjectName} › {t.name}
                   </option>
                 ))}
               </AdminSelect>
+            </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
               <AdminSelect
                 label="Type"
                 name="type"
