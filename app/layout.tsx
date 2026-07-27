@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Poppins, Public_Sans } from "next/font/google";
 import {
   SITE_DESCRIPTION,
@@ -83,14 +83,32 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
+  manifest: "/site.webmanifest",
   icons: {
-    // favicon.ico + app/icon.tsx are picked up by file convention; apple
-    // touch icons have no .ico fallback, so the logo is named explicitly.
-    apple: "/logo.jpg",
+    // app/favicon.ico is emitted by file convention (`sizes="any"`). These
+    // cover what it cannot: crisp hi-dpi PNGs, and the iOS home-screen icon,
+    // which has no .ico fallback at all.
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   // Stops iOS Safari turning stray numbers (question counts, prices) into
   // tap-to-call links.
   formatDetection: { telephone: false },
+};
+
+/**
+ * Browser chrome colour. These track the page background per theme rather
+ * than the brand coral — the address bar sits directly above the page, so a
+ * contrasting bar reads as a rendering seam.
+ */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf6f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a1815" },
+  ],
 };
 
 export default function RootLayout({
