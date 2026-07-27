@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
@@ -8,6 +9,14 @@ import { nextPosition } from "@/lib/admin/taxonomy";
 import { subjectSchema, topicSchema, uuid } from "@/lib/validation";
 
 export type AdminState = { error?: string; success?: string } | null;
+
+function revalidateSubjects() {
+  revalidatePath("/admin/subjects");
+  // "page" scope so every /admin/subjects/[id] instance is invalidated, not
+  // just the literal path — a rename has to land on the detail page it came
+  // from.
+  revalidatePath("/admin/subjects/[id]", "page");
+}
 
 /** Postgres unique_violation. */
 const UNIQUE_VIOLATION = "23505";
@@ -91,7 +100,7 @@ export async function createSubject(
     name: parsed.data.name,
     specialtyId: parsed.data.specialtyId,
   });
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   return { success: `Created ${parsed.data.name}.` };
 }
 
@@ -132,7 +141,7 @@ export async function renameSubject(
     before: before?.name,
     after: parsed.data,
   });
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   return { success: "Renamed." };
 }
 
@@ -146,6 +155,14 @@ export async function deleteSubject(
   if (!id.success) return { error: "Unknown subject." };
 
   const admin = createAdminClient();
+
+  // Read the parent before the row goes away — the redirect below has to land
+  // back on the specialty the subject was filed under.
+  const { data: parent } = await admin
+    .from("subjects")
+    .select("specialty_id")
+    .eq("id", id.data)
+    .maybeSingle();
 
   // Pre-flight rather than relying on the FK error. Counts soft-deleted
   // questions too — they still hold their FK to topics, so they still block
@@ -176,8 +193,15 @@ export async function deleteSubject(
   }
 
   await audit(user.id, "subject.delete", id.data);
-  revalidatePath("/admin/subjects");
-  return { success: "Subject deleted." };
+  revalidateSubjects();
+
+  // Delete is only offered from /admin/subjects/[id], which 404s the moment
+  // the row is gone. Leave for the list instead of re-rendering a dead page.
+  redirect(
+    parent
+      ? `/admin/subjects?specialty=${parent.specialty_id}`
+      : "/admin/subjects"
+  );
 }
 
 export async function createTopic(
@@ -221,7 +245,7 @@ export async function createTopic(
     name: parsed.data.name,
     subjectId: parsed.data.subjectId,
   });
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   return { success: `Created ${parsed.data.name}.` };
 }
 
@@ -257,7 +281,7 @@ export async function renameTopic(
     before: before?.name,
     after: name,
   });
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   return { success: "Renamed." };
 }
 
@@ -299,7 +323,7 @@ export async function deleteTopic(
   }
 
   await audit(user.id, "topic.delete", id.data);
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   return { success: "Topic deleted." };
 }
 
@@ -328,7 +352,7 @@ export async function moveTopicQuestions(
     to: to.data,
     moved: data?.length ?? 0,
   });
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   revalidatePath("/admin/questions");
   return { success: `Moved ${data?.length ?? 0} question(s).` };
 }
@@ -413,6 +437,6 @@ export async function reorder(
     id.data,
     { direction }
   );
-  revalidatePath("/admin/subjects");
+  revalidateSubjects();
   return { success: "Reordered." };
 }

@@ -158,6 +158,51 @@ export type TopicOption = {
   examName: string;
 };
 
+export type SubjectCard = Subject & {
+  topicCount: number;
+  questionCount: number;
+  deletedCount: number;
+};
+
+/**
+ * Card shape for the subjects index. Pure — the caller already has the tree,
+ * and the index has no reason to ship every topic to the client.
+ */
+export function toSubjectCards(
+  subjects: readonly SubjectWithTopics[]
+): SubjectCard[] {
+  return subjects.map(({ topics, ...subject }) => ({
+    ...subject,
+    topicCount: topics.length,
+  }));
+}
+
+export type SubjectDetail = SubjectWithTopics & {
+  specialtyName: string;
+  examId: string;
+  examName: string;
+};
+
+/** One subject, its topics, and the trail back up — for the detail page. */
+export async function getSubject(id: string): Promise<SubjectDetail | null> {
+  const hierarchy = await listHierarchy();
+
+  for (const exam of hierarchy) {
+    for (const specialty of exam.specialties) {
+      const subject = specialty.subjects.find((s) => s.id === id);
+      if (subject) {
+        return {
+          ...subject,
+          specialtyName: specialty.name,
+          examId: exam.id,
+          examName: exam.name,
+        };
+      }
+    }
+  }
+  return null;
+}
+
 /** Flat topic list for the editor's picker. */
 export async function listTopicOptions(): Promise<TopicOption[]> {
   const hierarchy = await listHierarchy();

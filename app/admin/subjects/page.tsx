@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { GraduationCap } from "lucide-react";
-import { listHierarchy } from "@/lib/admin/taxonomy";
+import { listHierarchy, toSubjectCards } from "@/lib/admin/taxonomy";
 import { DEFAULT_SPECIALTY_ID } from "@/lib/taxonomy-defaults";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -54,15 +54,6 @@ export default async function AdminSubjectsPage(
     specialties.find((s) => s.id === DEFAULT_SPECIALTY_ID) ??
     specialties[0];
 
-  // Cross-specialty move destinations, labelled so same-named subjects in
-  // different specialties stay distinguishable.
-  const moveGroups = specialties.flatMap((spec) =>
-    spec.subjects.map((subject) => ({
-      label: `${spec.name} › ${subject.name}`,
-      topics: subject.topics.map((t) => ({ id: t.id, name: t.name })),
-    }))
-  );
-
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
       <header className="mb-8">
@@ -108,9 +99,8 @@ export default async function AdminSubjectsPage(
       </form>
 
       <SubjectManager
-        subjects={active.subjects}
+        subjects={toSubjectCards(active.subjects)}
         specialtyId={active.id}
-        moveGroups={moveGroups}
       />
     </div>
   );
