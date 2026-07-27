@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
@@ -13,6 +14,9 @@ const FK_VIOLATION = "23503";
 
 function revalidateTaxonomy() {
   revalidatePath("/admin/exams");
+  // "page" scope so every /admin/exams/[id] instance is invalidated, not just
+  // the literal path — a rename has to land on the detail page it came from.
+  revalidatePath("/admin/exams/[id]", "page");
   revalidatePath("/admin/subjects");
 }
 
@@ -134,7 +138,10 @@ export async function deleteExam(
 
   await audit(user.id, "exam.delete", id.data);
   revalidateTaxonomy();
-  return { success: "Exam deleted." };
+
+  // Delete is only offered from /admin/exams/[id], which 404s the moment the
+  // row is gone. Leave for the list instead of re-rendering a dead page.
+  redirect("/admin/exams");
 }
 
 export async function createSpecialty(

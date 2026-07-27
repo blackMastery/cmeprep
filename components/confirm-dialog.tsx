@@ -75,6 +75,7 @@ export function ConfirmSubmit({
   size = "xs",
   className,
   triggerLabel,
+  disabled = false,
 }: ConfirmCopy & {
   children: React.ReactNode;
   variant?: ButtonProps["variant"];
@@ -82,6 +83,11 @@ export function ConfirmSubmit({
   className?: string;
   /** Accessible name when the trigger is icon-only. */
   triggerLabel?: string;
+  /**
+   * For actions the caller already knows the server would refuse — don't open
+   * a confirm dialog just to report a failure that was predictable.
+   */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
@@ -100,7 +106,7 @@ export function ConfirmSubmit({
             variant={variant}
             size={size}
             className={className}
-            disabled={pending}
+            disabled={pending || disabled}
             aria-busy={pending}
             aria-label={triggerLabel}
           >

@@ -71,31 +71,52 @@ export async function listTaxonomy(
   });
 }
 
-export type SpecialtyWithMeta = Specialty & { subjectCount: number };
+/** What a level of the tree holds, counted all the way down. */
+export type TaxonomyCounts = {
+  subjectCount: number;
+  topicCount: number;
+  questionCount: number;
+};
+
+function rollUp(subjects: readonly SubjectWithTopics[]): TaxonomyCounts {
+  const topics = subjects.flatMap((s) => s.topics);
+  return {
+    subjectCount: subjects.length,
+    topicCount: topics.length,
+    questionCount: topics.reduce((sum, t) => sum + t.questionCount, 0),
+  };
+}
+
+export type ExamCard = Exam & TaxonomyCounts & { specialtyCount: number };
+
+/** Exam summaries for the index page's cards. */
+export async function listExamCards(): Promise<ExamCard[]> {
+  const hierarchy = await listHierarchy();
+
+  return hierarchy.map(({ specialties, ...exam }) => ({
+    ...exam,
+    specialtyCount: specialties.length,
+    ...rollUp(specialties.flatMap((sp) => sp.subjects)),
+  }));
+}
+
+export type SpecialtyWithMeta = Specialty & TaxonomyCounts;
 export type ExamWithSpecialties = Exam & { specialties: SpecialtyWithMeta[] };
 
-/** Exams with their specialties and per-specialty subject counts. */
-export async function listExamTree(): Promise<ExamWithSpecialties[]> {
-  const admin = createAdminClient();
+/** One exam and its specialties — everything the detail page manages. */
+export async function getExam(id: string): Promise<ExamWithSpecialties | null> {
+  const hierarchy = await listHierarchy();
+  const found = hierarchy.find((e) => e.id === id);
+  if (!found) return null;
 
-  const [{ data: exams }, { data: specialties }, { data: subjects }] =
-    await Promise.all([
-      admin.from("exams").select("*").order("position").order("name"),
-      admin.from("specialties").select("*").order("position").order("name"),
-      admin.from("subjects").select("id, specialty_id"),
-    ]);
-
-  const subjectCount = new Map<string, number>();
-  for (const s of subjects ?? []) {
-    subjectCount.set(s.specialty_id, (subjectCount.get(s.specialty_id) ?? 0) + 1);
-  }
-
-  return (exams ?? []).map((exam) => ({
+  const { specialties, ...exam } = found;
+  return {
     ...exam,
-    specialties: (specialties ?? [])
-      .filter((sp) => sp.exam_id === exam.id)
-      .map((sp) => ({ ...sp, subjectCount: subjectCount.get(sp.id) ?? 0 })),
-  }));
+    specialties: specialties.map(({ subjects, ...sp }) => ({
+      ...sp,
+      ...rollUp(subjects),
+    })),
+  };
 }
 
 export type ExamHierarchy = Exam & {

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { listExamTree } from "@/lib/admin/taxonomy";
+import { listExamCards } from "@/lib/admin/taxonomy";
 import { ExamManager } from "@/components/admin/exam-manager";
 
 export const metadata: Metadata = { title: "Exams & specialties" };
 
 export default async function AdminExamsPage() {
-  const exams = await listExamTree();
+  const exams = await listExamCards();
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
