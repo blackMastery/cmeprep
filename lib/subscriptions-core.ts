@@ -19,23 +19,61 @@ export function computePeriodEnd(durationMonths: number, base: Date): Date {
 }
 
 /**
- * `custom_id` on the PayPal purchase unit carries who bought what through the
- * whole round-trip (create → capture → webhook). Two uuids + ":" = 73 chars,
- * under PayPal's 127-char limit.
+ * Where a new period starts. A buyer who is already active starts at their
+ * current period end, never at now() — they paid for full months and
+ * repurchasing must not eat remaining time.
  */
-export function formatPurchaseCustomId(userId: string, planId: string): string {
-  return `${userId}:${planId}`;
+export function stackBase(activeEnd: string | null, now: Date): Date {
+  return activeEnd && new Date(activeEnd) > now ? new Date(activeEnd) : now;
 }
+
+/**
+ * `custom_id` on the PayPal purchase unit carries who bought what through the
+ * whole round-trip (create → capture → webhook). Three uuids + two ":" = 110
+ * chars, under PayPal's 127-char limit.
+ *
+ * The exam rides HERE rather than in `reference_id` on purpose: the
+ * PAYMENT.CAPTURE.* webhook resources expose `custom_id` but not
+ * `reference_id`, so splitting the tuple would lose the exam on exactly the
+ * reconciliation path that exists to rescue a buyer whose browser died.
+ *
+ * `examId` is required, not optional — an optional parameter would let a
+ * future caller silently mint an all-access order.
+ */
+export function formatPurchaseCustomId(
+  userId: string,
+  planId: string,
+  examId: string
+): string {
+  return `${userId}:${planId}:${examId}`;
+}
+
+export type PurchaseCustomId = {
+  userId: string;
+  planId: string;
+  /**
+   * null ⇒ LEGACY two-segment id: an order created before exam scoping
+   * shipped and approved after. Callers must treat it as grandfathered
+   * ALL-ACCESS — the buyer paid under blanket terms — never as "whichever
+   * exam they ask for". PayPal orders are short-lived, so this should stop
+   * occurring within hours of deploy; it is logged so that can be confirmed.
+   */
+  examId: string | null;
+};
 
 export function parsePurchaseCustomId(
   customId: string | null | undefined
-): { userId: string; planId: string } | null {
+): PurchaseCustomId | null {
   if (!customId) return null;
-  const [userId, planId, ...rest] = customId.split(":");
-  if (rest.length > 0 || !UUID_RE.test(userId) || !UUID_RE.test(planId)) {
-    return null;
-  }
-  return { userId, planId };
+
+  const parts = customId.split(":");
+  if (parts.length < 2 || parts.length > 3) return null;
+
+  const [userId, planId, examId] = parts;
+  if (!UUID_RE.test(userId) || !UUID_RE.test(planId)) return null;
+  if (parts.length === 3 && !UUID_RE.test(examId)) return null;
+
+  return { userId, planId, examId: parts.length === 3 ? examId : null };
 }
 
 /** PayPal amounts are decimal strings: 14400 cents → "144.00". */
@@ -88,16 +126,12 @@ export function activePeriodEnd(
   return latest;
 }
 
-/** Non-null when access ends within EXPIRY_WARNING_DAYS; daysLeft >= 1. */
-export function expiryWarning(
-  subs: SubscriptionLike[],
-  now: Date
-): { periodEnd: string; daysLeft: number } | null {
-  const end = activePeriodEnd(subs, now);
-  if (end === null) return null;
-  const daysLeft = Math.ceil(
-    (new Date(end).getTime() - now.getTime()) / 86_400_000
-  );
-  if (daysLeft < 1 || daysLeft > EXPIRY_WARNING_DAYS) return null;
-  return { periodEnd: end, daysLeft };
+/** Whole days until `end`, rounded up; <= 0 once it has passed. */
+export function daysUntil(end: string, now: Date): number {
+  return Math.ceil((new Date(end).getTime() - now.getTime()) / 86_400_000);
 }
+
+// The old single `expiryWarning` lived here. It took the latest end across
+// ALL rows, which under exam scoping means a student whose PLAB lapses
+// tomorrow gets no warning at all while their USMLE runs a year. Warnings are
+// now per-exam: see expiryWarnings in lib/entitlements-core.ts.

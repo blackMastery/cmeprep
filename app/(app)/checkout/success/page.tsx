@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { listExamCatalog } from "@/lib/catalog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
@@ -13,15 +14,21 @@ export default async function CheckoutSuccessPage() {
   const user = await requireUser();
   const supabase = await createClient();
 
-  const { data: sub } = await supabase
-    .from("subscriptions")
-    .select("plan, current_period_end")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .gt("current_period_end", new Date().toISOString())
-    .order("current_period_end", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Newest row, not the furthest-out one: after buying a second exam the
+  // buyer needs confirmation of what they JUST bought, which may well end
+  // sooner than access they already had.
+  const [{ data: sub }, catalog] = await Promise.all([
+    supabase
+      .from("subscriptions")
+      .select("plan, current_period_end, exam_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .gt("current_period_end", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    listExamCatalog(),
+  ]);
 
   const until = sub
     ? new Date(sub.current_period_end).toLocaleDateString("en-US", {
@@ -29,6 +36,11 @@ export default async function CheckoutSuccessPage() {
         month: "long",
         day: "numeric",
       })
+    : null;
+
+  // null on an all-access row (admin comp or a legacy grandfathered grant).
+  const examName = sub?.exam_id
+    ? (catalog.find((exam) => exam.id === sub.exam_id)?.name ?? null)
     : null;
 
   return (
@@ -46,8 +58,9 @@ export default async function CheckoutSuccessPage() {
             <p className="mx-auto max-w-sm text-sm text-muted-foreground">
               {sub ? (
                 <>
-                  Your <strong>{sub.plan}</strong> access is active — unlimited
-                  tests until <strong>{until}</strong>.
+                  Your <strong>{sub.plan}</strong> access to{" "}
+                  <strong>{examName ?? "every examination"}</strong> is active —
+                  unlimited tests until <strong>{until}</strong>.
                 </>
               ) : (
                 <>

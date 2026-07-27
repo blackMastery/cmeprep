@@ -44,17 +44,25 @@ function addMonths(months: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Active paid plans from the plans table (name + default duration). */
-export type PlanPreset = { name: string; durationMonths: number | null };
+/** Active paid plans from the plans table (id + name + default duration). */
+export type PlanPreset = {
+  id: string;
+  name: string;
+  durationMonths: number | null;
+};
+
+export type ExamOption = { id: string; name: string };
 
 export function UserSubscriptionCard({
   userId,
   subscriptions,
   presets,
+  exams,
 }: {
   userId: string;
   subscriptions: Subscription[];
   presets: PlanPreset[];
+  exams: ExamOption[];
 }) {
   const [saveState, saveAction] = useActionState<AdminState, FormData>(
     saveSubscription,
@@ -68,12 +76,13 @@ export function UserSubscriptionCard({
   const latest = subscriptions[0] ?? null;
   const editing = latest !== null && latest.status === "active";
 
-  const isPreset = (name: string) => presets.some((p) => p.name === name);
+  // Matched on plan_id, not on the name snapshot: a renamed plan used to drop
+  // every historical row to "Custom…".
   const initialPreset = editing
-    ? isPreset(latest.plan)
-      ? latest.plan
+    ? presets.some((p) => p.id === latest.plan_id)
+      ? (latest.plan_id as string)
       : "custom"
-    : (presets[0]?.name ?? "custom");
+    : (presets[0]?.id ?? "custom");
 
   const [preset, setPreset] = useState<string>(initialPreset);
   // Until the admin touches the date, switching preset keeps it in step.
@@ -86,9 +95,16 @@ export function UserSubscriptionCard({
 
   const onPresetChange = (value: string) => {
     setPreset(value);
-    const months = presets.find((p) => p.name === value)?.durationMonths;
+    const months = presets.find((p) => p.id === value)?.durationMonths;
     if (!dateDirty && months) setEndDate(addMonths(months));
   };
+
+  // The action stores the name snapshot as well as the id, so post both.
+  const presetName = presets.find((p) => p.id === preset)?.name ?? "";
+  const examName = (examId: string | null) =>
+    examId === null
+      ? "All exams"
+      : (exams.find((e) => e.id === examId)?.name ?? "Exam");
 
   return (
     <Card className="[--card-spacing:--spacing(5)]">
@@ -125,22 +141,40 @@ export function UserSubscriptionCard({
             }
           >
             {presets.map((p) => (
-              <option key={p.name} value={p.name}>
+              <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
             <option value="custom">Custom…</option>
           </AdminSelect>
+          <input type="hidden" name="planName" value={presetName} />
 
           {preset === "custom" && (
             <AdminField
               label="Custom plan name"
               name="planCustom"
               required
-              defaultValue={editing && !isPreset(latest.plan) ? latest.plan : ""}
+              defaultValue={editing ? latest.plan : ""}
               placeholder="e.g. Scholarship 6 months"
             />
           )}
+
+          {/* defaultValue is load-bearing: without latest.exam_id preloaded,
+              editing a scoped row would submit "" and silently widen it to
+              all-access. */}
+          <AdminSelect
+            label="Examination"
+            name="examId"
+            defaultValue={editing ? (latest.exam_id ?? "") : ""}
+            hint="All exams grants access to everything — use it for comps and legacy grants."
+          >
+            <option value="">All exams (comp)</option>
+            {exams.map((exam) => (
+              <option key={exam.id} value={exam.id}>
+                {exam.name}
+              </option>
+            ))}
+          </AdminSelect>
 
           <AdminSelect
             label="Status"
@@ -203,6 +237,7 @@ export function UserSubscriptionCard({
                   className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
                 >
                   <span className="font-medium">{sub.plan}</span>
+                  <Badge variant="secondary">{examName(sub.exam_id)}</Badge>
                   <Badge variant={SUB_BADGE[sub.status]}>{sub.status}</Badge>
                   {sub.paypal_subscription_id && (
                     <Badge variant="outline">PayPal</Badge>

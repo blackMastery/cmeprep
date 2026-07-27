@@ -134,9 +134,13 @@ async function handleCaptureCompleted(admin: AdminClient, event: WebhookEvent) {
   await grantPlanPurchase(admin, {
     userId: parsed.userId,
     plan,
+    examId: parsed.examId,
     paypalOrderId: orderId,
     captureId: resource?.id ?? null,
-    meta: { via: "paypal_webhook" },
+    meta: {
+      via: "paypal_webhook",
+      ...(parsed.examId === null ? { legacyCustomId: true } : {}),
+    },
   });
 }
 
@@ -145,9 +149,11 @@ async function handleCaptureReversed(admin: AdminClient, event: WebhookEvent) {
   const orderId = event.resource?.supplementary_data?.related_ids?.order_id;
   if (!orderId) return;
 
+  // One PayPal order maps to exactly one subscription row, so cancelling by
+  // order id still revokes precisely the right exam's access.
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, user_id, plan, status")
+    .select("id, user_id, plan, status, exam_id")
     .eq("paypal_subscription_id", orderId)
     .maybeSingle();
   if (!sub || sub.status === "cancelled") return;
@@ -161,6 +167,7 @@ async function handleCaptureReversed(admin: AdminClient, event: WebhookEvent) {
   await audit(sub.user_id, "subscription.cancel", sub.user_id, {
     subscriptionId: sub.id,
     plan: sub.plan,
+    examId: sub.exam_id,
     paypalOrderId: orderId,
     via: "paypal_webhook",
     eventType: event.event_type,
@@ -193,8 +200,12 @@ async function handleOrderApproved(admin: AdminClient, event: WebhookEvent) {
   await grantPlanPurchase(admin, {
     userId: parsed.userId,
     plan,
+    examId: parsed.examId,
     paypalOrderId: orderId,
     captureId: capture?.id ?? null,
-    meta: { via: "paypal_webhook_approved" },
+    meta: {
+      via: "paypal_webhook_approved",
+      ...(parsed.examId === null ? { legacyCustomId: true } : {}),
+    },
   });
 }

@@ -89,6 +89,21 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
               {plan.price_cents === 0 ? "Start free" : `Choose ${plan.name}`}
             </Link>
           </Button>
+
+          {/* The exam is picked at checkout, not here — a card already
+              carries price, period, description and up to eight features. */}
+          {plan.price_cents > 0 && plan.duration_months !== null && (
+            <p
+              className={cn(
+                "mt-2 text-center text-xs",
+                plan.featured
+                  ? "text-primary-foreground/75"
+                  : "text-muted-foreground"
+              )}
+            >
+              Covers one examination — you&apos;ll pick it next.
+            </p>
+          )}
         </div>
       ))}
     </div>

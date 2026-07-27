@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { createTestSchema } from "@/lib/validation";
+import { examAccessFrom } from "@/lib/entitlements";
+import { canAccessExam } from "@/lib/entitlements-core";
 import { shuffle } from "@/lib/scoring";
 import type { TestConfig } from "@/lib/supabase/types";
 
@@ -33,6 +35,21 @@ export async function POST(request: Request) {
   const { examId, subjectIds, topicIds, difficulty, numQuestions, durationMin } =
     parsed.data;
   const admin = createAdminClient();
+
+  // ── Entitlement: a paid plan buys ONE exam. This is the hard block — the
+  // wizard only renders locks. Trial users pass (they may practise any exam);
+  // the quota below is their limiter. Checked BEFORE the trial claim, so a
+  // blocked request never burns a credit.
+  const access = await examAccessFrom(admin, user.id, user.profile.role);
+  if (!canAccessExam(access, examId)) {
+    return NextResponse.json(
+      {
+        error: "exam_locked",
+        message: "Your subscription doesn't include that examination.",
+      },
+      { status: 403 }
+    );
+  }
 
   // ── Integrity: every chosen subject must belong to the chosen exam.
   // Checked BEFORE the trial claim so no refund path is needed.

@@ -181,14 +181,28 @@ export type UserDailyActivity = {
   day: string;
 };
 
+/** Published, non-deleted questions per topic — the buyer-facing count. */
+export type TopicQuestionCount = {
+  topic_id: string;
+  question_count: number;
+};
+
 export type Subscription = Timestamps & {
   id: string;
   user_id: string;
   paypal_subscription_id: string | null;
   /** Free text snapshot; presets come from the plans table. */
   plan: string;
+  /** Soft link to plans; null for bespoke admin grants and deleted plans. */
+  plan_id: string | null;
+  /**
+   * Exam this subscription entitles.
+   * null = ALL-ACCESS (grandfathered legacy rows + admin comp grants).
+   */
+  exam_id: string | null;
   status: SubStatus;
   current_period_end: string;
+  updated_at: string | null;
 };
 
 /** PayPal webhook deliveries — unique event id is the idempotency key. */
@@ -258,6 +272,7 @@ export type Database = {
       topic_accuracy: View<TopicAccuracy>;
       user_daily_activity: View<UserDailyActivity>;
       user_emails: View<UserEmail>;
+      topic_question_counts: View<TopicQuestionCount>;
     };
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };

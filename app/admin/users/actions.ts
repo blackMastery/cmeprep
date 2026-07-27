@@ -203,12 +203,22 @@ export async function saveSubscription(
   const id = uuid().safeParse(formData.get("userId"));
   if (!id.success) return { error: "Unknown user." };
 
+  // The preset select carries the plan id; "custom" means a bespoke name and
+  // no plan link.
   const preset = String(formData.get("planPreset") ?? "");
-  const plan =
-    preset === "custom" ? String(formData.get("planCustom") ?? "") : preset;
+  const custom = preset === "custom";
+  const plan = custom
+    ? String(formData.get("planCustom") ?? "")
+    : String(formData.get("planName") ?? "");
+
+  // "" is the deliberate all-access choice; convert BEFORE parsing so the
+  // nullable schema sees null rather than an empty string.
+  const rawExam = String(formData.get("examId") ?? "").trim();
 
   const parsed = subscriptionSchema.safeParse({
     plan,
+    planId: custom || preset === "" ? null : preset,
+    examId: rawExam === "" ? null : rawExam,
     status: formData.get("status"),
     currentPeriodEnd: formData.get("currentPeriodEnd"),
   });
@@ -220,6 +230,17 @@ export async function saveSubscription(
   const admin = createAdminClient();
   const target = await getTargetProfile(admin, id.data);
   if (!target) return { error: "Unknown user." };
+
+  // Scoping to an exam that doesn't exist would fail on the FK with an opaque
+  // error; check it here so the admin gets a sentence instead.
+  if (parsed.data.examId !== null) {
+    const { data: exam } = await admin
+      .from("exams")
+      .select("id")
+      .eq("id", parsed.data.examId)
+      .maybeSingle();
+    if (!exam) return { error: "Unknown examination." };
+  }
 
   const rawSubId = String(formData.get("subscriptionId") ?? "");
   const subId = rawSubId === "" ? null : uuid().safeParse(rawSubId);
@@ -242,22 +263,29 @@ export async function saveSubscription(
       .from("subscriptions")
       .update({
         plan: parsed.data.plan,
+        plan_id: parsed.data.planId,
+        exam_id: parsed.data.examId,
         status: parsed.data.status,
         current_period_end: periodEnd,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", subId.data);
 
     if (error) return { error: "Could not update the subscription." };
 
+    // exam_id is in before/after because widening a scoped row to all-access
+    // is a privilege change, and this is the only trace of it.
     await audit(actor.id, "subscription.update", id.data, {
       subscriptionId: subId.data,
       before: {
         plan: existing.plan,
+        examId: existing.exam_id,
         status: existing.status,
         currentPeriodEnd: existing.current_period_end,
       },
       after: {
         plan: parsed.data.plan,
+        examId: parsed.data.examId,
         status: parsed.data.status,
         currentPeriodEnd: periodEnd,
       },
@@ -268,6 +296,8 @@ export async function saveSubscription(
       .insert({
         user_id: id.data,
         plan: parsed.data.plan,
+        plan_id: parsed.data.planId,
+        exam_id: parsed.data.examId,
         status: parsed.data.status,
         current_period_end: periodEnd,
       })
@@ -279,6 +309,8 @@ export async function saveSubscription(
     await audit(actor.id, "subscription.create", id.data, {
       subscriptionId: data.id,
       plan: parsed.data.plan,
+      planId: parsed.data.planId,
+      examId: parsed.data.examId,
       status: parsed.data.status,
       currentPeriodEnd: periodEnd,
     });

@@ -209,6 +209,13 @@ export const subscriptionSchema = z.object({
     .trim()
     .min(2, "Plan name is too short")
     .max(40, "Plan name is too long"),
+  /** Soft link to plans; null for bespoke grants. Actions map "" → null. */
+  planId: uuid().nullable(),
+  /**
+   * null = ALL-ACCESS. Only an admin can grant that, and only deliberately —
+   * actions map "" → null BEFORE parsing, per the coerce convention above.
+   */
+  examId: uuid().nullable(),
   status: z.enum(SUB_STATUSES),
   // <input type="date"> value; the action converts to `${d}T23:59:59Z` —
   // end-of-day UTC so the chosen date is the last day WITH access.
@@ -221,6 +228,9 @@ export const subscriptionSchema = z.object({
 /** POST /api/paypal/orders — the amount comes from the DB, never the body. */
 export const createPaypalOrderSchema = z.object({
   planId: uuid(),
+  // Required: self-serve checkout always buys exactly one exam. All-access is
+  // no longer purchasable — only an admin can grant it.
+  examId: uuid(),
 });
 
 /* ── Account / auth ─────────────────────────────────────────────── */

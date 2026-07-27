@@ -3,14 +3,14 @@ import { Flame, Target, TrendingUp } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
-import { expiryWarning } from "@/lib/subscriptions-core";
+import { listExamCatalog } from "@/lib/catalog";
 import type { Subscription } from "@/lib/supabase/types";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { IdentityCard } from "@/components/profile/identity-card";
 import { PlanCard } from "@/components/profile/plan-card";
 import { SubscriptionCard } from "@/components/profile/subscription-card";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
-import { ExpiryBanner } from "@/components/subscriptions/expiry-banner";
+import { ExpiryBanners } from "@/components/subscriptions/expiry-banners";
 
 export const metadata: Metadata = { title: "Profile" };
 
@@ -20,16 +20,19 @@ export default async function ProfilePage() {
 
   // RLS scopes the subscriptions read to this user; one query serves the
   // expiry banner, current status and history.
-  const [{ stats, streak }, { data: subs }] = await Promise.all([
+  const [{ stats, streak }, { data: subs }, catalog] = await Promise.all([
     getLifetimeStats(user.id),
     supabase
       .from("subscriptions")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
+    listExamCatalog(),
   ]);
   const subscriptions = (subs ?? []) as Subscription[];
-  const warning = expiryWarning(subscriptions, new Date());
+  const examNames = Object.fromEntries(
+    catalog.map((exam) => [exam.id, exam.name])
+  );
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
@@ -42,12 +45,7 @@ export default async function ProfilePage() {
         </p>
       </header>
 
-      {warning && (
-        <ExpiryBanner
-          periodEnd={warning.periodEnd}
-          daysLeft={warning.daysLeft}
-        />
-      )}
+      <ExpiryBanners subscriptions={subscriptions} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -80,7 +78,10 @@ export default async function ProfilePage() {
         </div>
         <div className="space-y-6">
           <PlanCard profile={user.profile} />
-          <SubscriptionCard subscriptions={subscriptions} />
+          <SubscriptionCard
+            subscriptions={subscriptions}
+            examNames={examNames}
+          />
         </div>
       </div>
     </div>

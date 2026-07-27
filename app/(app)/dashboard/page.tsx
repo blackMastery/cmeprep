@@ -5,17 +5,15 @@ import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
-import {
-  expiryWarning,
-  type SubscriptionLike,
-} from "@/lib/subscriptions-core";
+import { examAccessFor, type SubscriptionScope } from "@/lib/entitlements-core";
+import { listExamCatalog } from "@/lib/catalog";
 import type { Test, TopicAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { WeakAreas } from "@/components/dashboard/weak-areas";
 import { PastTests } from "@/components/dashboard/past-tests";
 import { AccountPanel } from "@/components/dashboard/account-panel";
-import { ExpiryBanner } from "@/components/subscriptions/expiry-banner";
+import { ExpiryBanners } from "@/components/subscriptions/expiry-banners";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -47,12 +45,24 @@ export default async function DashboardPage() {
       .limit(8),
     supabase
       .from("subscriptions")
-      .select("status, current_period_end")
+      .select("status, current_period_end, exam_id")
       .eq("user_id", user.id),
   ]);
 
-  const warning = expiryWarning((subs ?? []) as SubscriptionLike[], new Date());
+  const subscriptions = (subs ?? []) as SubscriptionScope[];
   const greetingName = firstName(user.profile.full_name);
+
+  // null = all exams (trial, admin, or an all-access row) — the panel says so
+  // rather than listing the whole catalogue.
+  const access = examAccessFor(user.profile.role, subscriptions, new Date());
+  const entitledExamNames =
+    access.kind === "all"
+      ? null
+      : access.kind === "none"
+        ? []
+        : (await listExamCatalog())
+            .filter((exam) => access.examIds.includes(exam.id))
+            .map((exam) => exam.name);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
@@ -75,12 +85,7 @@ export default async function DashboardPage() {
         )}
       </header>
 
-      {warning && (
-        <ExpiryBanner
-          periodEnd={warning.periodEnd}
-          daysLeft={warning.daysLeft}
-        />
-      )}
+      <ExpiryBanners subscriptions={subscriptions} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -114,7 +119,7 @@ export default async function DashboardPage() {
         </div>
         <div className="space-y-6">
           <WeakAreas topics={(topics ?? []) as TopicAccuracy[]} />
-          <AccountPanel profile={user.profile} />
+          <AccountPanel profile={user.profile} examNames={entitledExamNames} />
         </div>
       </div>
     </div>

@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export function AccountPanel({ profile }: { profile: Profile }) {
+export function AccountPanel({
+  profile,
+  /** Exam names this account covers; null = every exam (trial, comp, admin). */
+  examNames,
+}: {
+  profile: Profile;
+  examNames: string[] | null;
+}) {
   const isTrial = profile.role === "trial";
   const remaining = profile.trials_limit - profile.trials_used;
   const nearLimit = isTrial && remaining <= 1;
@@ -32,6 +39,22 @@ export function AccountPanel({ profile }: { profile: Profile }) {
               </dd>
             </div>
           )}
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <dt className="text-muted-foreground">Examinations</dt>
+            <dd className="flex flex-wrap justify-end gap-1">
+              {examNames === null ? (
+                <Badge variant="outline">All exams</Badge>
+              ) : examNames.length === 0 ? (
+                <span className="text-muted-foreground">None</span>
+              ) : (
+                examNames.map((name) => (
+                  <Badge key={name} variant="outline">
+                    {name}
+                  </Badge>
+                ))
+              )}
+            </dd>
+          </div>
         </dl>
 
         {nearLimit && (

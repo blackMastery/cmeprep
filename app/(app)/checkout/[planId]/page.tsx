@@ -4,10 +4,17 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { listExamCatalogTree } from "@/lib/catalog";
+import { toExamSummary } from "@/lib/catalog-core";
+import { accessEndsByExam } from "@/lib/entitlements-core";
+import type { SubscriptionScope } from "@/lib/entitlements-core";
 import { priceLabel } from "@/lib/format";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { PayPalCheckoutButtons } from "@/components/checkout/paypal-buttons";
+import { ExamChoice } from "@/components/checkout/exam-choice";
+import { ExamDetailPanel } from "@/components/checkout/exam-detail-panel";
 
 export const metadata: Metadata = { title: "Checkout" };
 
@@ -19,10 +26,23 @@ function longDate(iso: string): string {
   });
 }
 
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function one(value: string | string[] | undefined): string | undefined {
+  const v = Array.isArray(value) ? value[0] : value;
+  return v && v.length > 0 ? v : undefined;
+}
+
 export default async function CheckoutPage(
   props: PageProps<"/checkout/[planId]">
 ) {
   const { planId } = await props.params;
+  const sp = await props.searchParams;
   const user = await requireUser();
   const supabase = await createClient();
 
@@ -43,19 +63,40 @@ export default async function CheckoutPage(
     notFound();
   }
 
+  const catalog = await listExamCatalogTree();
+
+  // An unknown or stale ?exam= must not dead-end the buyer — fall back to
+  // unselected and let them pick. A single exam is auto-selected.
+  const requested = one(sp.exam);
+  const selected =
+    catalog.find((exam) => exam.id === requested) ??
+    (catalog.length === 1 ? catalog[0] : null);
+
   // RLS: users can read their own subscriptions.
-  const { data: activeSub } = await supabase
+  const { data: subs } = await supabase
     .from("subscriptions")
-    .select("current_period_end")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .gt("current_period_end", new Date().toISOString())
-    .order("current_period_end", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .select("status, current_period_end, exam_id")
+    .eq("user_id", user.id);
+
+  // Per exam, not global: telling a buyer that a purchase for exam A extends
+  // their access is only true for A itself, or for an all-access row.
+  const endsByExam = accessEndsByExam(
+    (subs ?? []) as SubscriptionScope[],
+    new Date()
+  );
+  const allAccessEnd = endsByExam.get(null) ?? null;
+  const extendsFrom = selected
+    ? (endsByExam.get(selected.id) ?? allAccessEnd)
+    : null;
+
+  const ownedUntil: Record<string, string> = {};
+  for (const exam of catalog) {
+    const end = endsByExam.get(exam.id) ?? allAccessEnd;
+    if (end) ownedUntil[exam.id] = shortDate(end);
+  }
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-8 sm:py-12">
+    <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:py-12">
       <Link
         href="/dashboard"
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -103,21 +144,72 @@ export default async function CheckoutPage(
             </ul>
           )}
 
-          {activeSub && (
+          <EcgDivider className="text-primary/30" />
+
+          <section aria-labelledby="exam-choice-heading" className="space-y-3">
+            <div>
+              <h2 id="exam-choice-heading" className="font-display text-lg">
+                {catalog.length === 1
+                  ? "This plan covers"
+                  : "Choose your examination"}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your subscription covers one examination. You can add another
+                later.
+              </p>
+            </div>
+
+            {catalog.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                No examinations are available yet — please check back shortly.
+              </p>
+            ) : (
+              <ExamChoice
+                planId={plan.id}
+                exams={catalog.map(toExamSummary)}
+                selectedId={selected?.id ?? null}
+                ownedUntil={ownedUntil}
+                labelledBy="exam-choice-heading"
+              >
+                {selected && <ExamDetailPanel exam={selected} />}
+              </ExamChoice>
+            )}
+          </section>
+
+          {selected && extendsFrom && (
             <p className="rounded-lg bg-accent px-4 py-3 text-sm">
-              You already have access until{" "}
-              <strong>{longDate(activeSub.current_period_end)}</strong> — this
-              purchase extends it from that date.
+              You already have access to <strong>{selected.name}</strong> until{" "}
+              <strong>{longDate(extendsFrom)}</strong> — this purchase extends
+              it from that date.
             </p>
           )}
 
           <EcgDivider className="text-primary/30" />
 
-          <PayPalCheckoutButtons planId={plan.id} />
+          {selected ? (
+            <PayPalCheckoutButtons planId={plan.id} examId={selected.id} />
+          ) : (
+            // Deliberately not a disabled PayPal iframe: a greyed-out one
+            // reads as broken, and not mounting also avoids loading the SDK
+            // before the buyer has shown intent.
+            <div className="space-y-2">
+              <Button size="lg" className="w-full" disabled>
+                Select an examination to continue
+              </Button>
+              <p
+                role="status"
+                className="text-center text-xs text-muted-foreground"
+              >
+                Pick the exam you are preparing for to unlock payment.
+              </p>
+            </div>
+          )}
 
           <p className="text-center text-xs text-muted-foreground">
-            Secure payment via PayPal. Access starts immediately after
-            payment.
+            Secure payment via PayPal. Access starts immediately after payment.{" "}
+            <Link href="/#pricing" className="underline underline-offset-2">
+              Change plan
+            </Link>
           </p>
         </CardContent>
       </Card>

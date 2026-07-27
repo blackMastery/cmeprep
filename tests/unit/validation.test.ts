@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPaypalOrderSchema,
   createTestSchema,
   parseFeatureLines,
   planSchema,
@@ -13,6 +14,7 @@ import {
 // Postgres uuids but are NOT RFC-compliant v4 values, which is exactly the
 // case that must keep working.
 const SEED_SUBJECT = "11111111-1111-1111-1111-111111111111";
+const SEED_EXAM = "e0000000-0000-0000-0000-000000000001";
 const V4 = "9f1c2b3e-7a4d-4c8b-9e2f-1a2b3c4d5e6f";
 
 describe("createTestSchema", () => {
@@ -111,7 +113,12 @@ describe("admin user & subscription schemas", () => {
   });
 
   it("subscriptionSchema accepts preset and custom plans with a valid date", () => {
-    const base = { status: "active", currentPeriodEnd: "2026-08-21" };
+    const base = {
+      planId: null,
+      examId: SEED_EXAM,
+      status: "active",
+      currentPeriodEnd: "2026-08-21",
+    };
     expect(
       subscriptionSchema.safeParse({ plan: "1 month", ...base }).success
     ).toBe(true);
@@ -121,31 +128,87 @@ describe("admin user & subscription schemas", () => {
     ).toBe(true);
   });
 
+  it("subscriptionSchema treats a null exam as the all-access grant", () => {
+    const base = { plan: "1 month", planId: null, status: "active" as const };
+    expect(
+      subscriptionSchema.safeParse({
+        ...base,
+        examId: null,
+        currentPeriodEnd: "2026-08-21",
+      }).success
+    ).toBe(true);
+
+    // "" must be mapped to null by the action BEFORE parsing — if it ever
+    // reaches the schema that is a bug, so it has to fail loudly.
+    expect(
+      subscriptionSchema.safeParse({
+        ...base,
+        examId: "",
+        currentPeriodEnd: "2026-08-21",
+      }).success
+    ).toBe(false);
+  });
+
   it("subscriptionSchema rejects short plans, bad statuses and bad dates", () => {
-    const base = { status: "active", currentPeriodEnd: "2026-08-21" };
+    const base = {
+      planId: null,
+      examId: SEED_EXAM,
+      status: "active",
+      currentPeriodEnd: "2026-08-21",
+    };
     expect(subscriptionSchema.safeParse({ plan: "x", ...base }).success).toBe(
       false
     );
     expect(
       subscriptionSchema.safeParse({
+        ...base,
         plan: "1 month",
         status: "paused",
-        currentPeriodEnd: "2026-08-21",
       }).success
     ).toBe(false);
     expect(
       subscriptionSchema.safeParse({
+        ...base,
         plan: "1 month",
-        status: "active",
         currentPeriodEnd: "2026-13-40",
       }).success
     ).toBe(false);
     expect(
       subscriptionSchema.safeParse({
+        ...base,
         plan: "1 month",
-        status: "active",
         currentPeriodEnd: "next tuesday",
       }).success
+    ).toBe(false);
+  });
+});
+
+describe("createPaypalOrderSchema", () => {
+  it("requires both a plan and an exam", () => {
+    expect(
+      createPaypalOrderSchema.safeParse({ planId: V4, examId: SEED_EXAM })
+        .success
+    ).toBe(true);
+    // All-access is no longer purchasable — the exam is mandatory.
+    expect(createPaypalOrderSchema.safeParse({ planId: V4 }).success).toBe(
+      false
+    );
+    expect(
+      createPaypalOrderSchema.safeParse({ planId: V4, examId: null }).success
+    ).toBe(false);
+  });
+
+  it("accepts the seed exam id, which is not RFC v4", () => {
+    // Guards the z.guid() vs z.uuid() choice: z.uuid() rejects this id.
+    expect(
+      createPaypalOrderSchema.safeParse({ planId: V4, examId: SEED_EXAM })
+        .success
+    ).toBe(true);
+  });
+
+  it("rejects a non-uuid exam id", () => {
+    expect(
+      createPaypalOrderSchema.safeParse({ planId: V4, examId: "camc" }).success
     ).toBe(false);
   });
 });

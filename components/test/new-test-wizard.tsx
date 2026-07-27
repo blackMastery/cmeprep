@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
+import { LockedExamRow } from "@/components/test/locked-exam-row";
 
 type WizardTopic = { id: string; name: string };
 type WizardSubject = { id: string; name: string; topics: WizardTopic[] };
@@ -15,6 +16,10 @@ export type WizardExam = {
   id: string;
   name: string;
   specialties: WizardSpecialty[];
+  subjectCount: number;
+  questionCount: number;
+  /** Not covered by this student's subscription — shown, never hidden. */
+  locked: boolean;
 };
 
 const COUNTS = [10, 20, 40, 60];
@@ -25,11 +30,22 @@ const DIFFICULTIES = [
   { value: "hard", label: "Hard" },
 ] as const;
 
-export function NewTestWizard({ exams }: { exams: WizardExam[] }) {
+export function NewTestWizard({
+  exams,
+  upsellPlanId,
+}: {
+  exams: WizardExam[];
+  /** Plan to send locked-exam upsells to; null when nothing is purchasable. */
+  upsellPlanId: string | null;
+}) {
   const router = useRouter();
 
-  // With a single exam the Exam step disappears entirely — the flow looks
-  // exactly like the original three-step wizard until a second exam exists.
+  const unlocked = useMemo(() => exams.filter((e) => !e.locked), [exams]);
+
+  // With a single exam in the catalogue the Exam step disappears entirely —
+  // the flow looks exactly like the original three-step wizard. It stays
+  // visible whenever there is more than one, even if only one is unlocked,
+  // because the locked ones are the upsell.
   const steps = useMemo(
     () =>
       exams.length > 1
@@ -40,7 +56,7 @@ export function NewTestWizard({ exams }: { exams: WizardExam[] }) {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [examId, setExamId] = useState<string | null>(
-    exams.length === 1 ? exams[0].id : null
+    unlocked.length === 1 ? unlocked[0].id : null
   );
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
   const [topicIds, setTopicIds] = useState<string[]>([]);
@@ -110,9 +126,19 @@ export function NewTestWizard({ exams }: { exams: WizardExam[] }) {
     }
   }
 
+  function selectExam(exam: WizardExam) {
+    if (exam.locked || examId === exam.id) return;
+    setExamId(exam.id);
+    // Selections belong to the previous exam's tree.
+    setSubjectIds([]);
+    setTopicIds([]);
+  }
+
+  const examReady = selectedExam !== null && !selectedExam.locked;
+
   const canAdvance =
     currentStep === "Exam"
-      ? examId !== null
+      ? examReady
       : currentStep === "Subjects"
         ? subjectIds.length > 0
         : true;
@@ -164,22 +190,64 @@ export function NewTestWizard({ exams }: { exams: WizardExam[] }) {
               <legend className="mb-3 font-display text-lg">
                 Which examination are you preparing for?
               </legend>
-              <div className="flex flex-wrap gap-2">
-                {exams.map((e) => (
-                  <Chip
-                    key={e.id}
-                    label={e.name}
-                    selected={examId === e.id}
-                    onClick={() => {
-                      if (examId !== e.id) {
-                        setExamId(e.id);
-                        // Selections belong to the previous exam's tree.
-                        setSubjectIds([]);
-                        setTopicIds([]);
+              {/* Cards rather than the Chip pills the other steps use: an
+                  exam now carries counts, a lock state and a CTA, none of
+                  which fit on a pill. */}
+              <div className="grid gap-2.5">
+                {exams.map((e) =>
+                  e.locked ? (
+                    <LockedExamRow
+                      key={e.id}
+                      name={e.name}
+                      subjectCount={e.subjectCount}
+                      questionCount={e.questionCount}
+                      href={
+                        upsellPlanId
+                          ? `/checkout/${upsellPlanId}?exam=${e.id}`
+                          : null
                       }
-                    }}
-                  />
-                ))}
+                    />
+                  ) : (
+                    <button
+                      key={e.id}
+                      type="button"
+                      aria-pressed={examId === e.id}
+                      onClick={() => selectExam(e)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-colors",
+                        "focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
+                        examId === e.id
+                          ? "border-primary bg-accent"
+                          : "border-border hover:border-primary/50 hover:bg-accent/50"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                          examId === e.id
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input"
+                        )}
+                        aria-hidden="true"
+                      >
+                        {examId === e.id && (
+                          <Check className="size-3" strokeWidth={3} />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium wrap-break-word">
+                          {e.name}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {e.subjectCount} subject
+                          {e.subjectCount === 1 ? "" : "s"} ·{" "}
+                          {e.questionCount.toLocaleString()} question
+                          {e.questionCount === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                )}
               </div>
             </fieldset>
           )}
@@ -357,7 +425,7 @@ export function NewTestWizard({ exams }: { exams: WizardExam[] }) {
                 className="ml-auto"
                 size="lg"
                 onClick={start}
-                disabled={submitting || examId === null || subjectIds.length === 0}
+                disabled={submitting || !examReady || subjectIds.length === 0}
               >
                 {submitting ? (
                   <>

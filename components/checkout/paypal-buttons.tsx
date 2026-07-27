@@ -9,11 +9,18 @@ import {
 } from "@paypal/react-paypal-js";
 
 /**
- * PayPal Smart Buttons for a single plan. The browser only shuttles opaque
- * order ids: /api/paypal/orders picks the amount from the DB, and the
- * capture route grants access, so nothing here is trusted.
+ * PayPal Smart Buttons for one plan and one exam. The browser only shuttles
+ * opaque order ids: /api/paypal/orders picks the amount from the DB and
+ * validates the exam, and the capture route grants access, so nothing here is
+ * trusted.
  */
-export function PayPalCheckoutButtons({ planId }: { planId: string }) {
+export function PayPalCheckoutButtons({
+  planId,
+  examId,
+}: {
+  planId: string;
+  examId: string;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
@@ -32,13 +39,17 @@ export function PayPalCheckoutButtons({ planId }: { planId: string }) {
         options={{ clientId, currency: "USD", intent: "capture" }}
       >
         <PayPalButtons
+          // The SDK captures createOrder at first mount. Without this, a
+          // buyer who picks one exam, switches to another, then pays would
+          // create an order for the FIRST one.
+          forceReRender={[examId]}
           style={{ layout: "vertical", label: "pay" }}
           createOrder={async () => {
             setError(null);
             const res = await fetch("/api/paypal/orders", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ planId }),
+              body: JSON.stringify({ planId, examId }),
             });
             const data = await res.json().catch(() => null);
             if (!res.ok || !data?.id) {

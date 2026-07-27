@@ -3,16 +3,20 @@ import {
   activePeriodEnd,
   centsToValue,
   computePeriodEnd,
+  daysUntil,
   displayStatus,
-  expiryWarning,
   formatPurchaseCustomId,
   isEffectivelyActive,
   parsePurchaseCustomId,
+  stackBase,
   type SubscriptionLike,
 } from "@/lib/subscriptions-core";
 
 const USER = "3f2a1b0c-4d5e-4f60-8a9b-0c1d2e3f4a5b";
 const PLAN = "9e8d7c6b-5a49-4382-b1c0-d9e8f7a6b5c4";
+// The seed exam id: non-RFC-v4 on purpose, which is why validation uses
+// z.guid() rather than z.uuid().
+const EXAM = "e0000000-0000-0000-0000-000000000001";
 
 const NOW = new Date("2026-07-23T12:00:00Z");
 const sub = (
@@ -45,16 +49,31 @@ describe("computePeriodEnd", () => {
 });
 
 describe("purchase custom_id", () => {
-  it("round-trips user and plan ids", () => {
-    const customId = formatPurchaseCustomId(USER, PLAN);
+  it("round-trips user, plan and exam ids", () => {
+    const customId = formatPurchaseCustomId(USER, PLAN, EXAM);
     expect(parsePurchaseCustomId(customId)).toEqual({
       userId: USER,
       planId: PLAN,
+      examId: EXAM,
     });
   });
 
   it("stays within PayPal's 127-char limit", () => {
-    expect(formatPurchaseCustomId(USER, PLAN).length).toBeLessThanOrEqual(127);
+    expect(formatPurchaseCustomId(USER, PLAN, EXAM)).toHaveLength(110);
+    expect(
+      formatPurchaseCustomId(USER, PLAN, EXAM).length
+    ).toBeLessThanOrEqual(127);
+  });
+
+  it("reads a legacy two-segment id as all-access", () => {
+    // Orders created before exam scoping shipped can still be approved after
+    // it. They were sold under blanket terms, so examId null (= all-access)
+    // is the correct read — not a reason to reject the capture.
+    expect(parsePurchaseCustomId(`${USER}:${PLAN}`)).toEqual({
+      userId: USER,
+      planId: PLAN,
+      examId: null,
+    });
   });
 
   it("rejects malformed values", () => {
@@ -62,7 +81,36 @@ describe("purchase custom_id", () => {
     expect(parsePurchaseCustomId("")).toBeNull();
     expect(parsePurchaseCustomId("not-a-uuid:also-not")).toBeNull();
     expect(parsePurchaseCustomId(USER)).toBeNull();
-    expect(parsePurchaseCustomId(`${USER}:${PLAN}:extra`)).toBeNull();
+    expect(parsePurchaseCustomId(`${USER}:${PLAN}:not-a-uuid`)).toBeNull();
+    expect(parsePurchaseCustomId(`${USER}:${PLAN}:`)).toBeNull();
+    expect(parsePurchaseCustomId(`${USER}:${PLAN}:${EXAM}:extra`)).toBeNull();
+  });
+});
+
+describe("stackBase", () => {
+  it("starts at the current period end when it is still in the future", () => {
+    expect(stackBase("2026-09-01T12:00:00Z", NOW).toISOString()).toBe(
+      "2026-09-01T12:00:00.000Z"
+    );
+  });
+
+  it("starts at now() when the previous period has lapsed", () => {
+    expect(stackBase("2026-07-01T12:00:00Z", NOW)).toEqual(NOW);
+  });
+
+  it("starts at now() when there is no previous period", () => {
+    expect(stackBase(null, NOW)).toEqual(NOW);
+  });
+});
+
+describe("daysUntil", () => {
+  it("rounds partial days up", () => {
+    expect(daysUntil("2026-07-23T20:00:00Z", NOW)).toBe(1);
+    expect(daysUntil("2026-07-30T11:00:00Z", NOW)).toBe(7);
+  });
+
+  it("goes non-positive once the date has passed", () => {
+    expect(daysUntil("2026-07-20T12:00:00Z", NOW)).toBeLessThanOrEqual(0);
   });
 });
 
@@ -149,41 +197,5 @@ describe("activePeriodEnd", () => {
   });
 });
 
-describe("expiryWarning", () => {
-  it("stays silent when access ends more than 7 days out", () => {
-    expect(
-      expiryWarning([sub("active", "2026-08-23T12:00:00Z")], NOW)
-    ).toBeNull();
-  });
-
-  it("fires at the 7-day boundary", () => {
-    expect(
-      expiryWarning([sub("active", "2026-07-30T11:00:00Z")], NOW)
-    ).toEqual({ periodEnd: "2026-07-30T11:00:00Z", daysLeft: 7 });
-  });
-
-  it("reports one day when only hours remain", () => {
-    expect(
-      expiryWarning([sub("active", "2026-07-23T20:00:00Z")], NOW)
-    ).toEqual({ periodEnd: "2026-07-23T20:00:00Z", daysLeft: 1 });
-  });
-
-  it("stays silent once access has lapsed", () => {
-    expect(
-      expiryWarning([sub("active", "2026-07-20T12:00:00Z")], NOW)
-    ).toBeNull();
-  });
-
-  it("lets a later stacked period suppress an earlier one ending soon", () => {
-    expect(
-      expiryWarning(
-        [sub("active", "2026-07-24T12:00:00Z"), sub("active", "2026-09-24T12:00:00Z")],
-        NOW
-      )
-    ).toBeNull();
-  });
-
-  it("returns null for no subscriptions", () => {
-    expect(expiryWarning([], NOW)).toBeNull();
-  });
-});
+// Expiry warnings moved to lib/entitlements-core.ts when they became
+// per-exam — see tests/unit/entitlements-core.test.ts.

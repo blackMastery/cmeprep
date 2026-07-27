@@ -5,6 +5,7 @@ import { ArrowLeft, Flame, Target, TrendingUp } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { getUserDetail } from "@/lib/admin/users";
 import { listActivePlans, paidPlans } from "@/lib/plans";
+import { listExamCards } from "@/lib/admin/taxonomy";
 import { ROLE_LABEL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,16 +28,19 @@ export default async function AdminUserDetailPage(
   // The layout already gates /admin/*; this call is for isSelf.
   const actor = await requireAdmin();
 
-  const [detail, activePlans] = await Promise.all([
+  const [detail, activePlans, examCards] = await Promise.all([
     getUserDetail(id),
     listActivePlans(),
+    listExamCards(),
   ]);
   if (!detail) notFound();
 
   const presets = paidPlans(activePlans).map((p) => ({
+    id: p.id,
     name: p.name,
     durationMonths: p.duration_months,
   }));
+  const exams = examCards.map((exam) => ({ id: exam.id, name: exam.name }));
   const { profile, email, subscriptions, stats, streak, testsCount } = detail;
   const isSelf = actor.id === profile.id;
 
@@ -98,6 +102,7 @@ export default async function AdminUserDetailPage(
           userId={profile.id}
           subscriptions={subscriptions}
           presets={presets}
+          exams={exams}
         />
       </div>
     </div>

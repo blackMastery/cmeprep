@@ -70,6 +70,13 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // A two-segment custom_id means the order was created before exam scoping
+  // shipped. It grants all-access, because that is what the buyer paid for.
+  // Logged so we can confirm the window has closed and drop the branch.
+  if (parsed.examId === null) {
+    console.warn("paypal_legacy_custom_id", { orderId, userId: parsed.userId });
+  }
+
   const admin = createAdminClient();
   const { data: plan } = await admin
     .from("plans")
@@ -99,9 +106,13 @@ export async function POST(
   const result = await grantPlanPurchase(admin, {
     userId: user.id,
     plan,
+    examId: parsed.examId,
     paypalOrderId: order.id,
     captureId: capture.id,
-    meta: amountMismatch ? { amountMismatch: true } : undefined,
+    meta: {
+      ...(amountMismatch ? { amountMismatch: true } : {}),
+      ...(parsed.examId === null ? { legacyCustomId: true } : {}),
+    },
   });
 
   if (result.outcome === "error") {

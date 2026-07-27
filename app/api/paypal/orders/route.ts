@@ -12,7 +12,7 @@ import {
  * POST /api/paypal/orders — create a PayPal order for a plan.
  *
  * Server-authoritative: the amount comes from the plans table, and the
- * buyer/plan pair rides along in the purchase unit's custom_id so the
+ * buyer/plan/exam triple rides along in the purchase unit's custom_id so the
  * capture route and webhook can re-derive it from PayPal, not the client.
  */
 export async function POST(request: Request) {
@@ -51,9 +51,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "plan_unavailable" }, { status: 404 });
   }
 
+  // The browser picks the exam, so it has to be checked here: an unvalidated
+  // id would ride into custom_id and only blow up on the FK AFTER the money
+  // is captured.
+  const { data: exam } = await admin
+    .from("exams")
+    .select("id")
+    .eq("id", parsed.data.examId)
+    .maybeSingle();
+
+  if (!exam) {
+    return NextResponse.json({ error: "exam_unavailable" }, { status: 404 });
+  }
+
   const order = await createPaypalOrder({
     value: centsToValue(plan.price_cents),
-    customId: formatPurchaseCustomId(user.id, plan.id),
+    customId: formatPurchaseCustomId(user.id, plan.id, exam.id),
     referenceId: plan.id,
   });
 
