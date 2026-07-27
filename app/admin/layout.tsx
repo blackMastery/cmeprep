@@ -5,6 +5,7 @@ import { AdminSidebar } from "@/components/admin/admin-nav";
 
 export const metadata: Metadata = {
   title: { default: "Admin", template: "%s · Admin · cmeprep.me" },
+  robots: { index: false, follow: false },
 };
 
 /**

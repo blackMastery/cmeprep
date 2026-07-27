@@ -1,7 +1,17 @@
+import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { AppHeader } from "@/components/app/app-header";
 import { AppChrome } from "@/components/app/app-chrome";
 import { AppSidebar } from "@/components/app/app-nav";
+
+/**
+ * Nothing behind auth belongs in an index. A crawler only ever sees the
+ * /login redirect, but saying so explicitly keeps these URLs out of Search
+ * Console as soft 404s, and stops a leaked share link being indexable.
+ */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 /**
  * Authoritative gate for the whole authenticated area. proxy.ts does a cheap

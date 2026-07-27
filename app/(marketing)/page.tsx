@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { PhoneMockup } from "@/components/marketing/phone-mockup";
 import { PricingCards } from "@/components/marketing/pricing-cards";
+import { MarketingStructuredData } from "@/components/marketing/structured-data";
 import { listActivePlans, paidPlans } from "@/lib/plans";
 import { priceLabel } from "@/lib/format";
 
@@ -71,20 +72,28 @@ const EXAMINATIONS = [
   { code: "PLAB", name: "UK Medical Board Exams" },
   { code: "NCLEX", name: "USA Nursing Board Exams" },
   { code: "MBBS", name: "Exit Exams" },
-  { code: "MCDN", name: "Nigerian Medical Board Exams" },
+  // MDCN = Medical and Dental Council of Nigeria. Was "MCDN", which is also
+  // the acronym people search for, so the metadata has to match.
+  { code: "MDCN", name: "Nigerian Medical Board Exams" },
 ];
+
+// No metadata export on purpose: the root layout's title, description,
+// canonical "/" and openGraph already describe this page exactly. Declaring
+// a partial `openGraph` here would REPLACE the root's and drop og:image.
 
 export default async function MarketingPage() {
   const plans = await listActivePlans();
   const paid = paidPlans(plans);
-  const startingPrice =
-    paid.length > 0
-      ? priceLabel(Math.min(...paid.map((p) => p.price_cents)))
-      : null;
+  const lowestCents =
+    paid.length > 0 ? Math.min(...paid.map((p) => p.price_cents)) : null;
+  const startingPrice = lowestCents !== null ? priceLabel(lowestCents) : null;
   const STATS = stats(startingPrice);
 
   return (
     <>
+      <MarketingStructuredData
+        startingPrice={lowestCents !== null ? lowestCents / 100 : undefined}
+      />
       {/* ── Hero ─────────────────────────────────────────── */}
       <section className="relative isolate overflow-hidden bg-coral">
         {/* Photograph under a near-opaque brand scrim: warmth and context

@@ -3,7 +3,13 @@ import Link from "next/link";
 import { AuthCard } from "@/components/auth/auth-card";
 import { LoginForm } from "@/components/auth/login-form";
 
-export const metadata: Metadata = { title: "Log in" };
+export const metadata: Metadata = {
+  title: "Log in",
+  description: "Log in to your cmeprep.me account.",
+  // Canonical without the ?next= query, so the dozens of redirect variants
+  // collapse to one indexable URL instead of competing with each other.
+  alternates: { canonical: "/login" },
+};
 
 export default async function LoginPage(props: PageProps<"/login">) {
   const { next, error } = await props.searchParams;

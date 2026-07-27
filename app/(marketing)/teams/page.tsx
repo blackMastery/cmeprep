@@ -20,12 +20,31 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OG_IMAGE, TWITTER_IMAGE } from "@/lib/site";
 import { Button } from "@/components/ui/button";
 
+const TEAMS_TITLE = "Teams & Enterprises";
+const TEAMS_DESCRIPTION =
+  "Bring cmeprep.me to your hospital or training program: org accounts, SSO/SCIM, private question banks, audit logs, admin dashboards and volume pricing.";
+
 export const metadata: Metadata = {
-  title: "Teams & Enterprises",
-  description:
-    "Bring cmeprep.me to your hospital or training program: org accounts, SSO/SCIM, private question banks, audit logs, admin dashboards and volume pricing.",
+  title: TEAMS_TITLE,
+  description: TEAMS_DESCRIPTION,
+  alternates: { canonical: "/teams" },
+  // `images` is repeated here deliberately — declaring openGraph/twitter at
+  // page level replaces the root's instead of merging, so omitting it would
+  // strip og:image from this page. See lib/site.ts.
+  openGraph: {
+    url: "/teams",
+    title: `${TEAMS_TITLE} · cmeprep.me`,
+    description: TEAMS_DESCRIPTION,
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    title: `${TEAMS_TITLE} · cmeprep.me`,
+    description: TEAMS_DESCRIPTION,
+    images: [TWITTER_IMAGE],
+  },
 };
 
 const CONTACT_HREF =

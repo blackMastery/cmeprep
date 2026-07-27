@@ -3,7 +3,11 @@ import Link from "next/link";
 import { MailCheck } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 
-export const metadata: Metadata = { title: "Verify your email" };
+export const metadata: Metadata = {
+  title: "Verify your email",
+  // The URL carries an email address in a query param — never index it.
+  robots: { index: false, follow: false },
+};
 
 export default async function VerifyEmailPage(
   props: PageProps<"/verify-email">

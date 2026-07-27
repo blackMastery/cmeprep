@@ -4,7 +4,10 @@ import { logout } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 
-export const metadata: Metadata = { title: "Account suspended" };
+export const metadata: Metadata = {
+  title: "Account suspended",
+  robots: { index: false, follow: false },
+};
 
 export default function BannedPage() {
   return (
