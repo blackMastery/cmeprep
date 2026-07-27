@@ -79,13 +79,6 @@ const ORG_PLANS: OrgPlan[] = [
   },
 ];
 
-function planContactHref(planName: string) {
-  return (
-    "mailto:support@cmeprep.me?subject=" +
-    encodeURIComponent(`${planName} plan inquiry`)
-  );
-}
-
 type Feature = {
   icon: LucideIcon;
   title: string;
@@ -433,9 +426,9 @@ export default function TeamsPage() {
                   size="lg"
                   variant={plan.featured ? "secondary" : "default"}
                   className="mt-8 w-full"
-                  asChild
+                  disabled
                 >
-                  <a href={planContactHref(plan.name)}>Choose {plan.name}</a>
+                  Coming Soon
                 </Button>
               </div>
             ))}

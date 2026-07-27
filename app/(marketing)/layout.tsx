@@ -26,7 +26,7 @@ export default async function MarketingLayout({
               <Link href="/#pricing">Pricing</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/teams">Teams</Link>
+              <Link href="/teams">Enterprise &amp; Teams</Link>
             </Button>
           </nav>
           <div className="ml-auto flex items-center gap-2 sm:ml-0">
