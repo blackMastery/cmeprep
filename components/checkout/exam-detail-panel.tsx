@@ -19,11 +19,10 @@ import { SpecialtyDisclosure } from "@/components/checkout/specialty-disclosure"
 export function ExamDetailPanel({ exam }: { exam: CatalogExamDetail }) {
   return (
     <div className="space-y-4">
-      <dl className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center sm:grid-cols-4">
+      <dl className="grid grid-cols-3 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
         <Stat label="Specialties" value={exam.specialtyCount} />
         <Stat label="Subjects" value={exam.subjectCount} />
         <Stat label="Topics" value={exam.topicCount} />
-        <Stat label="Questions" value={exam.questionCount} />
       </dl>
 
       {exam.specialties.length === 0 ? (
@@ -50,7 +49,6 @@ function specialtySummary(specialty: CatalogSpecialty): string {
   return [
     `${specialty.subjectCount} subject${specialty.subjectCount === 1 ? "" : "s"}`,
     `${specialty.topicCount} topic${specialty.topicCount === 1 ? "" : "s"}`,
-    `${specialty.questionCount.toLocaleString()} question${specialty.questionCount === 1 ? "" : "s"}`,
   ].join(" · ");
 }
 

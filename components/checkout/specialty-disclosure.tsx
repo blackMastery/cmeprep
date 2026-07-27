@@ -62,11 +62,7 @@ export function SpecialtyDisclosure({
             specialty.subjects.map((subject) => (
               <div key={subject.id}>
                 <p className="text-sm font-medium wrap-break-word">
-                  {subject.name}{" "}
-                  <span className="text-xs font-normal text-muted-foreground tabular-nums">
-                    · {subject.questionCount.toLocaleString()} question
-                    {subject.questionCount === 1 ? "" : "s"}
-                  </span>
+                  {subject.name}
                 </p>
                 {subject.topics.length > 0 && (
                   <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
