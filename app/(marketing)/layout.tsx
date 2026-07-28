@@ -14,10 +14,13 @@ export default async function MarketingLayout({
   return (
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:gap-6">
-          <MarketingMobileNav />
-          <Logo tagline="inline" />
-          <nav className="ml-auto hidden items-center gap-1 sm:flex">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 md:gap-6">
+          <MarketingMobileNav loggedIn={Boolean(user)} />
+          <Logo
+            tagline="inline"
+            taglineClassName="max-md:hidden"
+          />
+          <nav className="ml-auto hidden items-center gap-1 md:flex">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/#features">Features</Link>
             </Button>
@@ -31,14 +34,19 @@ export default async function MarketingLayout({
               <Link href="/teams">Enterprise &amp; Teams</Link>
             </Button>
           </nav>
-          <div className="ml-auto flex items-center gap-2 sm:ml-0">
+          <div className="ml-auto flex items-center gap-2 md:ml-0">
             {user ? (
               <Button size="sm" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
             ) : (
               <>
-                <Button variant="ghost" size="sm" asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden md:inline-flex"
+                  asChild
+                >
                   <Link href="/login">Log in</Link>
                 </Button>
                 <Button size="sm" asChild>

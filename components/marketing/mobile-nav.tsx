@@ -9,6 +9,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -22,7 +23,11 @@ const NAV_LINKS = [
 ] as const;
 
 /** Hamburger + left sheet for public pages on narrow screens. */
-export function MarketingMobileNav() {
+export function MarketingMobileNav({
+  loggedIn = false,
+}: {
+  loggedIn?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -32,7 +37,7 @@ export function MarketingMobileNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="sm:hidden"
+          className="md:hidden"
           aria-label="Open navigation"
         >
           <Menu />
@@ -60,6 +65,28 @@ export function MarketingMobileNav() {
             </Link>
           ))}
         </nav>
+        <SheetFooter className="mt-auto border-t border-border p-4">
+          {loggedIn ? (
+            <Button className="w-full" asChild>
+              <Link href="/dashboard" onClick={close}>
+                Dashboard
+              </Link>
+            </Button>
+          ) : (
+            <div className="flex w-full flex-col gap-2">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/login" onClick={close}>
+                  Log in
+                </Link>
+              </Button>
+              <Button className="w-full" asChild>
+                <Link href="/register" onClick={close}>
+                  Start free
+                </Link>
+              </Button>
+            </div>
+          )}
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
