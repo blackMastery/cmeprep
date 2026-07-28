@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { MarketingMobileNav } from "@/components/marketing/mobile-nav";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -13,7 +14,8 @@ export default async function MarketingLayout({
   return (
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-4">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:gap-6">
+          <MarketingMobileNav />
           <Logo tagline="inline" />
           <nav className="ml-auto hidden items-center gap-1 sm:flex">
             <Button variant="ghost" size="sm" asChild>
