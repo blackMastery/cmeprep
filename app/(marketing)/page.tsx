@@ -156,12 +156,6 @@ export default async function MarketingPage() {
               </Button>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/75">
-              <span className="tracking-wide uppercase">powered by</span>
-              <span className="rounded bg-white/15 px-2.5 py-1 font-medium tracking-wide">
-                fuze arts
-              </span>
-            </div>
           </div>
         </div>
       </section>

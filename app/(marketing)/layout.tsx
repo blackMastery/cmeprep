@@ -99,7 +99,7 @@ export default async function MarketingLayout({
             </div>
           </div>
           <p className="mt-10 border-t border-white/10 pt-6 text-xs text-[#6f6a72]">
-            © {new Date().getFullYear()} cmeprep.me · powered by fuze arts
+            © {new Date().getFullYear()} cmeprep.me
           </p>
         </div>
       </footer>
