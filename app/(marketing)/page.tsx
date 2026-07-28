@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   BookOpen,
+  Building2,
   Check,
   LineChart,
   SlidersHorizontal,
@@ -265,22 +266,36 @@ export default async function MarketingPage() {
                 Start free, subscribe when you&apos;re ready.
               </p>
             </div>
-            <PricingCards plans={plans} />
-            <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl bg-secondary/50 p-6 ring-1 ring-foreground/10 sm:flex-row sm:px-8">
-              <div>
-                <p className="font-display font-semibold">
-                  Teams &amp; Enterprises
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Org accounts, SSO, private question banks and shared
-                  analytics for hospitals, schools and training programs.
-                  Coming soon.
-                </p>
+
+            <div className="mt-10 flex flex-col gap-6 bg-brand-surface p-8 text-white sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:py-9">
+              <div className="flex gap-4">
+                <Building2
+                  className="mt-0.5 size-8 shrink-0 text-sun"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="font-display text-xl font-semibold tracking-tight sm:text-2xl">
+                    Teams &amp; Enterprises
+                  </p>
+                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/90 sm:text-base">
+                    Org accounts, SSO, private question banks and shared
+                    analytics for hospitals, schools and training programs.
+                  </p>
+                  <p className="mt-2 text-xs font-medium tracking-wide text-sun uppercase">
+                    Coming soon
+                  </p>
+                </div>
               </div>
-              <Button variant="outline" asChild>
+              <Button
+                size="lg"
+                className="shrink-0 bg-sun text-ink hover:bg-sun/85"
+                asChild
+              >
                 <Link href="/teams">Learn more</Link>
               </Button>
             </div>
+
+            <PricingCards plans={plans} />
           </div>
         </section>
       )}
