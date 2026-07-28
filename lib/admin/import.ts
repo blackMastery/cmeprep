@@ -45,20 +45,77 @@ export type WorkbookMatrix = {
   rows: { rowNumber: number; cells: unknown[] }[];
 };
 
+/**
+ * Cell comments are never read by the importer, but exceljs still walks the
+ * comment relationships while loading — and it only understands Excel's own
+ * layout (`xl/commentsN.xml`, relative rel targets). openpyxl and other
+ * generators write `xl/comments/commentN.xml` with absolute targets, which
+ * makes exceljs dereference an unparsed part and throw a TypeError that looks
+ * nothing like a format problem.
+ *
+ * So: drop the comment and VML parts, their relationships and their content
+ * types, then retry. Only cell values matter here, so nothing is lost.
+ */
+async function stripCommentParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(buffer);
+
+  for (const path of Object.keys(zip.files)) {
+    if (/^xl\/comments?[/\d]/i.test(path) || /\.vml$/i.test(path)) {
+      zip.remove(path);
+    }
+  }
+
+  // Rels are the part that actually breaks the load: a dangling comments
+  // relationship is dereferenced whether or not the target still exists.
+  for (const path of Object.keys(zip.files)) {
+    if (!/_rels\/[^/]*\.rels$/i.test(path)) continue;
+    const xml = await zip.files[path].async("string");
+    const cleaned = xml.replace(/<Relationship\b[^>]*\/>/g, (rel) =>
+      /(comments|vmlDrawing)"/i.test(rel) ? "" : rel
+    );
+    if (cleaned !== xml) zip.file(path, cleaned);
+  }
+
+  const contentTypes = zip.file("[Content_Types].xml");
+  if (contentTypes) {
+    const xml = await contentTypes.async("string");
+    zip.file(
+      "[Content_Types].xml",
+      xml.replace(/<Override\b[^>]*\/>/g, (override) =>
+        /comment|vml/i.test(override) ? "" : override
+      )
+    );
+  }
+
+  const rebuilt = await zip.generateAsync({ type: "uint8array" });
+  return rebuilt.buffer.slice(
+    rebuilt.byteOffset,
+    rebuilt.byteOffset + rebuilt.byteLength
+  ) as ArrayBuffer;
+}
+
 export async function workbookToMatrix(
   buffer: ArrayBuffer
 ): Promise<{ ok: true; matrix: WorkbookMatrix } | { ok: false; error: string }> {
   const ExcelJS = (await import("exceljs")).default;
-  const workbook = new ExcelJS.Workbook();
+  let workbook = new ExcelJS.Workbook();
 
   try {
     await workbook.xlsx.load(buffer);
-  } catch {
-    // Also covers legacy .xls, which exceljs cannot read.
-    return {
-      ok: false,
-      error: "That file could not be read as an .xlsx workbook. Save it as .xlsx and try again.",
-    };
+  } catch (firstError) {
+    try {
+      workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await stripCommentParts(buffer));
+    } catch (secondError) {
+      // Genuinely unreadable — legacy .xls, a renamed .csv, a corrupt zip.
+      // Both causes are logged: the message below cannot describe them all.
+      console.error("workbook_load_failed", { firstError, secondError });
+      return {
+        ok: false,
+        error: "That file could not be read as an .xlsx workbook. Save it as .xlsx and try again.",
+      };
+    }
   }
 
   // Prefer the sheet the template ships with; else the first visible sheet
