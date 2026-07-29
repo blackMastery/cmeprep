@@ -33,6 +33,9 @@ export default async function MarketingLayout({
             <Button variant="ghost" size="sm" asChild>
               <Link href="/teams">Enterprise &amp; Teams</Link>
             </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/about">About</Link>
+            </Button>
           </nav>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
             {user ? (
@@ -82,6 +85,9 @@ export default async function MarketingLayout({
                 </Link>
                 <Link href="/teams" className="block text-[#a9a29b] hover:text-white">
                   Teams &amp; Enterprises
+                </Link>
+                <Link href="/about" className="block text-[#a9a29b] hover:text-white">
+                  About
                 </Link>
                 <Link href="/register" className="block text-[#a9a29b] hover:text-white">
                   Start free

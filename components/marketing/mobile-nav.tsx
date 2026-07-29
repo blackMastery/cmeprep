@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: "/#examinations", label: "Examinations" },
   { href: "/#pricing", label: "Pricing" },
   { href: "/teams", label: "Enterprise & Teams" },
+  { href: "/about", label: "About" },
 ] as const;
 
 /** Hamburger + left sheet for public pages on narrow screens. */

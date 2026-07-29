@@ -1,0 +1,123 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Mail } from "lucide-react";
+import { OG_IMAGE, SUPPORT_EMAIL, TWITTER_IMAGE } from "@/lib/site";
+import { Button } from "@/components/ui/button";
+import { EcgDivider } from "@/components/brand/ecg-line";
+
+const ABOUT_TITLE = "About";
+const ABOUT_DESCRIPTION =
+  "Why we built Complete Medical Examinations Prep (CMEPrep) — the first and only interactive question bank for medical board and exit examinations.";
+
+export const metadata: Metadata = {
+  title: ABOUT_TITLE,
+  description: ABOUT_DESCRIPTION,
+  alternates: { canonical: "/about" },
+  // `images` is repeated here deliberately — declaring openGraph/twitter at
+  // page level replaces the root's instead of merging, so omitting it would
+  // strip og:image from this page. See lib/site.ts.
+  openGraph: {
+    url: "/about",
+    title: `${ABOUT_TITLE} · cmeprep.me`,
+    description: ABOUT_DESCRIPTION,
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    title: `${ABOUT_TITLE} · cmeprep.me`,
+    description: ABOUT_DESCRIPTION,
+    images: [TWITTER_IMAGE],
+  },
+};
+
+type AboutSection = {
+  heading: string;
+  /** One paragraph per entry, rendered in order. */
+  body: readonly string[];
+};
+
+/**
+ * Page copy lives here rather than inline so adding a section is a data edit.
+ *
+ * Only sections with real copy belong in this array — an unfinished one must
+ * never render placeholder text on a live marketing page. The commented
+ * entries below are the agreed shape, waiting on wording.
+ */
+const SECTIONS: readonly AboutSection[] = [
+  {
+    heading: "Who are we?",
+    body: [
+      "Complete Medical Examinations Prep (CMEPrep) was created to provide high-quality, practical exam prep tools to students. With no official syllabus or past papers available, we saw frustration and low confidence among exam takers so we built the first and only interactive question bank designed just for you!",
+    ],
+  },
+  // {
+  //   heading: "Our mission",
+  //   body: ["…"],
+  // },
+  // {
+  //   heading: "What we offer",
+  //   body: ["…"],
+  // },
+];
+
+export default function AboutPage() {
+  return (
+    <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:py-16">
+      {SECTIONS.map((section, index) => (
+        <section key={section.heading}>
+          {index > 0 && <EcgDivider className="my-12 text-primary/30" />}
+
+          {index === 0 ? (
+            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+              {section.heading}
+            </h1>
+          ) : (
+            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+              {section.heading}
+            </h2>
+          )}
+
+          {section.body.map((paragraph) => (
+            <p
+              key={paragraph.slice(0, 32)}
+              className="mt-6 text-lg leading-relaxed text-muted-foreground"
+            >
+              {paragraph}
+            </p>
+          ))}
+        </section>
+      ))}
+
+      <EcgDivider className="my-12 text-primary/30" />
+
+      <section className="rounded-2xl bg-secondary/40 p-7">
+        <h2 className="font-display text-2xl font-semibold tracking-tight">
+          Start practising
+        </h2>
+        <p className="mt-2 text-muted-foreground">
+          Try it free, then pick the plan that matches the examination you are
+          preparing for.
+        </p>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <Button size="lg" asChild>
+            <Link href="/register">Start free</Link>
+          </Button>
+          <Button size="lg" variant="outline" asChild>
+            <Link href="/#pricing">See pricing</Link>
+          </Button>
+        </div>
+
+        <p className="mt-6 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+          <Mail className="size-4 shrink-0" aria-hidden="true" />
+          Questions?
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            {SUPPORT_EMAIL}
+          </a>
+        </p>
+      </section>
+    </div>
+  );
+}
