@@ -21,6 +21,7 @@ export function ForgotPasswordForm() {
             type="email"
             autoComplete="email"
             placeholder="you@example.com"
+            defaultValue={state?.values?.email}
           />
           <SubmitButton>Send reset link</SubmitButton>
         </>

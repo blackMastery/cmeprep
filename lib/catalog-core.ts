@@ -35,6 +35,12 @@ export type CatalogExam = {
   id: string;
   name: string;
   code: string | null;
+  /**
+   * Offered for sale. The catalogue keeps returning inactive exams so name
+   * lookups (receipts, expiry banners, the profile) still resolve for people
+   * who bought one before it was retired — callers that SELL filter on this.
+   */
+  isActive: boolean;
   specialtyCount: number;
   subjectCount: number;
   topicCount: number;
@@ -46,7 +52,7 @@ export type CatalogExamDetail = CatalogExam & {
 };
 
 export type CatalogRows = {
-  exams: { id: string; name: string; code: string | null }[];
+  exams: { id: string; name: string; code: string | null; is_active: boolean }[];
   specialties: { id: string; name: string; exam_id: string }[];
   subjects: { id: string; name: string; specialty_id: string }[];
   topics: { id: string; name: string; subject_id: string }[];
@@ -114,6 +120,7 @@ export function assembleCatalog(rows: CatalogRows): CatalogExamDetail[] {
       id: exam.id,
       name: exam.name,
       code: exam.code,
+      isActive: exam.is_active,
       specialties,
       specialtyCount: specialties.length,
       subjectCount: sum(specialties, (sp) => sp.subjectCount),
@@ -129,9 +136,23 @@ export function toExamSummary(exam: CatalogExamDetail): CatalogExam {
     id: exam.id,
     name: exam.name,
     code: exam.code,
+    isActive: exam.isActive,
     specialtyCount: exam.specialtyCount,
     subjectCount: exam.subjectCount,
     topicCount: exam.topicCount,
     questionCount: exam.questionCount,
   };
+}
+
+/**
+ * The exams a buyer may put money on.
+ *
+ * Deliberately not applied inside assembleCatalog: retiring an exam must not
+ * blank its name on a receipt or an expiry banner, so the catalogue stays
+ * complete and only the selling surfaces narrow.
+ */
+export function sellableExams<T extends { isActive: boolean }>(
+  exams: readonly T[]
+): T[] {
+  return exams.filter((exam) => exam.isActive);
 }

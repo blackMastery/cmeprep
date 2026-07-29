@@ -5,9 +5,37 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { emailSchema, fullNameSchema, passwordSchema } from "@/lib/validation";
+import {
+  emailSchema,
+  fullNameSchema,
+  passwordSchema,
+  safeRedirectPath,
+} from "@/lib/validation";
 
-export type AuthState = { error?: string; success?: string } | null;
+/**
+ * Non-secret fields echoed back on failure.
+ *
+ * React 19 resets an uncontrolled `<form action={fn}>` as soon as the action
+ * resolves — it cannot tell a returned error from a success — so anything the
+ * user typed is wiped unless the state carries it back for `defaultValue`.
+ * Passwords are deliberately absent: re-serving a secret so it can land in an
+ * HTML attribute is not worth saving one retype.
+ */
+export type AuthValues = { email?: string; fullName?: string };
+
+export type AuthState =
+  | { error?: string; success?: string; values?: AuthValues }
+  | null;
+
+/** Raw submitted text, not the zod output — `emailSchema` lower-cases and
+ *  trims, and rewriting what someone typed under them is its own surprise. */
+function typed(formData: FormData, ...names: (keyof AuthValues)[]): AuthValues {
+  const values: AuthValues = {};
+  for (const name of names) {
+    values[name] = String(formData.get(name) ?? "");
+  }
+  return values;
+}
 
 async function siteUrl() {
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -30,7 +58,10 @@ export async function login(
     });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return {
+      error: parsed.error.issues[0].message,
+      values: typed(formData, "email"),
+    };
   }
 
   const supabase = await createClient();
@@ -39,12 +70,14 @@ export async function login(
   if (error) {
     // Supabase returns this for unverified emails as well as bad credentials;
     // keep the message generic so we don't leak which accounts exist.
-    return { error: "Incorrect email or password, or your email is not yet verified." };
+    return {
+      error: "Incorrect email or password, or your email is not yet verified.",
+      values: typed(formData, "email"),
+    };
   }
 
   revalidatePath("/", "layout");
-  const next = String(formData.get("next") || "/dashboard");
-  redirect(next.startsWith("/") ? next : "/dashboard");
+  redirect(safeRedirectPath(formData.get("next")));
 }
 
 export async function register(
@@ -64,7 +97,10 @@ export async function register(
     });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return {
+      error: parsed.error.issues[0].message,
+      values: typed(formData, "email", "fullName"),
+    };
   }
 
   const supabase = await createClient();
@@ -78,7 +114,7 @@ export async function register(
   });
 
   if (error) {
-    return { error: error.message };
+    return { error: error.message, values: typed(formData, "email", "fullName") };
   }
 
   redirect(`/verify-email?email=${encodeURIComponent(parsed.data.email)}`);
@@ -90,7 +126,10 @@ export async function requestPasswordReset(
 ): Promise<AuthState> {
   const parsed = emailSchema.safeParse(formData.get("email"));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return {
+      error: parsed.error.issues[0].message,
+      values: typed(formData, "email"),
+    };
   }
 
   const supabase = await createClient();

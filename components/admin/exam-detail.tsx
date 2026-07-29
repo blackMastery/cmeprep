@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 import type { ExamWithSpecialties } from "@/lib/admin/taxonomy";
 import {
   createSpecialty,
@@ -11,6 +11,7 @@ import {
   renameExam,
   renameSpecialty,
   reorderExamLevel,
+  setExamAvailability,
 } from "@/app/admin/exams/actions";
 import type { AdminState } from "@/app/admin/subjects/actions";
 import { Button } from "@/components/ui/button";
@@ -132,8 +133,65 @@ function ExamSettingsCard({ exam }: { exam: ExamWithSpecialties }) {
 
           <AdminSubmit variant="outline-muted">Save</AdminSubmit>
         </form>
+
+        <AvailabilityRow exam={exam} />
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Separate form from the rename above: availability posts a single boolean
+ * and must not carry — or clobber — the name/code pair.
+ */
+function AvailabilityRow({ exam }: { exam: ExamWithSpecialties }) {
+  const [state, action] = useActionState<AdminState, FormData>(
+    setExamAvailability,
+    null
+  );
+
+  return (
+    <div className="border-t border-border pt-4">
+      <FormMessage error={state?.error} success={state?.success} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            Availability
+            <Badge variant={exam.is_active ? "outline" : "secondary"}>
+              {exam.is_active ? "Offered at checkout" : "Not offered"}
+            </Badge>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {exam.is_active
+              ? "Students can buy access to this exam."
+              : "Hidden from checkout. Anyone who already bought it keeps full access until their subscription ends."}
+          </p>
+        </div>
+
+        <form action={action}>
+          <input type="hidden" name="id" value={exam.id} />
+          <input
+            type="hidden"
+            name="isActive"
+            value={exam.is_active ? "false" : "true"}
+          />
+          <AdminSubmit variant="outline-muted" size="sm">
+            {exam.is_active ? (
+              <>
+                <EyeOff data-icon="inline-start" />
+                Withdraw from sale
+              </>
+            ) : (
+              <>
+                <Eye data-icon="inline-start" />
+                Offer at checkout
+              </>
+            )}
+          </AdminSubmit>
+        </form>
+      </div>
+    </div>
   );
 }
 

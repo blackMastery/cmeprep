@@ -3,7 +3,7 @@ import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { listActivePlans, paidPlans } from "@/lib/plans";
 import { listExamCatalogTree } from "@/lib/catalog";
 import { getExamAccess } from "@/lib/entitlements";
-import { canAccessExam } from "@/lib/entitlements-core";
+import { canAccessExam, visibleExamsFor } from "@/lib/entitlements-core";
 import type { Plan } from "@/lib/supabase/types";
 import { NewTestWizard } from "@/components/test/new-test-wizard";
 import { TrialLimitCard } from "@/components/app/trial-limit-card";
@@ -47,8 +47,10 @@ export default async function NewTestPage() {
   const upsellPlanId = upsellPlan(plans)?.id ?? null;
 
   // Locked exams are still shipped: they're the upsell. /api/tests is what
-  // actually enforces — this is presentation.
-  const exams = tree.map((exam) => ({
+  // actually enforces — this is presentation. Retired exams are dropped
+  // unless this user's access names one, so nobody is offered an exam they
+  // can no longer buy.
+  const exams = visibleExamsFor(tree, access).map((exam) => ({
     id: exam.id,
     name: exam.name,
     subjectCount: exam.subjectCount,

@@ -105,7 +105,7 @@ function ExamSummaryCard({
             {exam.name}
           </Link>
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="flex flex-wrap items-center gap-2">
           {exam.code ? (
             <Badge variant="outline" className="font-mono">
               {exam.code}
@@ -113,6 +113,8 @@ function ExamSummaryCard({
           ) : (
             <span className="text-xs">No code set</span>
           )}
+          {/* Only the exception is worth a badge — "on sale" is the norm. */}
+          {!exam.is_active && <Badge variant="secondary">Not for sale</Badge>}
         </CardDescription>
         <CardAction className="relative z-10">
           <ExamReorderButtons

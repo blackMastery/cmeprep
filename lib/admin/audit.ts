@@ -16,6 +16,7 @@ export type AuditAction =
   | "exam.rename"
   | "exam.delete"
   | "exam.reorder"
+  | "exam.availability"
   | "specialty.create"
   | "specialty.rename"
   | "specialty.delete"

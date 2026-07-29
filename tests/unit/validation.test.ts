@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   createPaypalOrderSchema,
   createTestSchema,
+  emailSchema,
+  fullNameSchema,
   parseFeatureLines,
+  passwordSchema,
   planSchema,
+  safeRedirectPath,
   saveAnswersSchema,
   subscriptionSchema,
   trialsLimitSchema,
@@ -277,5 +281,67 @@ describe("parseFeatureLines", () => {
       "Three",
     ]);
     expect(parseFeatureLines("")).toEqual([]);
+  });
+});
+
+describe("emailSchema", () => {
+  it("trims and lower-cases so logins are case-insensitive", () => {
+    expect(emailSchema.parse("  Doctor.Test@Example.COM  ")).toBe(
+      "doctor.test@example.com"
+    );
+  });
+
+  it("rejects malformed addresses", () => {
+    for (const bad of ["", "not-an-email", "nope@", "@example.com", "a b@c.com"]) {
+      expect(emailSchema.safeParse(bad).success).toBe(false);
+    }
+  });
+});
+
+describe("passwordSchema", () => {
+  it("requires eight characters", () => {
+    expect(passwordSchema.safeParse("1234567").success).toBe(false);
+    expect(passwordSchema.safeParse("12345678").success).toBe(true);
+  });
+
+  it("does not trim — leading and trailing spaces are part of the secret", () => {
+    expect(passwordSchema.parse("  spaced  ")).toBe("  spaced  ");
+  });
+});
+
+describe("fullNameSchema", () => {
+  it("trims and enforces a sane length", () => {
+    expect(fullNameSchema.parse("  Dr. Anita Persaud  ")).toBe(
+      "Dr. Anita Persaud"
+    );
+    expect(fullNameSchema.safeParse("A").success).toBe(false);
+    expect(fullNameSchema.safeParse("x".repeat(121)).success).toBe(false);
+  });
+});
+
+describe("safeRedirectPath", () => {
+  it("keeps ordinary in-app destinations", () => {
+    expect(safeRedirectPath("/checkout/abc?exam=1")).toBe("/checkout/abc?exam=1");
+    expect(safeRedirectPath("/dashboard")).toBe("/dashboard");
+  });
+
+  it("rejects protocol-relative targets that walk off the site", () => {
+    // The whole point: these all pass a bare startsWith("/") check.
+    expect(safeRedirectPath("//evil.com")).toBe("/dashboard");
+    expect(safeRedirectPath("//evil.com/path")).toBe("/dashboard");
+    expect(safeRedirectPath("/\\evil.com")).toBe("/dashboard");
+  });
+
+  it("rejects absolute urls and junk", () => {
+    expect(safeRedirectPath("https://evil.com")).toBe("/dashboard");
+    expect(safeRedirectPath("javascript:alert(1)")).toBe("/dashboard");
+    expect(safeRedirectPath("dashboard")).toBe("/dashboard");
+    expect(safeRedirectPath("")).toBe("/dashboard");
+    expect(safeRedirectPath(null)).toBe("/dashboard");
+    expect(safeRedirectPath(undefined)).toBe("/dashboard");
+  });
+
+  it("honours a custom fallback", () => {
+    expect(safeRedirectPath("//evil.com", "/login")).toBe("/login");
   });
 });

@@ -13,11 +13,14 @@ export function RegisterForm() {
   return (
     <form action={formAction} className="space-y-5">
       <FormMessage error={state?.error} />
+      {/* React 19 resets the form once the action resolves; the action echoes
+          these back so a rejected sign-up doesn't cost a full retype. */}
       <Field
         label="Full name"
         name="fullName"
         autoComplete="name"
         placeholder="Dr. Anita Persaud"
+        defaultValue={state?.values?.fullName}
       />
       <Field
         label="Email"
@@ -25,6 +28,7 @@ export function RegisterForm() {
         type="email"
         autoComplete="email"
         placeholder="you@example.com"
+        defaultValue={state?.values?.email}
       />
       <Field
         label="Password"

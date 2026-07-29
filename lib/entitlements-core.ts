@@ -65,6 +65,32 @@ export function canAccessExam(access: ExamAccess, examId: string): boolean {
 }
 
 /**
+ * Which exams to LIST in the practice wizard once retired ones exist.
+ *
+ * Not the same question as canAccessExam: a retired exam stays visible to
+ * everyone whose access names it — they paid for it — and to admins, who
+ * need to QA what they are about to publish. It is hidden from trial users
+ * and from students who never bought it, because the wizard lists locked
+ * exams as the upsell and dangling something no longer for sale is a dead
+ * end. Trials are `kind: "all"` here, hence the explicit reason check.
+ */
+export function visibleExamsFor<T extends { id: string; isActive: boolean }>(
+  exams: readonly T[],
+  access: ExamAccess
+): T[] {
+  if (access.kind === "all" && access.reason === "admin") return [...exams];
+
+  return exams.filter(
+    (exam) =>
+      exam.isActive ||
+      (access.kind === "scoped" && access.examIds.includes(exam.id)) ||
+      // A grandfathered all-access row bought the whole catalogue, retired
+      // entries included.
+      (access.kind === "all" && access.reason === "legacy")
+  );
+}
+
+/**
  * When access ends, per exam. Key `null` is the all-access row. Latest end
  * wins per key, because repurchases of the same exam stack.
  */

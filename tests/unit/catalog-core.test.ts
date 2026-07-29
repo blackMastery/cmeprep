@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleCatalog,
+  sellableExams,
   toExamSummary,
   type CatalogRows,
 } from "@/lib/catalog-core";
@@ -15,7 +16,9 @@ const TOPIC_3 = "cccccccc-3333-4333-8333-cccccccccccc";
 
 function rows(overrides: Partial<CatalogRows> = {}): CatalogRows {
   return {
-    exams: [{ id: EXAM, name: "Medical Board Exam", code: "CAMC" }],
+    exams: [
+      { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
+    ],
     specialties: [{ id: SPEC, name: "General", exam_id: EXAM }],
     subjects: [
       { id: SUBJ, name: "Cardiology", specialty_id: SPEC },
@@ -108,8 +111,8 @@ describe("assembleCatalog", () => {
     const result = assembleCatalog(
       rows({
         exams: [
-          { id: second, name: "PLAB", code: null },
-          { id: EXAM, name: "Medical Board Exam", code: "CAMC" },
+          { id: second, name: "PLAB", code: null, is_active: true },
+          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
         ],
       })
     );
@@ -121,8 +124,8 @@ describe("assembleCatalog", () => {
     const result = assembleCatalog(
       rows({
         exams: [
-          { id: EXAM, name: "Medical Board Exam", code: "CAMC" },
-          { id: other, name: "PLAB", code: null },
+          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
+          { id: other, name: "PLAB", code: null, is_active: true },
         ],
       })
     );
@@ -138,5 +141,44 @@ describe("toExamSummary", () => {
     expect(summary).not.toHaveProperty("specialties");
     expect(summary.questionCount).toBe(25);
     expect(summary.subjectCount).toBe(2);
+  });
+
+  it("carries availability through to the summary", () => {
+    const [exam] = assembleCatalog(
+      rows({
+        exams: [{ id: EXAM, name: "Retired", code: null, is_active: false }],
+      })
+    );
+    expect(exam.isActive).toBe(false);
+    expect(toExamSummary(exam).isActive).toBe(false);
+  });
+});
+
+describe("sellableExams", () => {
+  const retired = "e0000000-0000-0000-0000-000000000002";
+
+  it("keeps only the exams still offered", () => {
+    const catalog = assembleCatalog(
+      rows({
+        exams: [
+          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
+          { id: retired, name: "PLAB", code: null, is_active: false },
+        ],
+      })
+    );
+    expect(sellableExams(catalog).map((e) => e.name)).toEqual([
+      "Medical Board Exam",
+    ]);
+  });
+
+  it("leaves the catalogue itself complete so names still resolve", () => {
+    // A receipt or expiry banner has to name a retired exam the buyer owns.
+    const catalog = assembleCatalog(
+      rows({
+        exams: [{ id: retired, name: "PLAB", code: null, is_active: false }],
+      })
+    );
+    expect(catalog).toHaveLength(1);
+    expect(sellableExams(catalog)).toEqual([]);
   });
 });

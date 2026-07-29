@@ -21,12 +21,15 @@ export function LoginForm({
     <form action={formAction} className="space-y-5">
       {next && <input type="hidden" name="next" value={next} />}
       <FormMessage error={state?.error} />
+      {/* React 19 resets the form once the action resolves, so a failed
+          attempt would blank this. The action echoes the address back. */}
       <Field
         label="Email"
         name="email"
         type="email"
         autoComplete="email"
         placeholder="you@example.com"
+        defaultValue={state?.values?.email}
       />
       <div className="space-y-2">
         <Field

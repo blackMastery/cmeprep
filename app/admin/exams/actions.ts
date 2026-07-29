@@ -108,6 +108,58 @@ export async function renameExam(
   return { success: "Saved." };
 }
 
+/**
+ * Offer an exam at checkout, or withdraw it.
+ *
+ * Withdrawing is not a revocation — every live subscription to the exam keeps
+ * working to its period end, and the exam stays in the practice wizard for
+ * those buyers. It only stops NEW purchases, which is what lets a bank be
+ * built up before anyone can pay for it.
+ */
+export async function setExamAvailability(
+  _prev: AdminState,
+  formData: FormData
+): Promise<AdminState> {
+  const user = await requireAdmin();
+
+  const id = uuid().safeParse(formData.get("id"));
+  if (!id.success) return { error: "Unknown exam." };
+  const isActive = formData.get("isActive") === "true";
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from("exams")
+    .select("name, is_active")
+    .eq("id", id.data)
+    .maybeSingle();
+
+  if (!before) return { error: "Unknown exam." };
+  if (before.is_active === isActive) return { success: "No change." };
+
+  const { error } = await admin
+    .from("exams")
+    .update({ is_active: isActive })
+    .eq("id", id.data);
+
+  if (error) return { error: "Could not update availability." };
+
+  await audit(user.id, "exam.availability", id.data, {
+    before: before.is_active,
+    after: isActive,
+  });
+  revalidateTaxonomy();
+  // The buyer-facing surfaces read this flag, so they must not serve a stale
+  // picker: /checkout is dynamic per plan, hence the "page" scope.
+  revalidatePath("/checkout/[planId]", "page");
+  revalidatePath("/tests/new");
+
+  return {
+    success: isActive
+      ? `${before.name} is now offered at checkout.`
+      : `${before.name} is no longer offered at checkout.`,
+  };
+}
+
 export async function deleteExam(
   _prev: AdminState,
   formData: FormData

@@ -39,6 +39,8 @@ export type Exam = Timestamps & {
   name: string;
   code: string | null;
   position: number;
+  /** Offered at checkout. False still serves everyone who already bought it. */
+  is_active: boolean;
 };
 
 export type Specialty = Timestamps & {

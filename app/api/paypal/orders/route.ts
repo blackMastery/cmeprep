@@ -53,11 +53,14 @@ export async function POST(request: Request) {
 
   // The browser picks the exam, so it has to be checked here: an unvalidated
   // id would ride into custom_id and only blow up on the FK AFTER the money
-  // is captured.
+  // is captured. is_active is enforced at THIS end of the flow only — once a
+  // payment is captured the grant honours it regardless, so retiring an exam
+  // mid-checkout never takes money without handing over the goods.
   const { data: exam } = await admin
     .from("exams")
     .select("id")
     .eq("id", parsed.data.examId)
+    .eq("is_active", true)
     .maybeSingle();
 
   if (!exam) {

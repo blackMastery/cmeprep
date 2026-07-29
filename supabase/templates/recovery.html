@@ -1,0 +1,80 @@
+<!--
+  Password-reset email.
+
+  The link deliberately uses {{ .TokenHash }} rather than Supabase's default
+  {{ .ConfirmationURL }}. ConfirmationURL routes through GoTrue's /verify and
+  hands back a PKCE `?code=`, which only works in the browser that REQUESTED
+  the reset — the code_verifier is a cookie there. Requesting on a laptop and
+  opening the mail on a phone would fail with "invalid or expired".
+
+  token_hash + type=recovery takes the verifyOtp branch of
+  app/auth/confirm/route.ts, which needs no local cookie and therefore works
+  on any device.
+
+  Inline styles only, and a table shell: email clients strip <style> blocks
+  and have no flexbox.
+-->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  style="background:#faf6f1;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;"
+>
+  <tr>
+    <td align="center">
+      <table
+        role="presentation"
+        width="100%"
+        cellpadding="0"
+        cellspacing="0"
+        style="max-width:520px;background:#ffffff;border-radius:16px;padding:32px;"
+      >
+        <tr>
+          <td>
+            <p style="margin:0 0 24px;font-size:20px;font-weight:600;color:#c44a18;">
+              cmeprep<span style="font-weight:300;">.me</span>
+            </p>
+
+            <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;color:#1a1a1a;">
+              Reset your password
+            </h1>
+
+            <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#2c2c2c;">
+              We received a request to reset the password for this account.
+              Choose a new one using the button below.
+            </p>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+              <tr>
+                <td style="border-radius:10px;background:#c44a18;">
+                  <a
+                    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password"
+                    style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;"
+                  >
+                    Choose a new password
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#6b6b6b;">
+              This link expires in one hour and can only be used once.
+            </p>
+            <p style="margin:0 0 24px;font-size:13px;line-height:1.6;color:#6b6b6b;">
+              If you didn't ask for this, you can ignore this email — your
+              password stays as it is.
+            </p>
+
+            <p style="margin:0;padding-top:20px;border-top:1px solid #ece5da;font-size:12px;line-height:1.6;color:#8a8a8a;">
+              If the button doesn't work, paste this into your browser:<br />
+              <span style="word-break:break-all;color:#c44a18;">
+                {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password
+              </span>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

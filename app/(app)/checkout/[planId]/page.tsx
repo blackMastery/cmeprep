@@ -5,7 +5,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listExamCatalogTree } from "@/lib/catalog";
-import { toExamSummary } from "@/lib/catalog-core";
+import { sellableExams, toExamSummary } from "@/lib/catalog-core";
 import { accessEndsByExam } from "@/lib/entitlements-core";
 import type { SubscriptionScope } from "@/lib/entitlements-core";
 import { priceLabel } from "@/lib/format";
@@ -63,7 +63,9 @@ export default async function CheckoutPage(
     notFound();
   }
 
-  const catalog = await listExamCatalogTree();
+  // Retired exams are not for sale: they drop out of the picker, and a stale
+  // ?exam= pointing at one falls through to "unselected" below.
+  const catalog = sellableExams(await listExamCatalogTree());
 
   // An unknown or stale ?exam= must not dead-end the buyer — fall back to
   // unselected and let them pick. A single exam is auto-selected.

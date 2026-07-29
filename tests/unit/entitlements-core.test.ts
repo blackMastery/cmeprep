@@ -5,6 +5,7 @@ import {
   canAccessExam,
   examAccessFor,
   expiryWarnings,
+  visibleExamsFor,
   type ExamAccess,
   type SubscriptionScope,
 } from "@/lib/entitlements-core";
@@ -112,6 +113,48 @@ describe("canAccessExam", () => {
 
   it("blocks everything when there is no access", () => {
     expect(canAccessExam({ kind: "none" }, EXAM_A)).toBe(false);
+  });
+});
+
+describe("visibleExamsFor", () => {
+  const live = { id: EXAM_A, isActive: true };
+  const retired = { id: EXAM_B, isActive: false };
+  const catalog = [live, retired];
+
+  it("hides retired exams from trial users", () => {
+    // Trials are all-access for PRACTICE, but they are also prospects — a
+    // retired exam must not be dangled at someone who cannot buy it.
+    expect(visibleExamsFor(catalog, { kind: "all", reason: "trial" })).toEqual([
+      live,
+    ]);
+  });
+
+  it("shows admins everything, retired included", () => {
+    expect(visibleExamsFor(catalog, { kind: "all", reason: "admin" })).toEqual(
+      catalog
+    );
+  });
+
+  it("keeps a retired exam the buyer actually owns", () => {
+    expect(
+      visibleExamsFor(catalog, { kind: "scoped", examIds: [EXAM_B] })
+    ).toEqual(catalog);
+  });
+
+  it("still hides a retired exam the buyer never bought", () => {
+    expect(
+      visibleExamsFor(catalog, { kind: "scoped", examIds: [EXAM_A] })
+    ).toEqual([live]);
+  });
+
+  it("keeps everything for a grandfathered all-access row", () => {
+    expect(visibleExamsFor(catalog, { kind: "all", reason: "legacy" })).toEqual(
+      catalog
+    );
+  });
+
+  it("hides retired exams from a lapsed student", () => {
+    expect(visibleExamsFor(catalog, { kind: "none" })).toEqual([live]);
   });
 });
 

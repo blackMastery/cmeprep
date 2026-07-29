@@ -235,6 +235,20 @@ export const createPaypalOrderSchema = z.object({
 
 /* ── Account / auth ─────────────────────────────────────────────── */
 
+/**
+ * Sanitise a user-supplied post-login destination.
+ *
+ * A bare `startsWith("/")` check is not enough: "//evil.com" passes it, and
+ * browsers resolve a protocol-relative Location straight off the site. Also
+ * rejects "/\evil.com", which some browsers normalise to the same thing.
+ */
+export function safeRedirectPath(next: unknown, fallback = "/dashboard"): string {
+  if (typeof next !== "string" || next === "") return fallback;
+  if (!next.startsWith("/")) return fallback;
+  if (next.startsWith("//") || next.startsWith("/\\")) return fallback;
+  return next;
+}
+
 export const emailSchema = z
   .string()
   .trim()
