@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COLUMNS,
+  DEFAULT_TOPIC_NAME,
   EXAMPLE_ROWS,
   IMPORT_ROW_CAP,
   PLACEHOLDER_TOPIC_ID,
@@ -633,7 +634,9 @@ describe("row cap and numbering", () => {
       );
     expect(run(mk(IMPORT_ROW_CAP)).fileErrors).toEqual([]);
     const over = run(mk(IMPORT_ROW_CAP + 1));
-    expect(over.fileErrors[0]).toMatch(/limit is 500/);
+    // Assert against the constant, not a literal — the cap is a tuning knob
+    // and this test is about the message naming it, not about its value.
+    expect(over.fileErrors[0]).toContain(`limit is ${IMPORT_ROW_CAP}`);
     expect(over.validRows).toEqual([]);
   });
 
@@ -678,5 +681,57 @@ describe("preview/commit parity", () => {
 describe("normalizeStem", () => {
   it("collapses whitespace and casefolds", () => {
     expect(normalizeStem("  A   Stem Here ")).toBe("a stem here");
+  });
+});
+
+describe("template columns vs parser columns", () => {
+  it("keeps Topic, Type and Difficulty out of the template but still parses them", () => {
+    const templateKeys = COLUMNS.filter((c) => c.inTemplate !== false).map(
+      (c) => c.key
+    );
+    for (const key of ["topic", "type", "difficulty"]) {
+      // Absent from the generated file...
+      expect(templateKeys).not.toContain(key);
+      // ...but still a column the parser understands, so sheets built from an
+      // older template keep filing exactly where they used to.
+      expect(COLUMNS.map((c) => c.key)).toContain(key);
+    }
+  });
+
+  it("files a row with no Topic under the default topic", () => {
+    const a = run([goodRow({ topic: "" })]);
+    expect(a.lines.filter((l) => l.severity === "error")).toEqual([]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.creationPlan.topics.map((t) => t.name)).toContain(
+      DEFAULT_TOPIC_NAME
+    );
+  });
+
+  it("still honours an explicit Topic when the sheet has one", () => {
+    const a = run([goodRow({ subject: "Medicine", topic: "Cardiology" })]);
+    expect(a.counts.valid).toBe(1);
+    // Cardiology already exists in the fixture taxonomy, so nothing is planned
+    // and the row resolves to the real topic id rather than the placeholder.
+    expect(a.creationPlan.topics).toEqual([]);
+    expect(a.validRows[0].input.topicId).not.toBe(PLACEHOLDER_TOPIC_ID);
+  });
+
+  it("does not require a Topic column to exist at all", () => {
+    const keys = COLUMNS.filter((c) => c.key !== "topic");
+    const a = parseMatrix(
+      {
+        header: keys.map((c) => c.header),
+        rows: [
+          {
+            rowNumber: 2,
+            cells: keys.map((c) => goodRow()[c.key] ?? ""),
+          },
+        ],
+      },
+      TAXONOMY,
+      { autoCreateTaxonomy: true }
+    );
+    expect(a.fileErrors).toEqual([]);
+    expect(a.counts.valid).toBe(1);
   });
 });

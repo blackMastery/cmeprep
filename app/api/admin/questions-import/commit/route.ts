@@ -14,7 +14,14 @@ import { listHierarchy, nextPosition } from "@/lib/admin/taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const UNIQUE_VIOLATION = "23505";
-const CHUNK_SIZE = 100;
+
+/**
+ * Rows per insert round-trip. Each chunk costs two sequential calls
+ * (questions, then their options), so this is the main lever on how long a
+ * full-cap import takes: at 2000 rows, 250 means 16 round-trips instead of
+ * the 40 that 100 would cost.
+ */
+const CHUNK_SIZE = 250;
 
 function reportOf(analysis: ImportAnalysis): ImportReport {
   return {
@@ -45,6 +52,17 @@ function fail(
  * DRAFT question. All-or-nothing: any insert failure deletes everything this
  * request inserted.
  */
+
+/**
+ * The all-or-nothing guarantee below depends on this handler SURVIVING to run
+ * `compensate()`. A platform timeout kills the process instead, leaving
+ * orphaned drafts and no error — so this must stay comfortably above the
+ * worst-case run: a full IMPORT_ROW_CAP file, re-parsed, plus one round-trip
+ * per newly created taxonomy row. 60s is Vercel's Hobby ceiling and within
+ * Pro's, so it is safe on either plan.
+ */
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const gate = await requireAdminJson();
   if ("response" in gate) return gate.response;

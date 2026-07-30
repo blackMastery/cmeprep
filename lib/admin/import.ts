@@ -6,6 +6,7 @@ import {
   EXAMPLE_ROWS,
   IMPORT_ROW_CAP,
   PLACEHOLDER_TOPIC_ID,
+  TEMPLATE_VALIDATION_ROWS,
   normalizeStem,
   parseMatrix,
   type ImportAnalysis,
@@ -296,7 +297,12 @@ export async function buildTemplateBuffer(): Promise<ArrayBuffer> {
     views: [{ state: "frozen", ySplit: 1 }], // keep the header on screen
   });
 
-  ws.columns = COLUMNS.map((column) => ({
+  // Only the columns admins are meant to fill in. The parser still accepts
+  // every entry in COLUMNS, so sheets exported from an older template — or
+  // built by hand with Topic/Type/Difficulty — import unchanged.
+  const templateColumns = COLUMNS.filter((column) => column.inTemplate !== false);
+
+  ws.columns = templateColumns.map((column) => ({
     header: column.header,
     key: column.key,
     width: column.width,
@@ -313,7 +319,7 @@ export async function buildTemplateBuffer(): Promise<ArrayBuffer> {
   // Header styling + per-column rules as notes.
   const headerRow = ws.getRow(1);
   headerRow.font = { bold: true };
-  COLUMNS.forEach((column, index) => {
+  templateColumns.forEach((column, index) => {
     const cell = headerRow.getCell(index + 1);
     cell.note = column.note;
     if (column.required) {
@@ -324,7 +330,7 @@ export async function buildTemplateBuffer(): Promise<ArrayBuffer> {
   // Dropdowns for the enum columns. Assigned per-cell because exceljs's
   // shipped types don't expose worksheet.dataValidations; inline lists are
   // well under the 255-char formula limit.
-  COLUMNS.forEach((column, index) => {
+  templateColumns.forEach((column, index) => {
     if (!column.dropdown) return;
     const validation = {
       type: "list" as const,
@@ -334,14 +340,14 @@ export async function buildTemplateBuffer(): Promise<ArrayBuffer> {
       errorTitle: "Invalid value",
       error: `Use one of: ${column.dropdown.join(", ")} (or leave blank for the default).`,
     };
-    for (let rowNumber = 2; rowNumber <= IMPORT_ROW_CAP + 1; rowNumber++) {
+    for (let rowNumber = 2; rowNumber <= TEMPLATE_VALIDATION_ROWS + 1; rowNumber++) {
       ws.getCell(rowNumber, index + 1).dataValidation = validation;
     }
   });
 
   // Example rows — the parser recognises these exact values and skips them.
   for (const example of EXAMPLE_ROWS) {
-    ws.addRow(COLUMNS.map((column) => example[column.key] ?? ""));
+    ws.addRow(templateColumns.map((column) => example[column.key] ?? ""));
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

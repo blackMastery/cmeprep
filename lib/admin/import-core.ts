@@ -10,7 +10,29 @@ import { questionSchema, type QuestionInput } from "@/lib/validation";
  * the two paths cannot drift.
  */
 
-export const IMPORT_ROW_CAP = 500;
+/**
+ * Rows accepted per upload.
+ *
+ * The ceiling is the commit route's wall-clock, not the parser: it inserts
+ * sequentially and re-parses the workbook to re-verify the file hash, so this
+ * number is only safe alongside CHUNK_SIZE and `maxDuration` on
+ * app/api/admin/questions-import/{preview,commit}. Raise all three together —
+ * a commit killed mid-loop cannot run its own compensation, which is how you
+ * get orphaned drafts with no options and no error.
+ *
+ * MAX_SCAN_ROWS in lib/admin/import.ts (5000) is the hard stop above this.
+ */
+export const IMPORT_ROW_CAP = 2000;
+
+/**
+ * Rows of the downloadable template that carry dropdown validation.
+ *
+ * Deliberately NOT IMPORT_ROW_CAP: the template pre-fills a data-validation
+ * rule per row, so tying it to the cap would bloat the file every time the
+ * cap rises. Anyone pasting past this still imports fine — they just lose the
+ * dropdown affordance.
+ */
+export const TEMPLATE_VALIDATION_ROWS = 500;
 
 /**
  * Stand-in topicId for rows whose subject/topic will be auto-created at
@@ -44,7 +66,23 @@ export type ColumnDef = {
   wrap?: boolean;
   /** Template: inline-list dropdown values. */
   dropdown?: readonly string[];
+  /**
+   * Template: include this column in the generated file. Defaults to true.
+   *
+   * `false` keeps the column fully supported by the PARSER — sheets that
+   * already carry it import exactly as before — while leaving it out of the
+   * blank template handed to new admins. Dropping a column outright would
+   * silently discard data in existing files.
+   */
+  inTemplate?: boolean;
 };
+
+/**
+ * Topic for rows that don't name one. Topic left the template, but
+ * `questions.topic_id` is NOT NULL, so every row still needs somewhere to
+ * land — one predictable bucket per subject beats failing the row.
+ */
+export const DEFAULT_TOPIC_NAME = "General";
 
 /** Single source of truth for the parser AND the downloadable template. */
 export const COLUMNS: readonly ColumnDef[] = [
@@ -66,20 +104,22 @@ export const COLUMNS: readonly ColumnDef[] = [
     key: "subject",
     header: "Subject",
     required: true,
-    note: "Required. Subject name within the specialty. Unknown names are created automatically when auto-create is enabled.",
+    note: `Required. Subject name within the specialty. Unknown names are created automatically when auto-create is enabled. Questions file under a "${DEFAULT_TOPIC_NAME}" topic in this subject.`,
     width: 18,
   },
   {
     key: "topic",
     header: "Topic",
-    required: true,
-    note: "Required. Topic name within the subject.",
+    required: false,
+    inTemplate: false,
+    note: `Optional. Topic name within the subject — blank files under "${DEFAULT_TOPIC_NAME}".`,
     width: 24,
   },
   {
     key: "type",
     header: "Type",
     required: false,
+    inTemplate: false,
     note: "Optional. single or multi (default single). Image questions must be created in the editor.",
     width: 10,
     dropdown: ["single", "multi"],
@@ -88,6 +128,7 @@ export const COLUMNS: readonly ColumnDef[] = [
     key: "difficulty",
     header: "Difficulty",
     required: false,
+    inTemplate: false,
     note: "Optional. easy, medium or hard (default medium).",
     width: 12,
     dropdown: ["easy", "medium", "hard"],
@@ -495,9 +536,12 @@ export function parseMatrix(
     }
 
     const subjectName = fields.get("subject") ?? "";
-    const topicName = fields.get("topic") ?? "";
     if (subjectName === "") rowErrors.push("Subject is required.");
-    if (topicName === "") rowErrors.push("Topic is required.");
+
+    // Topic left the template, so most sheets won't carry one. A blank falls
+    // back to a single per-subject bucket rather than failing the row —
+    // sheets that DO name topics keep filing exactly as before.
+    const topicName = fields.get("topic") || DEFAULT_TOPIC_NAME;
 
     // Exam/Specialty fall back to the defaults BEFORE any keying, so every
     // downstream lookup and plan key is fully qualified.

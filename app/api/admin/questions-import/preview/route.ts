@@ -10,6 +10,14 @@ import type { ImportPreviewResponse, ImportReport } from "@/lib/admin/import-api
  * Validates everything and returns the per-row report plus the file's sha256,
  * which commit must echo back. Inserts nothing.
  */
+
+/**
+ * Parsing an IMPORT_ROW_CAP-sized workbook and running every row rule is well
+ * past Vercel's 10s default. 60s is the ceiling on Hobby and comfortably
+ * within Pro's, so it is safe on either plan.
+ */
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const gate = await requireAdminJson();
   if ("response" in gate) return gate.response;

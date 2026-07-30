@@ -268,6 +268,13 @@ export function ImportWizard() {
   );
 }
 
+/**
+ * A bad file can produce a message per row, so this list is bounded by the
+ * import cap rather than by anything the admin did. Rendering two thousand
+ * table rows to say the same thing twenty times over helps nobody.
+ */
+const MAX_SHOWN_LINES = 200;
+
 const SEVERITY_META: Record<
   Severity,
   { label: string; className: string; icon: typeof Info }
@@ -342,7 +349,7 @@ function ReportPanel({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {report.lines.map((line, index) => {
+                {report.lines.slice(0, MAX_SHOWN_LINES).map((line, index) => {
                   const meta = SEVERITY_META[line.severity];
                   return (
                     <TableRow key={index}>
@@ -366,6 +373,13 @@ function ReportPanel({
                 })}
               </TableBody>
             </Table>
+
+            {report.lines.length > MAX_SHOWN_LINES && (
+              <p className="border-t border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+                Showing the first {MAX_SHOWN_LINES} of {report.lines.length}{" "}
+                messages. Fix these and re-run the preview to see the rest.
+              </p>
+            )}
           </div>
         ) : (
           <p className="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-2.5 text-sm text-success">
