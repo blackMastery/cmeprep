@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { GraduationCap } from "lucide-react";
-import { listHierarchy, toSubjectCards } from "@/lib/admin/taxonomy";
+import { listHierarchy } from "@/lib/admin/taxonomy";
 import { DEFAULT_SPECIALTY_ID } from "@/lib/taxonomy-defaults";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SubjectManager } from "@/components/admin/subject-manager";
 
-export const metadata: Metadata = { title: "Subjects & topics" };
+export const metadata: Metadata = { title: "Subjects" };
 
 function one(value: string | string[] | undefined): string | undefined {
   const v = Array.isArray(value) ? value[0] : value;
@@ -58,11 +58,10 @@ export default async function AdminSubjectsPage(
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
       <header className="mb-8">
         <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Subjects &amp; topics
+          Subjects
         </h1>
         <p className="mt-1 text-muted-foreground">
-          {active.examName} › {active.name} — questions live under a topic,
-          topics under a subject.
+          {active.examName} › {active.name} — questions live under a subject.
         </p>
       </header>
 
@@ -98,10 +97,7 @@ export default async function AdminSubjectsPage(
         </Button>
       </form>
 
-      <SubjectManager
-        subjects={toSubjectCards(active.subjects)}
-        specialtyId={active.id}
-      />
+      <SubjectManager subjects={active.subjects} specialtyId={active.id} />
     </div>
   );
 }

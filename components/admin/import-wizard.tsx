@@ -40,7 +40,13 @@ type Phase =
   | { name: "committing"; fileSha256: string; report: ImportReport }
   | { name: "done"; result: Extract<ImportCommitResponse, { ok: true }> };
 
-export function ImportWizard() {
+export function ImportWizard({
+  examId,
+  examName,
+}: {
+  examId: string;
+  examName: string;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   // The File lives in React state so it survives past preview — commit
   // re-sends the same bytes and the server verifies the sha256 matches.
@@ -76,6 +82,7 @@ export function ImportWizard() {
       const body = new FormData();
       body.set("file", file);
       body.set("autoCreate", String(autoCreate));
+      body.set("examId", examId);
       const res = await fetch("/api/admin/questions-import/preview", {
         method: "POST",
         body,
@@ -107,6 +114,7 @@ export function ImportWizard() {
       body.set("file", file);
       body.set("autoCreate", String(autoCreate));
       body.set("fileSha256", fileSha256);
+      body.set("examId", examId);
       const res = await fetch("/api/admin/questions-import/commit", {
         method: "POST",
         body,
@@ -129,7 +137,13 @@ export function ImportWizard() {
   }
 
   if (phase.name === "done") {
-    return <SuccessPanel result={phase.result} />;
+    return (
+      <SuccessPanel
+        result={phase.result}
+        examId={examId}
+        examName={examName}
+      />
+    );
   }
 
   const busy = phase.name === "previewing" || phase.name === "committing";
@@ -140,14 +154,20 @@ export function ImportWizard() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm">
+        Importing into{" "}
+        <span className="font-medium text-foreground">{examName}</span>
+        . Every row files under this exam — the template has no Exam column.
+      </div>
+
       {/* Step 1: template */}
       <Card className="[--card-spacing:--spacing(5)]">
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-lg">1 · Fill in the template</h2>
             <p className="text-sm text-muted-foreground">
-              One row per question. The two example rows show the format and
-              are ignored on import.
+              One row per question for {examName}. The two example rows show
+              the format and are ignored on import.
             </p>
           </div>
           <Button variant="outline" asChild>
@@ -223,9 +243,10 @@ export function ImportWizard() {
               className="mt-0.5 size-4 accent-[var(--primary)]"
             />
             <span>
-              Create missing subjects and topics automatically
+              Create missing specialties and subjects under this exam
+              automatically
               <span className="block text-xs text-muted-foreground">
-                Turn off to treat unknown subject/topic names as row errors.
+                Turn off to treat unknown names as row errors.
               </span>
             </span>
           </label>
@@ -414,8 +435,12 @@ function ReportPanel({
 
 function SuccessPanel({
   result,
+  examId,
+  examName,
 }: {
   result: Extract<ImportCommitResponse, { ok: true }>;
+  examId: string;
+  examName: string;
 }) {
   return (
     <Card className="[--card-spacing:--spacing(7)]">
@@ -429,21 +454,15 @@ function SuccessPanel({
             Imported {result.imported} draft
             {result.imported === 1 ? "" : "s"}
           </h2>
-          {(result.createdExams.length > 0 ||
-            result.createdSpecialties.length > 0 ||
-            result.createdSubjects.length > 0 ||
-            result.createdTopics.length > 0) && (
+          {(result.createdSpecialties.length > 0 ||
+            result.createdSubjects.length > 0) && (
             <p className="mx-auto max-w-md text-sm text-muted-foreground">
-              Created{" "}
+              Created under {examName}:{" "}
               {[
-                result.createdExams.length > 0 &&
-                  `exams: ${result.createdExams.join(", ")}`,
                 result.createdSpecialties.length > 0 &&
                   `specialties: ${result.createdSpecialties.join(", ")}`,
                 result.createdSubjects.length > 0 &&
                   `subjects: ${result.createdSubjects.join(", ")}`,
-                result.createdTopics.length > 0 &&
-                  `topics: ${result.createdTopics.join(", ")}`,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -460,7 +479,7 @@ function SuccessPanel({
             <Link href="/admin/questions?published=false">Review drafts</Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href="/admin/questions/import">Import another file</Link>
+            <Link href={`/admin/exams/${examId}/import`}>Import another file</Link>
           </Button>
         </div>
       </CardContent>

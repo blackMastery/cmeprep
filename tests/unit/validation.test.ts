@@ -25,7 +25,6 @@ describe("createTestSchema", () => {
   const valid = {
     examId: "e0000000-0000-0000-0000-000000000001",
     subjectIds: [SEED_SUBJECT],
-    topicIds: [],
     difficulty: "mixed",
     numQuestions: 10,
     durationMin: 15,

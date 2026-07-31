@@ -15,7 +15,7 @@ export default async function AdminExamsPage() {
         </h1>
         <p className="mt-1 text-muted-foreground">
           The top of the hierarchy: every specialty belongs to an exam, and
-          subjects &amp; topics live inside a specialty.
+          subjects live inside a specialty.
         </p>
       </header>
 

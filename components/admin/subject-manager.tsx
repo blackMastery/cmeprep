@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus } from "lucide-react";
-import type { SubjectCard } from "@/lib/admin/taxonomy";
+import type { SubjectWithCount } from "@/lib/admin/taxonomy";
 import { createSubject, type AdminState } from "@/app/admin/subjects/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,14 +22,12 @@ import { SubjectReorderButtons } from "@/components/admin/subject-detail";
 
 /**
  * Mirror of ExamManager: the index summarises, /admin/subjects/[id] edits.
- * Topic editing in particular needs the room — every topic row carries a
- * rename form, a move-questions panel and two destructive controls.
  */
 export function SubjectManager({
   subjects,
   specialtyId,
 }: {
-  subjects: SubjectCard[];
+  subjects: SubjectWithCount[];
   specialtyId: string;
 }) {
   const [createState, createAction] = useActionState<AdminState, FormData>(
@@ -87,7 +85,7 @@ function SubjectSummaryCard({
   isFirst,
   isLast,
 }: {
-  subject: SubjectCard;
+  subject: SubjectWithCount;
   isFirst: boolean;
   isLast: boolean;
 }) {
@@ -104,23 +102,17 @@ function SubjectSummaryCard({
           </Link>
         </CardTitle>
         <CardDescription className="text-xs">
-          {subject.topicCount === 0
-            ? "No topics yet"
-            : `${subject.topicCount} topic${subject.topicCount === 1 ? "" : "s"}`}
+          {subject.questionCount === 0
+            ? "No questions yet"
+            : `${subject.questionCount} question${subject.questionCount === 1 ? "" : "s"}`}
         </CardDescription>
         <CardAction className="relative z-10">
-          <SubjectReorderButtons
-            table="subjects"
-            id={subject.id}
-            isFirst={isFirst}
-            isLast={isLast}
-          />
+          <SubjectReorderButtons id={subject.id} isFirst={isFirst} isLast={isLast} />
         </CardAction>
       </CardHeader>
 
       <CardContent>
-        <dl className="grid grid-cols-3 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
-          <Stat label="Topics" value={subject.topicCount} />
+        <dl className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
           <Stat label="Questions" value={subject.questionCount} />
           <Stat label="Deleted" value={subject.deletedCount} muted />
         </dl>
@@ -128,11 +120,9 @@ function SubjectSummaryCard({
 
       <CardFooter className="justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {subject.topicCount === 0
-            ? "Add a topic to file questions."
-            : subject.questionCount === 0
-              ? "No questions filed yet."
-              : "Ready for tests."}
+          {subject.questionCount === 0
+            ? "Add a question to file it here."
+            : "Ready for tests."}
         </p>
         <Button variant="outline-muted" size="sm" className="relative z-10" asChild>
           <Link href={href}>

@@ -1,35 +1,29 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Exam, Specialty, Subject, Topic } from "@/lib/supabase/types";
+import type { Exam, Specialty, Subject } from "@/lib/supabase/types";
 
-export type TopicWithCount = Topic & {
+export type SubjectWithCount = Subject & {
   /** Live questions — the number an admin actually cares about. */
   questionCount: number;
   /**
    * Soft-deleted questions. Tracked separately because they still hold their
-   * FK to `topics` and so still block a topic delete, even though they should
-   * never be counted as content.
+   * FK to `subjects` and so still block a subject delete, even though they
+   * should never be counted as content.
    */
   deletedCount: number;
 };
 
-export type SubjectWithTopics = Subject & {
-  topics: TopicWithCount[];
-  questionCount: number;
-  deletedCount: number;
-};
-
 /**
- * Full taxonomy with per-topic question counts.
+ * Subjects with their question counts.
  *
  * Live and soft-deleted counts are kept apart on purpose: the live count is
  * what the UI shows, while the deleted count is what explains an otherwise
- * baffling "can't delete this topic" error.
+ * baffling "can't delete this subject" error.
  */
 export async function listTaxonomy(
   specialtyId?: string
-): Promise<SubjectWithTopics[]> {
+): Promise<SubjectWithCount[]> {
   const admin = createAdminClient();
 
   let subjectsQuery = admin
@@ -39,51 +33,35 @@ export async function listTaxonomy(
     .order("name");
   if (specialtyId) subjectsQuery = subjectsQuery.eq("specialty_id", specialtyId);
 
-  const [{ data: subjects }, { data: topics }, { data: questions }] =
-    await Promise.all([
-      subjectsQuery,
-      admin.from("topics").select("*").order("position").order("name"),
-      admin.from("questions").select("topic_id, deleted_at"),
-    ]);
+  const [{ data: subjects }, { data: questions }] = await Promise.all([
+    subjectsQuery,
+    admin.from("questions").select("subject_id, deleted_at"),
+  ]);
 
-  const liveByTopic = new Map<string, number>();
-  const deletedByTopic = new Map<string, number>();
+  const liveBySubject = new Map<string, number>();
+  const deletedBySubject = new Map<string, number>();
   for (const q of questions ?? []) {
-    const bucket = q.deleted_at ? deletedByTopic : liveByTopic;
-    bucket.set(q.topic_id, (bucket.get(q.topic_id) ?? 0) + 1);
+    const bucket = q.deleted_at ? deletedBySubject : liveBySubject;
+    bucket.set(q.subject_id, (bucket.get(q.subject_id) ?? 0) + 1);
   }
 
-  return (subjects ?? []).map((subject) => {
-    const own = (topics ?? [])
-      .filter((t) => t.subject_id === subject.id)
-      .map((t) => ({
-        ...t,
-        questionCount: liveByTopic.get(t.id) ?? 0,
-        deletedCount: deletedByTopic.get(t.id) ?? 0,
-      }));
-
-    return {
-      ...subject,
-      topics: own,
-      questionCount: own.reduce((sum, t) => sum + t.questionCount, 0),
-      deletedCount: own.reduce((sum, t) => sum + t.deletedCount, 0),
-    };
-  });
+  return (subjects ?? []).map((subject) => ({
+    ...subject,
+    questionCount: liveBySubject.get(subject.id) ?? 0,
+    deletedCount: deletedBySubject.get(subject.id) ?? 0,
+  }));
 }
 
 /** What a level of the tree holds, counted all the way down. */
 export type TaxonomyCounts = {
   subjectCount: number;
-  topicCount: number;
   questionCount: number;
 };
 
-function rollUp(subjects: readonly SubjectWithTopics[]): TaxonomyCounts {
-  const topics = subjects.flatMap((s) => s.topics);
+function rollUp(subjects: readonly SubjectWithCount[]): TaxonomyCounts {
   return {
     subjectCount: subjects.length,
-    topicCount: topics.length,
-    questionCount: topics.reduce((sum, t) => sum + t.questionCount, 0),
+    questionCount: subjects.reduce((sum, s) => sum + s.questionCount, 0),
   };
 }
 
@@ -120,10 +98,10 @@ export async function getExam(id: string): Promise<ExamWithSpecialties | null> {
 }
 
 export type ExamHierarchy = Exam & {
-  specialties: (Specialty & { subjects: SubjectWithTopics[] })[];
+  specialties: (Specialty & { subjects: SubjectWithCount[] })[];
 };
 
-/** The full four-level tree — filters, pickers and import all read this. */
+/** The full three-level tree — filters, pickers and import all read this. */
 export async function listHierarchy(): Promise<ExamHierarchy[]> {
   const admin = createAdminClient();
 
@@ -144,46 +122,42 @@ export async function listHierarchy(): Promise<ExamHierarchy[]> {
   }));
 }
 
-export type TopicOption = {
+export type SubjectOption = {
   id: string;
   name: string;
-  subjectName: string;
   specialtyName: string;
   /**
-   * A question's exam is only ever implied — questions → topics → subjects →
+   * A question's exam is only ever implied — questions → subjects →
    * specialties → exams. The editor still has to *show* it, so carry it down
-   * with the topic rather than making the picker re-derive it.
+   * with the subject rather than making the picker re-derive it.
    */
   examId: string;
   examName: string;
 };
 
-export type SubjectCard = Subject & {
-  topicCount: number;
-  questionCount: number;
-  deletedCount: number;
-};
-
-/**
- * Card shape for the subjects index. Pure — the caller already has the tree,
- * and the index has no reason to ship every topic to the client.
- */
-export function toSubjectCards(
-  subjects: readonly SubjectWithTopics[]
-): SubjectCard[] {
-  return subjects.map(({ topics, ...subject }) => ({
-    ...subject,
-    topicCount: topics.length,
-  }));
+/** Flat subject list for the question editor's picker. */
+export async function listSubjectOptions(): Promise<SubjectOption[]> {
+  const hierarchy = await listHierarchy();
+  return hierarchy.flatMap((exam) =>
+    exam.specialties.flatMap((sp) =>
+      sp.subjects.map((s) => ({
+        id: s.id,
+        name: s.name,
+        specialtyName: sp.name,
+        examId: exam.id,
+        examName: exam.name,
+      }))
+    )
+  );
 }
 
-export type SubjectDetail = SubjectWithTopics & {
+export type SubjectDetail = SubjectWithCount & {
   specialtyName: string;
   examId: string;
   examName: string;
 };
 
-/** One subject, its topics, and the trail back up — for the detail page. */
+/** One subject and the trail back up — for the detail page. */
 export async function getSubject(id: string): Promise<SubjectDetail | null> {
   const hierarchy = await listHierarchy();
 
@@ -201,25 +175,6 @@ export async function getSubject(id: string): Promise<SubjectDetail | null> {
     }
   }
   return null;
-}
-
-/** Flat topic list for the editor's picker. */
-export async function listTopicOptions(): Promise<TopicOption[]> {
-  const hierarchy = await listHierarchy();
-  return hierarchy.flatMap((exam) =>
-    exam.specialties.flatMap((sp) =>
-      sp.subjects.flatMap((s) =>
-        s.topics.map((t) => ({
-          id: t.id,
-          name: t.name,
-          subjectName: s.name,
-          specialtyName: sp.name,
-          examId: exam.id,
-          examName: exam.name,
-        }))
-      )
-    )
-  );
 }
 
 /** Next position value for a new row in an ordered list. */

@@ -64,7 +64,7 @@ export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Question</TableHead>
-                <TableHead>Topic</TableHead>
+                <TableHead>Subject</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Options</TableHead>
                 <TableHead>Status</TableHead>
@@ -97,7 +97,7 @@ function QuestionCard({ row }: { row: QuestionListRow }) {
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>
-            {row.topicName} · {row.subjectName}
+            {row.subjectName} · {row.specialtyName}
           </span>
           <span className="capitalize">
             {TYPE_LABEL[row.type] ?? row.type} · {row.difficulty}
@@ -156,9 +156,9 @@ function QuestionRow({ row }: { row: QuestionListRow }) {
       </TableCell>
 
       <TableCell className="whitespace-nowrap text-sm">
-        <span className="block">{row.topicName}</span>
+        <span className="block">{row.subjectName}</span>
         <span className="block text-xs text-muted-foreground">
-          {row.subjectName}
+          {row.specialtyName}
         </span>
       </TableCell>
 

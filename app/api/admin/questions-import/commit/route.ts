@@ -5,13 +5,14 @@ import { audit } from "@/lib/admin/audit";
 import { analyzeUpload } from "@/lib/admin/import";
 import type { ImportCommitResponse, ImportReport } from "@/lib/admin/import-api";
 import {
-  PLACEHOLDER_TOPIC_ID,
+  PLACEHOLDER_SUBJECT_ID,
   normalizeKey,
   type ImportAnalysis,
 } from "@/lib/admin/import-core";
 import { diffOptions } from "@/lib/admin/option-diff";
 import { listHierarchy, nextPosition } from "@/lib/admin/taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { uuid } from "@/lib/validation";
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -45,12 +46,12 @@ function fail(
 
 /**
  * POST /api/admin/questions-import/commit
- * FormData: file (.xlsx), autoCreate ("true"|"false"), fileSha256 (from preview)
+ * FormData: file (.xlsx), autoCreate ("true"|"false"), fileSha256, examId
  *
  * Re-parses and re-validates the file from scratch (same code path as
- * preview), creates any planned taxonomy, then inserts every valid row as a
- * DRAFT question. All-or-nothing: any insert failure deletes everything this
- * request inserted.
+ * preview), creates any planned specialties/subjects under the forced exam,
+ * then inserts every valid row as a DRAFT question. All-or-nothing: any
+ * insert failure deletes everything this request inserted.
  */
 
 /**
@@ -76,8 +77,24 @@ export async function POST(request: Request) {
     return fail(400, "Run preview first — the commit is missing its file fingerprint.");
   }
 
+  const examIdParsed = uuid().safeParse(String(form.get("examId") ?? ""));
+  if (!examIdParsed.success) {
+    return fail(400, "Open import from an exam page — examId is required.");
+  }
+
+  const admin = createAdminClient();
+  const { data: exam } = await admin
+    .from("exams")
+    .select("id, name")
+    .eq("id", examIdParsed.data)
+    .maybeSingle();
+  if (!exam) return fail(404, "That exam no longer exists.");
+
   const autoCreate = form.get("autoCreate") === "true";
-  const result = await analyzeUpload(form.get("file"), autoCreate);
+  const result = await analyzeUpload(form.get("file"), autoCreate, {
+    id: exam.id,
+    name: exam.name,
+  });
   if (!result.ok) return fail(400, result.error);
 
   // The file must be byte-identical to the one previewed; otherwise the admin
@@ -96,8 +113,15 @@ export async function POST(request: Request) {
   if (analysis.validRows.length === 0) {
     return fail(422, "No valid rows to import.", reportOf(analysis));
   }
+  // Exam-scoped import never creates exams — the exam was chosen on the page.
+  if (analysis.creationPlan.exams.length > 0) {
+    return fail(
+      422,
+      "This import cannot create exams. Remove other exam names from the sheet.",
+      reportOf(analysis)
+    );
+  }
 
-  const admin = createAdminClient();
   const now = new Date().toISOString();
 
   // ── Execute the taxonomy creation plan ──────────────────────
@@ -110,22 +134,21 @@ export async function POST(request: Request) {
   const examIdByNorm = new Map<string, string>();
   const specialtyIdByKey = new Map<string, string>();
   const subjectIdByKey = new Map<string, string>();
-  const topicIdByKey = new Map<string, string>();
-  const examPositions: { position: number }[] = [];
   const specialtyPositions = new Map<string, { position: number }[]>();
   const subjectPositions = new Map<string, { position: number }[]>();
-  const topicPositions = new Map<string, { position: number }[]>();
 
-  for (const exam of hierarchy) {
-    const examNorm = normalizeKey(exam.name);
-    examIdByNorm.set(examNorm, exam.id);
-    examPositions.push({ position: exam.position });
-    for (const sp of exam.specialties) {
+  for (const hierarchyExam of hierarchy) {
+    const examNorm = normalizeKey(hierarchyExam.name);
+    examIdByNorm.set(examNorm, hierarchyExam.id);
+    for (const sp of hierarchyExam.specialties) {
       const specKey = `${examNorm}::${normalizeKey(sp.name)}`;
       specialtyIdByKey.set(specKey, sp.id);
       specialtyPositions.set(
-        exam.id,
-        [...(specialtyPositions.get(exam.id) ?? []), { position: sp.position }]
+        hierarchyExam.id,
+        [
+          ...(specialtyPositions.get(hierarchyExam.id) ?? []),
+          { position: sp.position },
+        ]
       );
       for (const subject of sp.subjects) {
         const subjKey = `${specKey}::${normalizeKey(subject.name)}`;
@@ -137,61 +160,12 @@ export async function POST(request: Request) {
             { position: subject.position },
           ]
         );
-        for (const topic of subject.topics) {
-          topicIdByKey.set(
-            `${subjKey}::${normalizeKey(topic.name)}`,
-            topic.id
-          );
-          topicPositions.set(
-            subject.id,
-            [
-              ...(topicPositions.get(subject.id) ?? []),
-              { position: topic.position },
-            ]
-          );
-        }
       }
     }
   }
 
-  const createdExams: string[] = [];
   const createdSpecialties: string[] = [];
   const createdSubjects: string[] = [];
-  const createdTopics: string[] = [];
-
-  for (const planned of analysis.creationPlan.exams) {
-    const norm = normalizeKey(planned.name);
-    if (examIdByNorm.has(norm)) continue;
-
-    const { data, error } = await admin
-      .from("exams")
-      .insert({ name: planned.name, position: nextPosition(examPositions) })
-      .select("id")
-      .single();
-
-    if (error?.code === UNIQUE_VIOLATION) {
-      // exams.name is globally unique, so a bare-name refetch is safe here.
-      const { data: existing } = await admin
-        .from("exams")
-        .select("id")
-        .eq("name", planned.name)
-        .maybeSingle();
-      if (!existing) return fail(500, `Could not create exam "${planned.name}".`);
-      examIdByNorm.set(norm, existing.id);
-      continue;
-    }
-    if (error || !data) {
-      return fail(500, `Could not create exam "${planned.name}".`);
-    }
-
-    examIdByNorm.set(norm, data.id);
-    examPositions.push({ position: examPositions.length });
-    createdExams.push(planned.name);
-    await audit(user.id, "exam.create", data.id, {
-      name: planned.name,
-      via: "bulk_import",
-    });
-  }
 
   for (const planned of analysis.creationPlan.specialties) {
     const examNorm = normalizeKey(planned.examName);
@@ -290,66 +264,22 @@ export async function POST(request: Request) {
     });
   }
 
-  for (const planned of analysis.creationPlan.topics) {
-    const subjKey = `${normalizeKey(planned.examName)}::${normalizeKey(planned.specialtyName)}::${normalizeKey(planned.subjectName)}`;
-    const key = `${subjKey}::${normalizeKey(planned.name)}`;
-    if (topicIdByKey.has(key)) continue;
-
-    const subjectId = subjectIdByKey.get(subjKey);
-    if (!subjectId) {
-      return fail(500, `Missing subject for topic "${planned.name}".`);
-    }
-
-    const siblings = topicPositions.get(subjectId) ?? [];
-    const { data, error } = await admin
-      .from("topics")
-      .insert({
-        subject_id: subjectId,
-        name: planned.name,
-        position: nextPosition(siblings),
-      })
-      .select("id")
-      .single();
-
-    if (error?.code === UNIQUE_VIOLATION) {
-      const { data: existing } = await admin
-        .from("topics")
-        .select("id")
-        .eq("subject_id", subjectId)
-        .eq("name", planned.name)
-        .maybeSingle();
-      if (!existing) return fail(500, `Could not create topic "${planned.name}".`);
-      topicIdByKey.set(key, existing.id);
-      continue;
-    }
-    if (error || !data) {
-      return fail(500, `Could not create topic "${planned.name}".`);
-    }
-
-    topicIdByKey.set(key, data.id);
-    topicPositions.set(subjectId, [...siblings, { position: siblings.length }]);
-    createdTopics.push(`${planned.subjectName} › ${planned.name}`);
-    await audit(user.id, "topic.create", data.id, {
-      name: planned.name,
-      subjectId,
-      via: "bulk_import",
-    });
-  }
-
-  // ── Patch placeholder topic ids with the real ones ──────────
-  type InsertableRow = (typeof analysis.validRows)[number] & { topicId: string };
+  // ── Patch placeholder subject ids with the real ones ────────
+  type InsertableRow = (typeof analysis.validRows)[number] & {
+    subjectId: string;
+  };
   const rows: InsertableRow[] = [];
   for (const row of analysis.validRows) {
-    let topicId = row.input.topicId;
-    if (topicId === PLACEHOLDER_TOPIC_ID) {
-      const key = `${normalizeKey(row.examName)}::${normalizeKey(row.specialtyName)}::${normalizeKey(row.subjectName)}::${normalizeKey(row.topicName)}`;
-      const resolved = topicIdByKey.get(key);
+    let subjectId = row.input.subjectId;
+    if (subjectId === PLACEHOLDER_SUBJECT_ID) {
+      const key = `${normalizeKey(row.examName)}::${normalizeKey(row.specialtyName)}::${normalizeKey(row.subjectName)}`;
+      const resolved = subjectIdByKey.get(key);
       if (!resolved) {
-        return fail(500, `Could not resolve topic for row ${row.rowNumber}.`);
+        return fail(500, `Could not resolve subject for row ${row.rowNumber}.`);
       }
-      topicId = resolved;
+      subjectId = resolved;
     }
-    rows.push({ ...row, topicId });
+    rows.push({ ...row, subjectId });
   }
 
   // ── Chunked inserts with all-or-nothing compensation ────────
@@ -375,7 +305,7 @@ export async function POST(request: Request) {
 
     const questionRows = chunk.map((row) => ({
       id: crypto.randomUUID(),
-      topic_id: row.topicId,
+      subject_id: row.subjectId,
       type: row.input.type,
       difficulty: row.input.difficulty,
       stem: row.input.stem,
@@ -424,10 +354,9 @@ export async function POST(request: Request) {
     imported: insertedQuestionIds.length,
     fileName: result.fileName,
     fileSha256: result.fileSha256,
-    createdExams,
+    examId: exam.id,
     createdSpecialties,
     createdSubjects,
-    createdTopics,
     errorRows: analysis.counts.errorRows,
     skipped: analysis.counts.skipped,
   });
@@ -439,9 +368,8 @@ export async function POST(request: Request) {
   return NextResponse.json<ImportCommitResponse>({
     ok: true,
     imported: insertedQuestionIds.length,
-    createdExams,
+    createdExams: [],
     createdSpecialties,
     createdSubjects,
-    createdTopics,
   });
 }

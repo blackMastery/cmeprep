@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { listTopicOptions } from "@/lib/admin/taxonomy";
+import { listSubjectOptions } from "@/lib/admin/taxonomy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuestionEditor } from "@/components/admin/question-editor";
@@ -9,7 +9,7 @@ import { QuestionEditor } from "@/components/admin/question-editor";
 export const metadata: Metadata = { title: "New question" };
 
 export default async function NewQuestionPage() {
-  const topics = await listTopicOptions();
+  const subjects = await listSubjectOptions();
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
@@ -25,20 +25,20 @@ export default async function NewQuestionPage() {
         </h1>
       </div>
 
-      {topics.length === 0 ? (
+      {subjects.length === 0 ? (
         <Card className="[--card-spacing:--spacing(6)]">
           <CardContent className="space-y-3 text-center">
-            <h2 className="font-display text-lg">Create a topic first</h2>
+            <h2 className="font-display text-lg">Create a subject first</h2>
             <p className="text-sm text-muted-foreground">
-              Every question belongs to a topic.
+              Every question belongs to a subject.
             </p>
             <Button asChild>
-              <Link href="/admin/subjects">Manage subjects &amp; topics</Link>
+              <Link href="/admin/subjects">Manage subjects</Link>
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <QuestionEditor topics={topics} />
+        <QuestionEditor subjects={subjects} />
       )}
     </div>
   );

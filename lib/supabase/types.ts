@@ -14,7 +14,6 @@ export type SubStatus = "active" | "expired" | "cancelled";
 
 export type TestConfig = {
   subject_ids: string[];
-  topic_ids: string[];
   difficulty: Difficulty | "mixed";
   num_questions: number;
   duration_sec: number;
@@ -57,16 +56,9 @@ export type Subject = Timestamps & {
   position: number;
 };
 
-export type Topic = Timestamps & {
-  id: string;
-  subject_id: string;
-  name: string;
-  position: number;
-};
-
 export type Question = Timestamps & {
   id: string;
-  topic_id: string;
+  subject_id: string;
   type: QuestionType;
   difficulty: Difficulty;
   stem: string;
@@ -163,10 +155,8 @@ export type UserStats = {
   accuracy_pct: number;
 };
 
-export type TopicAccuracy = {
+export type SubjectAccuracy = {
   user_id: string;
-  topic_id: string;
-  topic_name: string;
   subject_id: string;
   subject_name: string;
   specialty_id: string;
@@ -183,9 +173,9 @@ export type UserDailyActivity = {
   day: string;
 };
 
-/** Published, non-deleted questions per topic — the buyer-facing count. */
-export type TopicQuestionCount = {
-  topic_id: string;
+/** Published, non-deleted questions per subject — the buyer-facing count. */
+export type SubjectQuestionCount = {
+  subject_id: string;
   question_count: number;
 };
 
@@ -254,7 +244,6 @@ export type Database = {
       exams: Table<Exam>;
       specialties: Table<Specialty>;
       subjects: Table<Subject>;
-      topics: Table<Topic>;
       questions: Table<Question>;
       question_options: Table<QuestionOption>;
       tests: Table<Test>;
@@ -271,10 +260,10 @@ export type Database = {
     Views: {
       question_options_public: View<QuestionOptionPublic>;
       user_stats: View<UserStats>;
-      topic_accuracy: View<TopicAccuracy>;
+      subject_accuracy: View<SubjectAccuracy>;
       user_daily_activity: View<UserDailyActivity>;
       user_emails: View<UserEmail>;
-      topic_question_counts: View<TopicQuestionCount>;
+      subject_question_counts: View<SubjectQuestionCount>;
     };
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };

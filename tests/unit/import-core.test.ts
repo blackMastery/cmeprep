@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   COLUMNS,
-  DEFAULT_TOPIC_NAME,
   EXAMPLE_ROWS,
   IMPORT_ROW_CAP,
-  PLACEHOLDER_TOPIC_ID,
+  PLACEHOLDER_SUBJECT_ID,
   coerceCellValue,
   normalizeStem,
   parseMatrix,
@@ -16,6 +15,23 @@ import {
 
 const HEADERS = COLUMNS.map((c) => c.header);
 const COL = new Map(COLUMNS.map((c, i) => [c.key, i]));
+
+/** Headers actually shipped in the generated template (Exam excluded). */
+const TEMPLATE_HEADERS = COLUMNS.filter((c) => c.inTemplate !== false).map(
+  (c) => c.header
+);
+
+/** Default forced exam — matches the default exam in TAXONOMY below. */
+const FORCED = {
+  id: "e0000000-0000-0000-0000-000000000001",
+  name: "Medical Board Exam",
+};
+
+/** A second, non-default forced exam — matches the USMLE exam in TAXONOMY. */
+const USMLE = {
+  id: "e0000000-0000-0000-0000-000000000002",
+  name: "USMLE",
+};
 
 // Default exam/specialty plus a SECOND exam containing a subject that shares
 // its name with one in the default tree — exercising composite resolution.
@@ -32,17 +48,10 @@ const TAXONOMY: TaxonomySnapshot = {
             {
               id: "11111111-1111-1111-1111-111111111111",
               name: "Medicine",
-              topics: [
-                { id: "a1000000-0000-0000-0000-000000000001", name: "Cardiology" },
-                { id: "a1000000-0000-0000-0000-000000000002", name: "Endocrinology" },
-              ],
             },
             {
               id: "22222222-2222-2222-2222-222222222222",
               name: "Surgery",
-              topics: [
-                { id: "a2000000-0000-0000-0000-000000000001", name: "Trauma" },
-              ],
             },
           ],
         },
@@ -59,9 +68,6 @@ const TAXONOMY: TaxonomySnapshot = {
             {
               id: "99999999-9999-9999-9999-999999999999",
               name: "Medicine", // same name as the default tree's subject
-              topics: [
-                { id: "a9000000-0000-0000-0000-000000000001", name: "Cardiology" },
-              ],
             },
           ],
         },
@@ -86,7 +92,6 @@ function cells(fields: Record<string, unknown>): unknown[] {
 function goodRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     subject: "Medicine",
-    topic: "Cardiology",
     type: "single",
     difficulty: "easy",
     stem: "A 60-year-old presents with exertional chest pain relieved by rest. What is the most likely diagnosis?",
@@ -106,6 +111,7 @@ function run(
     header?: unknown[];
     startRow?: number;
     taxonomy?: TaxonomySnapshot;
+    forcedExam?: { id: string; name: string };
   } = {}
 ): ImportAnalysis {
   const startRow = opts.startRow ?? 2;
@@ -115,7 +121,10 @@ function run(
       rows: rows.map((r, i) => ({ rowNumber: startRow + i, cells: cells(r) })),
     },
     opts.taxonomy ?? TAXONOMY,
-    { autoCreateTaxonomy: opts.autoCreate ?? true }
+    {
+      autoCreateTaxonomy: opts.autoCreate ?? true,
+      forcedExam: opts.forcedExam ?? FORCED,
+    }
   );
 }
 
@@ -125,7 +134,10 @@ const LEGACY_COLUMNS = COLUMNS.filter(
 );
 const LEGACY_HEADERS = LEGACY_COLUMNS.map((c) => c.header);
 
-function runLegacy(rows: Record<string, unknown>[]): ImportAnalysis {
+function runLegacy(
+  rows: Record<string, unknown>[],
+  forcedExam: { id: string; name: string } = FORCED
+): ImportAnalysis {
   return parseMatrix(
     {
       header: LEGACY_HEADERS,
@@ -135,7 +147,7 @@ function runLegacy(rows: Record<string, unknown>[]): ImportAnalysis {
       })),
     },
     TAXONOMY,
-    { autoCreateTaxonomy: true }
+    { autoCreateTaxonomy: true, forcedExam }
   );
 }
 
@@ -146,14 +158,14 @@ const errorsOf = (a: ImportAnalysis, row: number) =>
 
 describe("header handling", () => {
   it("matches headers case-insensitively with NBSP and extra whitespace", () => {
-    const header = HEADERS.map((h) => `  ${h.toUpperCase()} `);
+    const header = HEADERS.map((h) => `  ${h.toUpperCase()} `);
     const a = run([goodRow()], { header });
     expect(a.fileErrors).toEqual([]);
     expect(a.counts.valid).toBe(1);
   });
 
   it("reports every missing required column as a file error", () => {
-    const header = ["Subject", "Topic"]; // most required columns missing
+    const header = ["Subject"]; // most required columns missing
     const a = run([], { header });
     expect(a.fileErrors.some((e) => e.includes('"Stem"'))).toBe(true);
     expect(a.fileErrors.some((e) => e.includes('"Correct"'))).toBe(true);
@@ -180,7 +192,7 @@ describe("header handling", () => {
         ],
       },
       TAXONOMY,
-      { autoCreateTaxonomy: true }
+      { autoCreateTaxonomy: true, forcedExam: FORCED }
     );
     expect(a.counts.valid).toBe(1);
     expect(a.counts.dataRows).toBe(1);
@@ -327,7 +339,7 @@ describe("correct-letter parsing", () => {
         ],
       },
       TAXONOMY,
-      { autoCreateTaxonomy: true }
+      { autoCreateTaxonomy: true, forcedExam: FORCED }
     );
     expect(errorsOf(a, 2)[0]).toMatch(/Option C.*not in this file/);
   });
@@ -385,7 +397,7 @@ describe("schema rules surface as row errors", () => {
   });
 
   it("treats whitespace-only and NBSP-only cells as blank", () => {
-    const a = run([goodRow({ optionC: "      " })]);
+    const a = run([goodRow({ optionC: "      " })]);
     expect(a.counts.valid).toBe(1);
     expect(a.validRows[0].input.options).toHaveLength(2);
   });
@@ -394,10 +406,12 @@ describe("schema rules surface as row errors", () => {
 // ── Taxonomy resolution ─────────────────────────────────────
 
 describe("taxonomy", () => {
-  it("resolves existing subject/topic case-insensitively", () => {
-    const a = run([goodRow({ subject: "  medicine ", topic: "CARDIOLOGY" })]);
+  it("resolves an existing subject case-insensitively", () => {
+    const a = run([goodRow({ subject: "  medicine " })]);
     expect(a.counts.valid).toBe(1);
-    expect(a.validRows[0].input.topicId).toBe("a1000000-0000-0000-0000-000000000001");
+    expect(a.validRows[0].input.subjectId).toBe(
+      "11111111-1111-1111-1111-111111111111"
+    );
     expect(a.creationPlan.subjects).toEqual([]);
   });
 
@@ -405,161 +419,185 @@ describe("taxonomy", () => {
     const rows = Array.from({ length: 30 }, (_, i) =>
       goodRow({
         subject: i % 2 ? "Ophthalmology" : "OPHTHALMOLOGY",
-        topic: "Retina",
         stem: `Question number ${i} about retinal disease, padded to length.`,
       })
     );
     const a = run(rows);
     expect(a.creationPlan.subjects).toHaveLength(1);
-    expect(a.creationPlan.topics).toHaveLength(1);
     expect(a.counts.valid).toBe(30);
-    expect(a.validRows.every((r) => r.input.topicId === PLACEHOLDER_TOPIC_ID)).toBe(true);
-    // One info line per created entity, not per row.
-    expect(a.lines.filter((l) => l.severity === "info")).toHaveLength(2);
+    expect(a.validRows.every((r) => r.input.subjectId === PLACEHOLDER_SUBJECT_ID)).toBe(true);
+    // One info line for the one created entity, not per row.
+    expect(a.lines.filter((l) => l.severity === "info")).toHaveLength(1);
   });
 
-  it("resolves the same topic name under two different subjects separately", () => {
-    const a = run([
-      goodRow({ subject: "Medicine", topic: "Emergencies" }),
-      goodRow({
-        subject: "Surgery",
-        topic: "Emergencies",
-        stem: "A different stem for the surgical emergencies question here.",
-      }),
-    ]);
-    expect(a.creationPlan.topics).toEqual([
+  it("resolves the same subject name under two different specialties separately", () => {
+    // Imports are locked to one exam per upload, so cross-exam composite
+    // keying is exercised as two separate runs, one per forced exam.
+    const defaultExamRun = run([goodRow({ subject: "Emergencies" })]);
+    const usmleRun = run(
+      [
+        goodRow({
+          specialty: "Internal Medicine",
+          subject: "Emergencies",
+          stem: "A different stem for the USMLE emergencies question here.",
+        }),
+      ],
+      { forcedExam: USMLE }
+    );
+    expect(defaultExamRun.creationPlan.subjects).toEqual([
       {
         examName: "Medical Board Exam",
         specialtyName: "General",
-        subjectName: "Medicine",
         name: "Emergencies",
       },
+    ]);
+    expect(usmleRun.creationPlan.subjects).toEqual([
       {
-        examName: "Medical Board Exam",
-        specialtyName: "General",
-        subjectName: "Surgery",
+        examName: "USMLE",
+        specialtyName: "Internal Medicine",
         name: "Emergencies",
       },
     ]);
   });
 
-  it("turns unknown taxonomy into row errors when auto-create is off", () => {
-    const a = run([goodRow({ subject: "Ophthalmology", topic: "Retina" })], {
+  it("turns an unknown subject into a row error when auto-create is off", () => {
+    const a = run([goodRow({ subject: "Ophthalmology" })], {
       autoCreate: false,
     });
     expect(a.counts.valid).toBe(0);
     expect(errorsOf(a, 2)[0]).toMatch(/Subject "Ophthalmology" doesn't exist/);
-
-    const b = run([goodRow({ topic: "Neurocardiology" })], { autoCreate: false });
-    expect(errorsOf(b, 2)[0]).toMatch(/Topic "Neurocardiology" doesn't exist under "Medicine"/);
   });
 });
 
 // ── Exam / Specialty levels ─────────────────────────────────
 
 describe("exam and specialty resolution", () => {
-  it("blank Exam and Specialty resolve to the defaults before keying", () => {
+  it("blank Exam resolves to the forced exam, and blank Specialty to the default when forced IS the default", () => {
     const a = run([goodRow()]);
     expect(a.counts.valid).toBe(1);
     expect(a.validRows[0].examName).toBe("Medical Board Exam");
     expect(a.validRows[0].specialtyName).toBe("General");
-    expect(a.validRows[0].input.topicId).toBe(
-      "a1000000-0000-0000-0000-000000000001"
+    expect(a.validRows[0].input.subjectId).toBe(
+      "11111111-1111-1111-1111-111111111111"
     );
   });
 
-  it("explicit default exam name with blank Specialty resolves to the default specialty", () => {
+  it("explicit exam name matching the forced exam (case-insensitive) with blank Specialty resolves to the default specialty", () => {
     const a = run([goodRow({ exam: "medical board exam" })]);
     expect(a.counts.valid).toBe(1);
+    // The sheet's literal (matching) text passes through unchanged.
+    expect(a.validRows[0].examName).toBe("medical board exam");
     expect(a.validRows[0].specialtyName).toBe("General");
   });
 
-  it("blank Specialty under a non-default exam is a row error", () => {
-    const a = run([goodRow({ exam: "USMLE" })]);
+  it("blank Specialty under a forced NON-default exam is a row error", () => {
+    const a = run([goodRow()], { forcedExam: USMLE });
     expect(errorsOf(a, 2)[0]).toMatch(/Specialty is required when Exam is not the default/);
   });
 
-  it("blank Exam is a row error when the snapshot has no default exam", () => {
-    const a = run([goodRow()], {
-      taxonomy: { ...TAXONOMY, defaultExamName: null },
-    });
-    expect(errorsOf(a, 2)[0]).toMatch(/no default exam exists/);
+  it("a sheet Exam value that doesn't match the forced exam is a row error, never a new exam", () => {
+    const a = run([goodRow({ exam: "USMLE" })]); // forcedExam defaults to Medical Board Exam
+    expect(a.counts.valid).toBe(0);
+    expect(errorsOf(a, 2)[0]).toMatch(/Exam must be/);
+    expect(a.creationPlan.exams).toEqual([]);
   });
 
-  it("unknown exam with auto-create on plans exam, specialty, subject and topic exactly once", () => {
+  it("blank Exam still resolves to the forced exam even when the snapshot's default exam name is null", () => {
+    const a = run([goodRow({ specialty: "General" })], {
+      taxonomy: { ...TAXONOMY, defaultExamName: null },
+    });
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].examName).toBe("Medical Board Exam");
+  });
+
+  it("an unrecognised sheet Exam name is a mismatch error — exams are never auto-created", () => {
     const rows = [
-      goodRow({ exam: "PLAB", specialty: "Clinical", subject: "Anatomy", topic: "Thorax" }),
+      goodRow({ exam: "PLAB", specialty: "Clinical", subject: "Anatomy" }),
       goodRow({
         exam: "plab",
         specialty: "CLINICAL",
         subject: "anatomy",
-        topic: "THORAX",
         stem: "A second question about thoracic anatomy, padded for length rules.",
       }),
     ];
     const a = run(rows);
-    expect(a.counts.valid).toBe(2);
-    expect(a.creationPlan.exams).toEqual([{ name: "PLAB" }]);
-    expect(a.creationPlan.specialties).toEqual([
-      { examName: "PLAB", name: "Clinical" },
-    ]);
-    expect(a.creationPlan.subjects).toHaveLength(1);
-    expect(a.creationPlan.topics).toHaveLength(1);
+    expect(a.counts.valid).toBe(0);
+    expect(errorsOf(a, 2)[0]).toMatch(/Exam must be/);
+    expect(errorsOf(a, 3)[0]).toMatch(/Exam must be/);
+    expect(a.creationPlan.exams).toEqual([]);
+    expect(a.creationPlan.specialties).toEqual([]);
+    expect(a.creationPlan.subjects).toEqual([]);
   });
 
-  it("unknown exam with auto-create off is a row error naming the exam", () => {
+  it("a forcedExam absent from the taxonomy snapshot is a row error naming it (defensive)", () => {
+    const ghostExam = { id: "e0000000-0000-0000-0000-000000000099", name: "Ghost Exam" };
     const a = run(
-      [goodRow({ exam: "PLAB", specialty: "Clinical" })],
-      { autoCreate: false }
+      [goodRow({ specialty: "Clinical", subject: "Anatomy" })],
+      { forcedExam: ghostExam }
     );
-    expect(errorsOf(a, 2)[0]).toMatch(/Exam "PLAB" doesn't exist/);
+    expect(errorsOf(a, 2)[0]).toMatch(/Exam "Ghost Exam" doesn't exist/);
+    expect(a.creationPlan.exams).toEqual([]);
   });
 
-  it("unknown specialty under an existing exam plans only specialty, subject and topic", () => {
-    const a = run([
-      goodRow({ exam: "USMLE", specialty: "Surgery Shelf", subject: "Anatomy", topic: "Abdomen" }),
-    ]);
+  it("unknown specialty under an existing forced exam plans only specialty and subject", () => {
+    const a = run(
+      [goodRow({ specialty: "Surgery Shelf", subject: "Anatomy" })],
+      { forcedExam: USMLE }
+    );
     expect(a.creationPlan.exams).toEqual([]);
     expect(a.creationPlan.specialties).toEqual([
       { examName: "USMLE", name: "Surgery Shelf" },
     ]);
     expect(a.creationPlan.subjects).toHaveLength(1);
-    expect(a.creationPlan.topics).toHaveLength(1);
   });
 
-  it("the same subject name under two different specialties resolves to distinct ids", () => {
-    const a = run([
-      goodRow(), // defaults → General › Medicine › Cardiology
-      goodRow({
-        exam: "USMLE",
-        specialty: "Internal Medicine",
-        subject: "Medicine",
-        topic: "Cardiology",
-        stem: "A USMLE-style cardiology question with a distinct stem for this test.",
-      }),
-    ]);
-    expect(a.counts.valid).toBe(2);
-    expect(a.validRows[0].input.topicId).toBe(
-      "a1000000-0000-0000-0000-000000000001"
+  it("creationPlan.exams stays empty even with auto-create on and a brand-new specialty/subject", () => {
+    const a = run(
+      [goodRow({ specialty: "Brand New Specialty", subject: "Brand New Subject" })],
+      { forcedExam: USMLE, autoCreate: true }
     );
-    expect(a.validRows[1].input.topicId).toBe(
-      "a9000000-0000-0000-0000-000000000001"
+    expect(a.counts.valid).toBe(1);
+    expect(a.creationPlan.exams).toEqual([]);
+    expect(a.creationPlan.specialties).toHaveLength(1);
+    expect(a.creationPlan.subjects).toHaveLength(1);
+  });
+
+  it("the same subject name resolves to a different id depending on which exam is forced", () => {
+    const defaultExamRun = run([goodRow()]); // General › Medicine under Medical Board Exam
+    const usmleRun = run(
+      [
+        goodRow({
+          specialty: "Internal Medicine",
+          subject: "Medicine",
+          stem: "A USMLE-style cardiology question with a distinct stem for this test.",
+        }),
+      ],
+      { forcedExam: USMLE }
+    );
+    expect(defaultExamRun.counts.valid).toBe(1);
+    expect(usmleRun.counts.valid).toBe(1);
+    expect(defaultExamRun.validRows[0].input.subjectId).toBe(
+      "11111111-1111-1111-1111-111111111111"
+    );
+    expect(usmleRun.validRows[0].input.subjectId).toBe(
+      "99999999-9999-9999-9999-999999999999"
     );
   });
 
-  it("the same NEW subject name under two specialties plans two distinct creations", () => {
-    const a = run([
-      goodRow({ subject: "Pharmacology", topic: "Antibiotics" }),
-      goodRow({
-        exam: "USMLE",
-        specialty: "Internal Medicine",
-        subject: "Pharmacology",
-        topic: "Antibiotics",
-        stem: "A second pharmacology stem so the duplicate-stem warning stays out of the way.",
-      }),
-    ]);
-    expect(a.creationPlan.subjects).toHaveLength(2);
-    expect(a.creationPlan.topics).toHaveLength(2);
+  it("the same NEW subject name under two forced exams plans a distinct creation each time", () => {
+    const defaultExamRun = run([goodRow({ subject: "Pharmacology" })]);
+    const usmleRun = run(
+      [
+        goodRow({
+          specialty: "Internal Medicine",
+          subject: "Pharmacology",
+          stem: "A second pharmacology stem so the duplicate-stem warning stays out of the way.",
+        }),
+      ],
+      { forcedExam: USMLE }
+    );
+    expect(defaultExamRun.creationPlan.subjects).toHaveLength(1);
+    expect(usmleRun.creationPlan.subjects).toHaveLength(1);
   });
 });
 
@@ -570,8 +608,8 @@ describe("legacy sheets without Exam/Specialty columns", () => {
     expect(a.counts.valid).toBe(1);
     expect(a.validRows[0].examName).toBe("Medical Board Exam");
     expect(a.validRows[0].specialtyName).toBe("General");
-    expect(a.validRows[0].input.topicId).toBe(
-      "a1000000-0000-0000-0000-000000000001"
+    expect(a.validRows[0].input.subjectId).toBe(
+      "11111111-1111-1111-1111-111111111111"
     );
   });
 
@@ -651,7 +689,7 @@ describe("row cap and numbering", () => {
         ],
       },
       TAXONOMY,
-      { autoCreateTaxonomy: true }
+      { autoCreateTaxonomy: true, forcedExam: FORCED }
     );
     expect(a.validRows[0].rowNumber).toBe(2);
     expect(errorsOf(a, 4).length).toBeGreaterThan(0);
@@ -666,7 +704,7 @@ describe("preview/commit parity", () => {
     const rows = [
       goodRow(),
       goodRow({ correct: "Z" }),
-      goodRow({ subject: "NewSubject", topic: "NewTopic" }),
+      goodRow({ subject: "NewSubject" }),
     ];
     const first = run(rows);
     const second = run(rows);
@@ -680,16 +718,16 @@ describe("preview/commit parity", () => {
 
 describe("normalizeStem", () => {
   it("collapses whitespace and casefolds", () => {
-    expect(normalizeStem("  A   Stem Here ")).toBe("a stem here");
+    expect(normalizeStem("  A   Stem Here ")).toBe("a stem here");
   });
 });
 
 describe("template columns vs parser columns", () => {
-  it("keeps Topic, Type and Difficulty out of the template but still parses them", () => {
+  it("keeps Type and Difficulty out of the template but still parses them", () => {
     const templateKeys = COLUMNS.filter((c) => c.inTemplate !== false).map(
       (c) => c.key
     );
-    for (const key of ["topic", "type", "difficulty"]) {
+    for (const key of ["type", "difficulty"]) {
       // Absent from the generated file...
       expect(templateKeys).not.toContain(key);
       // ...but still a column the parser understands, so sheets built from an
@@ -698,40 +736,29 @@ describe("template columns vs parser columns", () => {
     }
   });
 
-  it("files a row with no Topic under the default topic", () => {
-    const a = run([goodRow({ topic: "" })]);
-    expect(a.lines.filter((l) => l.severity === "error")).toEqual([]);
-    expect(a.counts.valid).toBe(1);
-    expect(a.creationPlan.topics.map((t) => t.name)).toContain(
-      DEFAULT_TOPIC_NAME
-    );
+  it("excludes Exam from the generated template — the exam is chosen on its page", () => {
+    expect(TEMPLATE_HEADERS).not.toContain("Exam");
+    // ...but a sheet built from an older template that still carries it parses fine.
+    expect(COLUMNS.map((c) => c.key)).toContain("exam");
   });
+});
 
-  it("still honours an explicit Topic when the sheet has one", () => {
-    const a = run([goodRow({ subject: "Medicine", topic: "Cardiology" })]);
-    expect(a.counts.valid).toBe(1);
-    // Cardiology already exists in the fixture taxonomy, so nothing is planned
-    // and the row resolves to the real topic id rather than the placeholder.
-    expect(a.creationPlan.topics).toEqual([]);
-    expect(a.validRows[0].input.topicId).not.toBe(PLACEHOLDER_TOPIC_ID);
-  });
-
-  it("does not require a Topic column to exist at all", () => {
-    const keys = COLUMNS.filter((c) => c.key !== "topic");
+describe("legacy Topic column", () => {
+  it("ignores a Topic column entirely — no error, no plan, no effect on resolution", () => {
+    const header = [...HEADERS, "Topic"];
     const a = parseMatrix(
       {
-        header: keys.map((c) => c.header),
-        rows: [
-          {
-            rowNumber: 2,
-            cells: keys.map((c) => goodRow()[c.key] ?? ""),
-          },
-        ],
+        header,
+        rows: [{ rowNumber: 2, cells: [...cells(goodRow()), "Cardiology"] }],
       },
       TAXONOMY,
-      { autoCreateTaxonomy: true }
+      { autoCreateTaxonomy: true, forcedExam: FORCED }
     );
     expect(a.fileErrors).toEqual([]);
     expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].input.subjectId).toBe(
+      "11111111-1111-1111-1111-111111111111"
+    );
+    expect(a.creationPlan.subjects).toEqual([]);
   });
 });

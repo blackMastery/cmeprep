@@ -35,11 +35,11 @@ export const IMPORT_ROW_CAP = 2000;
 export const TEMPLATE_VALIDATION_ROWS = 500;
 
 /**
- * Stand-in topicId for rows whose subject/topic will be auto-created at
- * commit. All-zeros is a valid Postgres uuid (and passes z.guid()), so rows
- * can be schema-validated at preview time before the real id exists.
+ * Stand-in subjectId for rows whose subject will be auto-created at commit.
+ * All-zeros is a valid Postgres uuid (and passes z.guid()), so rows can be
+ * schema-validated at preview time before the real id exists.
  */
-export const PLACEHOLDER_TOPIC_ID = "00000000-0000-0000-0000-000000000000";
+export const PLACEHOLDER_SUBJECT_ID = "00000000-0000-0000-0000-000000000000";
 
 export const OPTION_LETTERS = [
   "A",
@@ -77,43 +77,29 @@ export type ColumnDef = {
   inTemplate?: boolean;
 };
 
-/**
- * Topic for rows that don't name one. Topic left the template, but
- * `questions.topic_id` is NOT NULL, so every row still needs somewhere to
- * land — one predictable bucket per subject beats failing the row.
- */
-export const DEFAULT_TOPIC_NAME = "General";
-
 /** Single source of truth for the parser AND the downloadable template. */
 export const COLUMNS: readonly ColumnDef[] = [
   {
     key: "exam",
     header: "Exam",
     required: false,
-    note: "Optional. Exam name — leave blank to use the default exam. Unknown names are created automatically when auto-create is enabled.",
+    inTemplate: false,
+    note: "Optional legacy column. New templates omit Exam — the exam is chosen on the exam page before you download the template. If present, the name must match that exam.",
     width: 20,
   },
   {
     key: "specialty",
     header: "Specialty",
     required: false,
-    note: "Optional. Specialty within the exam — leave blank to use the default specialty (only allowed for the default exam).",
+    note: "Optional. Specialty within the selected exam — leave blank to use the default specialty (only when importing into the default exam).",
     width: 20,
   },
   {
     key: "subject",
     header: "Subject",
     required: true,
-    note: `Required. Subject name within the specialty. Unknown names are created automatically when auto-create is enabled. Questions file under a "${DEFAULT_TOPIC_NAME}" topic in this subject.`,
+    note: "Required. Subject name within the specialty under the selected exam. Unknown names are created automatically when auto-create is enabled.",
     width: 18,
-  },
-  {
-    key: "topic",
-    header: "Topic",
-    required: false,
-    inTemplate: false,
-    note: `Optional. Topic name within the subject — blank files under "${DEFAULT_TOPIC_NAME}".`,
-    width: 24,
   },
   {
     key: "type",
@@ -179,10 +165,8 @@ export const COLUMNS: readonly ColumnDef[] = [
  */
 export const EXAMPLE_ROWS: readonly Record<string, string>[] = [
   {
-    exam: "Medical Board Exam",
     specialty: "General",
     subject: "Medicine",
-    topic: "Cardiology",
     type: "single",
     difficulty: "medium",
     stem: "EXAMPLE - A 58-year-old man presents with crushing central chest pain. ECG shows ST elevation in leads II, III and aVF. Which coronary artery is most likely occluded?",
@@ -194,10 +178,8 @@ export const EXAMPLE_ROWS: readonly Record<string, string>[] = [
     correct: "A",
   },
   {
-    exam: "Medical Board Exam",
     specialty: "General",
     subject: "Medicine",
-    topic: "Endocrinology",
     type: "multi",
     difficulty: "hard",
     stem: "EXAMPLE - Which of the following support a diagnosis of Graves disease? Select all that apply.",
@@ -225,8 +207,7 @@ export type ValidRow = {
   examName: string;
   specialtyName: string;
   subjectName: string;
-  topicName: string;
-  /** Ready for questionSchema/insert; topicId may be the placeholder. */
+  /** Ready for questionSchema/insert. */
   input: QuestionInput;
   /** Normalised stem, for duplicate detection against the DB. */
   stemNorm: string;
@@ -237,12 +218,6 @@ export type CreationPlan = {
   exams: { name: string }[];
   specialties: { examName: string; name: string }[];
   subjects: { examName: string; specialtyName: string; name: string }[];
-  topics: {
-    examName: string;
-    specialtyName: string;
-    subjectName: string;
-    name: string;
-  }[];
 };
 
 export type ImportAnalysis = {
@@ -267,11 +242,7 @@ export type TaxonomySnapshot = {
     specialties: {
       id: string;
       name: string;
-      subjects: {
-        id: string;
-        name: string;
-        topics: { id: string; name: string }[];
-      }[];
+      subjects: { id: string; name: string }[];
     }[];
   }[];
   /** Display names of the default exam/specialty; null if deleted. */
@@ -424,7 +395,11 @@ export function parseMatrix(
     rows: { rowNumber: number; cells: unknown[] }[];
   },
   taxonomy: TaxonomySnapshot,
-  opts: { autoCreateTaxonomy: boolean }
+  opts: {
+    autoCreateTaxonomy: boolean;
+    /** Every row is locked to this exam (chosen on the exam import page). */
+    forcedExam: { id: string; name: string };
+  }
 ): ImportAnalysis {
   const lines: ReportLine[] = [];
   const validRows: ValidRow[] = [];
@@ -432,7 +407,6 @@ export function parseMatrix(
     exams: [],
     specialties: [],
     subjects: [],
-    topics: [],
   };
   const counts = {
     dataRows: 0,
@@ -454,9 +428,8 @@ export function parseMatrix(
   }
 
   // Taxonomy lookups, casefolded once. All plan keys are FULLY QUALIFIED
-  // (exam::specialty::subject::topic) — blank cells fall back to the default
-  // names before keying, so identical names under different parents never
-  // collide.
+  // (exam::specialty::subject) — blank cells fall back to the default names
+  // before keying, so identical names under different parents never collide.
   const examsByName = new Map(
     taxonomy.exams.map((e) => [normalizeKey(e.name), e])
   );
@@ -464,10 +437,8 @@ export function parseMatrix(
     taxonomy.defaultExamName === null
       ? null
       : normalizeKey(taxonomy.defaultExamName);
-  const plannedExams = new Set<string>();
   const plannedSpecialties = new Set<string>();
   const plannedSubjects = new Set<string>();
-  const plannedTopics = new Set<string>();
 
   const stemFirstRow = new Map<string, number>();
 
@@ -538,23 +509,17 @@ export function parseMatrix(
     const subjectName = fields.get("subject") ?? "";
     if (subjectName === "") rowErrors.push("Subject is required.");
 
-    // Topic left the template, so most sheets won't carry one. A blank falls
-    // back to a single per-subject bucket rather than failing the row —
-    // sheets that DO name topics keep filing exactly as before.
-    const topicName = fields.get("topic") || DEFAULT_TOPIC_NAME;
-
-    // Exam/Specialty fall back to the defaults BEFORE any keying, so every
-    // downstream lookup and plan key is fully qualified.
+    // Exam is chosen on the exam page. Blank / missing Exam → forced exam.
+    // A legacy Exam column must match; never invent another exam.
     let examName = fields.get("exam") ?? "";
     let specialtyName = fields.get("specialty") ?? "";
+    const forcedNorm = normalizeKey(opts.forcedExam.name);
     if (examName === "") {
-      if (taxonomy.defaultExamName === null) {
-        rowErrors.push(
-          "Exam is required — no default exam exists. Fill in the Exam column."
-        );
-      } else {
-        examName = taxonomy.defaultExamName;
-      }
+      examName = opts.forcedExam.name;
+    } else if (normalizeKey(examName) !== forcedNorm) {
+      rowErrors.push(
+        `Exam must be "${opts.forcedExam.name}" — this import is locked to that exam.`
+      );
     }
     if (specialtyName === "" && examName !== "") {
       const isDefaultExam =
@@ -654,19 +619,13 @@ export function parseMatrix(
       }
     }
 
-    // Taxonomy resolution: walk exam → specialty → subject → topic. Only
-    // runs once the names above resolved (fallback applied, nothing blank).
-    let topicId = PLACEHOLDER_TOPIC_ID;
-    if (
-      examName !== "" &&
-      specialtyName !== "" &&
-      subjectName !== "" &&
-      topicName !== ""
-    ) {
+    // Taxonomy resolution: walk exam → specialty → subject. Only runs once
+    // the names above resolved (fallback applied, nothing blank).
+    let subjectId: string | null = null;
+    if (examName !== "" && specialtyName !== "" && subjectName !== "") {
       const examNorm = normalizeKey(examName);
       const specNorm = normalizeKey(specialtyName);
       const subjNorm = normalizeKey(subjectName);
-      const topicNorm = normalizeKey(topicName);
 
       const existingExam = examsByName.get(examNorm);
       const existingSpec = existingExam?.specialties.find(
@@ -675,43 +634,33 @@ export function parseMatrix(
       const existingSubject = existingSpec?.subjects.find(
         (s) => normalizeKey(s.name) === subjNorm
       );
-      const existingTopic = existingSubject?.topics.find(
-        (t) => normalizeKey(t.name) === topicNorm
-      );
 
-      if (existingTopic) {
-        topicId = existingTopic.id;
+      if (existingSubject) {
+        subjectId = existingSubject.id;
       } else if (!opts.autoCreateTaxonomy) {
         // Name the FIRST missing level — that's the one to create.
+        // The exam is forced and must already exist (loaded by id on the API).
         if (!existingExam) {
           rowErrors.push(
-            `Exam "${examName}" doesn't exist. Create it first, or enable auto-create.`
+            `Exam "${examName}" doesn't exist. Open import from that exam's page after creating it.`
           );
         } else if (!existingSpec) {
           rowErrors.push(
             `Specialty "${specialtyName}" doesn't exist under "${examName}". Create it first, or enable auto-create.`
           );
-        } else if (!existingSubject) {
+        } else {
           rowErrors.push(
             `Subject "${subjectName}" doesn't exist under "${examName} › ${specialtyName}". Create it first, or enable auto-create.`
           );
-        } else {
-          rowErrors.push(
-            `Topic "${topicName}" doesn't exist under "${subjectName}". Create it first, or enable auto-create.`
-          );
         }
       } else {
-        if (!existingExam && !plannedExams.has(examNorm)) {
-          plannedExams.add(examNorm);
-          creationPlan.exams.push({ name: examName });
-          lines.push({
-            row: rowNumber,
-            severity: "info",
-            message: `Will create exam "${examName}".`,
-          });
+        if (!existingExam) {
+          rowErrors.push(
+            `Exam "${examName}" doesn't exist. Open import from that exam's page after creating it.`
+          );
         }
         const specKey = `${examNorm}::${specNorm}`;
-        if (!existingSpec && !plannedSpecialties.has(specKey)) {
+        if (existingExam && !existingSpec && !plannedSpecialties.has(specKey)) {
           plannedSpecialties.add(specKey);
           creationPlan.specialties.push({ examName, name: specialtyName });
           lines.push({
@@ -721,7 +670,12 @@ export function parseMatrix(
           });
         }
         const subjKey = `${specKey}::${subjNorm}`;
-        if (!existingSubject && !plannedSubjects.has(subjKey)) {
+        if (
+          existingExam &&
+          (existingSpec || plannedSpecialties.has(specKey)) &&
+          !existingSubject &&
+          !plannedSubjects.has(subjKey)
+        ) {
           plannedSubjects.add(subjKey);
           creationPlan.subjects.push({
             examName,
@@ -732,21 +686,6 @@ export function parseMatrix(
             row: rowNumber,
             severity: "info",
             message: `Will create subject "${subjectName}" in "${examName} › ${specialtyName}".`,
-          });
-        }
-        const topicKey = `${subjKey}::${topicNorm}`;
-        if (!plannedTopics.has(topicKey)) {
-          plannedTopics.add(topicKey);
-          creationPlan.topics.push({
-            examName,
-            specialtyName,
-            subjectName,
-            name: topicName,
-          });
-          lines.push({
-            row: rowNumber,
-            severity: "info",
-            message: `Will create topic "${topicName}" under "${specialtyName} › ${subjectName}".`,
           });
         }
       }
@@ -760,7 +699,7 @@ export function parseMatrix(
     }));
 
     const candidate = {
-      topicId,
+      subjectId: subjectId ?? PLACEHOLDER_SUBJECT_ID,
       type,
       difficulty,
       stem: fields.get("stem") ?? "",
@@ -818,7 +757,6 @@ export function parseMatrix(
       examName,
       specialtyName,
       subjectName,
-      topicName,
       input: candidate,
       stemNorm,
     });

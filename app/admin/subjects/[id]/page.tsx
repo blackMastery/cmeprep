@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getSubject, listHierarchy } from "@/lib/admin/taxonomy";
+import { getSubject } from "@/lib/admin/taxonomy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SubjectDetail } from "@/components/admin/subject-detail";
@@ -19,23 +19,9 @@ export default async function AdminSubjectPage(
   props: PageProps<"/admin/subjects/[id]">
 ) {
   const { id } = await props.params;
-  const [subject, hierarchy] = await Promise.all([
-    getSubject(id),
-    listHierarchy(),
-  ]);
+  const subject = await getSubject(id);
 
   if (!subject) notFound();
-
-  // Cross-specialty move destinations, labelled so same-named subjects in
-  // different specialties stay distinguishable.
-  const moveGroups = hierarchy.flatMap((exam) =>
-    exam.specialties.flatMap((spec) =>
-      spec.subjects.map((s) => ({
-        label: `${spec.name} › ${s.name}`,
-        topics: s.topics.map((t) => ({ id: t.id, name: t.name })),
-      }))
-    )
-  );
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
@@ -68,13 +54,12 @@ export default async function AdminSubjectPage(
           >
             {subject.examName}
           </Link>{" "}
-          › {subject.specialtyName} — {subject.topics.length} topic
-          {subject.topics.length === 1 ? "" : "s"} · {subject.questionCount}{" "}
-          question{subject.questionCount === 1 ? "" : "s"}.
+          › {subject.specialtyName} — {subject.questionCount} question
+          {subject.questionCount === 1 ? "" : "s"}.
         </p>
       </header>
 
-      <SubjectDetail subject={subject} moveGroups={moveGroups} />
+      <SubjectDetail subject={subject} />
     </div>
   );
 }

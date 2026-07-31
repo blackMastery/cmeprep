@@ -5,7 +5,7 @@ import {
   COLUMNS,
   EXAMPLE_ROWS,
   IMPORT_ROW_CAP,
-  PLACEHOLDER_TOPIC_ID,
+  PLACEHOLDER_SUBJECT_ID,
   TEMPLATE_VALIDATION_ROWS,
   normalizeStem,
   parseMatrix,
@@ -168,7 +168,8 @@ const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
  */
 export async function analyzeUpload(
   file: unknown,
-  autoCreateTaxonomy: boolean
+  autoCreateTaxonomy: boolean,
+  forcedExam: { id: string; name: string }
 ): Promise<
   | {
       ok: true;
@@ -198,6 +199,7 @@ export async function analyzeUpload(
   const taxonomy = await taxonomySnapshot();
   const analysis = parseMatrix(matrixResult.matrix, taxonomy, {
     autoCreateTaxonomy,
+    forcedExam,
   });
 
   return {
@@ -226,11 +228,7 @@ async function taxonomySnapshot(): Promise<TaxonomySnapshot> {
       specialties: exam.specialties.map((sp) => ({
         id: sp.id,
         name: sp.name,
-        subjects: sp.subjects.map((s) => ({
-          id: s.id,
-          name: s.name,
-          topics: s.topics.map((t) => ({ id: t.id, name: t.name })),
-        })),
+        subjects: sp.subjects.map((s) => ({ id: s.id, name: s.name })),
       })),
     })),
     defaultExamName: defaultExam?.name ?? null,
@@ -244,42 +242,42 @@ async function taxonomySnapshot(): Promise<TaxonomySnapshot> {
  *
  * Deliberately NOT `.in("stem", …)`: stems run to 5000 chars and supabase-js
  * puts .in() values in the URL, so a single long stem would 414 at the
- * gateway. Instead fetch candidate stems by target topic and compare
+ * gateway. Instead fetch candidate stems by target subject and compare
  * normalised in JS — the bank is small and the fetch is scoped.
  */
 export async function dbDuplicateWarnings(
   validRows: readonly ValidRow[]
 ): Promise<ReportLine[]> {
-  const topicIds = [
+  const subjectIds = [
     ...new Set(
       validRows
-        .map((r) => r.input.topicId)
-        .filter((id) => id !== PLACEHOLDER_TOPIC_ID)
+        .map((r) => r.input.subjectId)
+        .filter((id) => id !== PLACEHOLDER_SUBJECT_ID)
     ),
   ];
-  if (topicIds.length === 0) return [];
+  if (subjectIds.length === 0) return [];
 
   const admin = createAdminClient();
   const { data } = await admin
     .from("questions")
-    .select("stem, topic_id")
-    .in("topic_id", topicIds)
+    .select("stem, subject_id")
+    .in("subject_id", subjectIds)
     .is("deleted_at", null);
 
-  const byTopic = new Map<string, Set<string>>();
+  const bySubject = new Map<string, Set<string>>();
   for (const row of data ?? []) {
-    const set = byTopic.get(row.topic_id) ?? new Set<string>();
+    const set = bySubject.get(row.subject_id) ?? new Set<string>();
     set.add(normalizeStem(row.stem));
-    byTopic.set(row.topic_id, set);
+    bySubject.set(row.subject_id, set);
   }
 
   const warnings: ReportLine[] = [];
   for (const row of validRows) {
-    if (byTopic.get(row.input.topicId)?.has(row.stemNorm)) {
+    if (bySubject.get(row.input.subjectId)?.has(row.stemNorm)) {
       warnings.push({
         row: row.rowNumber,
         severity: "warning",
-        message: `A question with this stem already exists in ${row.specialtyName} › ${row.subjectName} › ${row.topicName}.`,
+        message: `A question with this stem already exists in ${row.specialtyName} › ${row.subjectName}.`,
       });
     }
   }
@@ -297,9 +295,10 @@ export async function buildTemplateBuffer(): Promise<ArrayBuffer> {
     views: [{ state: "frozen", ySplit: 1 }], // keep the header on screen
   });
 
-  // Only the columns admins are meant to fill in. The parser still accepts
-  // every entry in COLUMNS, so sheets exported from an older template — or
-  // built by hand with Topic/Type/Difficulty — import unchanged.
+  // Only the columns admins are meant to fill in. Exam is omitted — the exam
+  // is chosen on /admin/exams/[id]/import. The parser still accepts a legacy
+  // Exam header (must match the forced exam). A legacy Topic column is simply
+  // ignored: it's not in COLUMNS at all.
   const templateColumns = COLUMNS.filter((column) => column.inTemplate !== false);
 
   ws.columns = templateColumns.map((column) => ({

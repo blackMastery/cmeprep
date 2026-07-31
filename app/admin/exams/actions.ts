@@ -335,7 +335,7 @@ export async function reorderExamLevel(
 
   const admin = createAdminClient();
 
-  // Branch explicitly — same reasoning as subjects/topics reorder: the two
+  // Branch explicitly — same reasoning as subjects reorder: the two
   // tables differ and TS can't narrow `.eq()` through a union table name.
   type Sibling = { id: string; name: string; position: number };
   let siblings: Sibling[] = [];

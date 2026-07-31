@@ -3,17 +3,16 @@ import {
   parseQuestionForm,
   questionSchema,
   subjectSchema,
-  topicSchema,
 } from "@/lib/validation";
 
 // Matches the fixed-value ids in supabase/seed.sql — valid Postgres uuids
 // that are NOT RFC-compliant v4. Guards the z.guid() choice against regression.
-const SEED_TOPIC = "a1000000-0000-0000-0000-000000000001";
+const SEED_SUBJECT = "11111111-1111-1111-1111-111111111111";
 const V4 = "9f1c2b3e-7a4d-4c8b-9e2f-1a2b3c4d5e6f";
 
 function question(overrides: Record<string, unknown> = {}) {
   return {
-    topicId: SEED_TOPIC,
+    subjectId: SEED_SUBJECT,
     type: "mcq_single",
     difficulty: "medium",
     stem: "A 58-year-old man presents with crushing central chest pain.",
@@ -34,12 +33,12 @@ describe("questionSchema", () => {
   });
 
   it("accepts seed-style uuids that are not RFC v4", () => {
-    const r = questionSchema.safeParse(question({ topicId: SEED_TOPIC }));
+    const r = questionSchema.safeParse(question({ subjectId: SEED_SUBJECT }));
     expect(r.success).toBe(true);
   });
 
   it("accepts standard v4 uuids", () => {
-    expect(questionSchema.safeParse(question({ topicId: V4 })).success).toBe(true);
+    expect(questionSchema.safeParse(question({ subjectId: V4 })).success).toBe(true);
   });
 
   describe("correct-answer cardinality", () => {
@@ -196,7 +195,7 @@ describe("parseQuestionForm", () => {
 
   it("parses a complete form into a valid question", () => {
     const fd = form({
-      topicId: SEED_TOPIC,
+      subjectId: SEED_SUBJECT,
       type: "mcq_single",
       difficulty: "hard",
       stem: "A 29-year-old at 34 weeks gestation presents with hypertension.",
@@ -219,7 +218,7 @@ describe("parseQuestionForm", () => {
 
   it("treats a missing isPublished checkbox as draft", () => {
     const fd = form({
-      topicId: SEED_TOPIC,
+      subjectId: SEED_SUBJECT,
       type: "mcq_single",
       difficulty: "medium",
       stem: "A stem long enough to pass validation checks.",
@@ -248,14 +247,11 @@ describe("parseQuestionForm", () => {
   });
 });
 
-describe("subjectSchema / topicSchema", () => {
+describe("subjectSchema", () => {
   it("accepts valid names", () => {
     expect(
-      subjectSchema.safeParse({ specialtyId: SEED_TOPIC, name: "Medicine" })
+      subjectSchema.safeParse({ specialtyId: SEED_SUBJECT, name: "Medicine" })
         .success
-    ).toBe(true);
-    expect(
-      topicSchema.safeParse({ subjectId: SEED_TOPIC, name: "Cardiology" }).success
     ).toBe(true);
   });
 
@@ -265,7 +261,7 @@ describe("subjectSchema / topicSchema", () => {
 
   it("trims and rejects names that are too short", () => {
     expect(
-      subjectSchema.safeParse({ specialtyId: SEED_TOPIC, name: " M " }).success
+      subjectSchema.safeParse({ specialtyId: SEED_SUBJECT, name: " M " }).success
     ).toBe(false);
   });
 });

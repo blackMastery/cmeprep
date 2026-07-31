@@ -9,8 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { LockedExamRow } from "@/components/test/locked-exam-row";
 
-type WizardTopic = { id: string; name: string };
-type WizardSubject = { id: string; name: string; topics: WizardTopic[] };
+type WizardSubject = { id: string; name: string };
 type WizardSpecialty = { id: string; name: string; subjects: WizardSubject[] };
 export type WizardExam = {
   id: string;
@@ -49,8 +48,8 @@ export function NewTestWizard({
   const steps = useMemo(
     () =>
       exams.length > 1
-        ? (["Exam", "Subjects", "Topics", "Format"] as const)
-        : (["Subjects", "Topics", "Format"] as const),
+        ? (["Exam", "Subjects", "Format"] as const)
+        : (["Subjects", "Format"] as const),
     [exams.length]
   );
 
@@ -59,7 +58,6 @@ export function NewTestWizard({
     unlocked.length === 1 ? unlocked[0].id : null
   );
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [topicIds, setTopicIds] = useState<string[]>([]);
   const [numQuestions, setNumQuestions] = useState(20);
   const [difficulty, setDifficulty] =
     useState<(typeof DIFFICULTIES)[number]["value"]>("mixed");
@@ -85,14 +83,6 @@ export function NewTestWizard({
     [specialtyGroups]
   );
 
-  const availableTopics = useMemo(
-    () =>
-      examSubjects
-        .filter((s) => subjectIds.includes(s.id))
-        .flatMap((s) => s.topics),
-    [subjectIds, examSubjects]
-  );
-
   function toggle(list: string[], id: string) {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
   }
@@ -107,7 +97,6 @@ export function NewTestWizard({
         body: JSON.stringify({
           examId,
           subjectIds,
-          topicIds,
           difficulty,
           numQuestions,
           durationMin,
@@ -131,7 +120,6 @@ export function NewTestWizard({
     setExamId(exam.id);
     // Selections belong to the previous exam's tree.
     setSubjectIds([]);
-    setTopicIds([]);
   }
 
   const examReady = selectedExam !== null && !selectedExam.locked;
@@ -150,9 +138,9 @@ export function NewTestWizard({
           Start a new test
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {steps.length === 3
-            ? "Three quick steps — you'll be answering in under a minute."
-            : "Four quick steps — you'll be answering in under a minute."}
+          {steps.length === 2
+            ? "Two quick steps — you'll be answering in under a minute."
+            : "Three quick steps — you'll be answering in under a minute."}
         </p>
       </header>
 
@@ -267,14 +255,13 @@ export function NewTestWizard({
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {sp.subjects.map((s) => (
-                          <SubjectChip
+                          <Chip
                             key={s.id}
-                            subject={s}
-                            subjectIds={subjectIds}
-                            setSubjectIds={setSubjectIds}
-                            setTopicIds={setTopicIds}
-                            examSubjects={examSubjects}
-                            toggle={toggle}
+                            label={s.name}
+                            selected={subjectIds.includes(s.id)}
+                            onClick={() =>
+                              setSubjectIds(toggle(subjectIds, s.id))
+                            }
                           />
                         ))}
                       </div>
@@ -284,14 +271,11 @@ export function NewTestWizard({
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {examSubjects.map((s) => (
-                    <SubjectChip
+                    <Chip
                       key={s.id}
-                      subject={s}
-                      subjectIds={subjectIds}
-                      setSubjectIds={setSubjectIds}
-                      setTopicIds={setTopicIds}
-                      examSubjects={examSubjects}
-                      toggle={toggle}
+                      label={s.name}
+                      selected={subjectIds.includes(s.id)}
+                      onClick={() => setSubjectIds(toggle(subjectIds, s.id))}
                     />
                   ))}
                 </div>
@@ -303,27 +287,6 @@ export function NewTestWizard({
                   {selectedExam ? ` for ${selectedExam.name}` : ""}.
                 </p>
               )}
-            </fieldset>
-          )}
-
-          {currentStep === "Topics" && (
-            <fieldset className="space-y-3">
-              <legend className="mb-1 font-display text-lg">
-                Narrow to topics?
-              </legend>
-              <p className="mb-3 text-sm text-muted-foreground">
-                Optional — leave empty to cover every topic in your subjects.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {availableTopics.map((t) => (
-                  <Chip
-                    key={t.id}
-                    label={t.name}
-                    selected={topicIds.includes(t.id)}
-                    onClick={() => setTopicIds(toggle(topicIds, t.id))}
-                  />
-                ))}
-              </div>
             </fieldset>
           )}
 
@@ -378,12 +341,8 @@ export function NewTestWizard({
 
               <EcgDivider className="my-2" />
 
-              <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <dl className="grid grid-cols-3 gap-3 text-sm">
                 <Summary label="Subjects" value={String(subjectIds.length)} />
-                <Summary
-                  label="Topics"
-                  value={topicIds.length === 0 ? "All" : String(topicIds.length)}
-                />
                 <Summary label="Questions" value={String(numQuestions)} />
                 <Summary label="Time" value={`${durationMin} min`} />
               </dl>
@@ -441,41 +400,6 @@ export function NewTestWizard({
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function SubjectChip({
-  subject,
-  subjectIds,
-  setSubjectIds,
-  setTopicIds,
-  examSubjects,
-  toggle,
-}: {
-  subject: WizardSubject;
-  subjectIds: string[];
-  setSubjectIds: (ids: string[]) => void;
-  setTopicIds: React.Dispatch<React.SetStateAction<string[]>>;
-  examSubjects: WizardSubject[];
-  toggle: (list: string[], id: string) => string[];
-}) {
-  return (
-    <Chip
-      label={subject.name}
-      selected={subjectIds.includes(subject.id)}
-      onClick={() => {
-        const next = toggle(subjectIds, subject.id);
-        setSubjectIds(next);
-        // Drop topics whose subject was just removed.
-        setTopicIds((prev) =>
-          prev.filter((tid) =>
-            examSubjects
-              .filter((x) => next.includes(x.id))
-              .some((x) => x.topics.some((t) => t.id === tid))
-          )
-        );
-      }}
-    />
   );
 }
 

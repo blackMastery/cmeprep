@@ -21,7 +21,6 @@ export default async function AdminOverviewPage() {
     { icon: GraduationCap, label: "Exams", value: counts.exams },
     { icon: GraduationCap, label: "Specialties", value: counts.specialties },
     { icon: FolderTree, label: "Subjects", value: counts.subjects },
-    { icon: FolderTree, label: "Topics", value: counts.topics },
     { icon: Users, label: "Users", value: counts.users },
     { icon: CreditCard, label: "Plans", value: counts.plans },
   ];
@@ -66,7 +65,7 @@ export default async function AdminOverviewPage() {
           <CardContent className="space-y-3 text-center">
             <h2 className="font-display text-lg">Start with a subject</h2>
             <p className="text-sm text-muted-foreground">
-              Questions live under a topic, and topics live under a subject.
+              Questions live under a subject.
             </p>
             <Button asChild>
               <Link href="/admin/subjects">Create a subject</Link>

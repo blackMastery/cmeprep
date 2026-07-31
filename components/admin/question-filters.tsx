@@ -109,33 +109,6 @@ export function QuestionFilters({
       </select>
 
       <select
-        name="topic"
-        defaultValue={get("topic")}
-        aria-label="Topic"
-        className={SELECT_CLASS}
-      >
-        <option value="">All topics</option>
-        {specialties.flatMap((s) =>
-          s.subjects.map((subject) => (
-            <optgroup
-              key={subject.id}
-              label={
-                specialties.length > 1
-                  ? `${s.name} › ${subject.name}`
-                  : subject.name
-              }
-            >
-              {subject.topics.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </optgroup>
-          ))
-        )}
-      </select>
-
-      <select
         name="difficulty"
         defaultValue={get("difficulty")}
         aria-label="Difficulty"

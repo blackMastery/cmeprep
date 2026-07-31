@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, EyeOff, FileUp, Plus, Trash2 } from "lucide-react";
 import type { ExamWithSpecialties } from "@/lib/admin/taxonomy";
 import {
   createSpecialty,
@@ -32,6 +32,23 @@ export function ExamDetail({ exam }: { exam: ExamWithSpecialties }) {
 
   return (
     <div className="space-y-6">
+      <Card className="[--card-spacing:--spacing(5)]">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg">Import questions</h2>
+            <p className="text-xs text-muted-foreground">
+              Upload an Excel sheet — every row files under {exam.name}.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href={`/admin/exams/${exam.id}/import`}>
+              <FileUp data-icon="inline-start" />
+              Import questions
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <ExamSettingsCard exam={exam} />
 
       <Card className="[--card-spacing:--spacing(5)]">
@@ -39,8 +56,8 @@ export function ExamDetail({ exam }: { exam: ExamWithSpecialties }) {
           <div>
             <h2 className="font-display text-lg">Specialties</h2>
             <p className="text-xs text-muted-foreground">
-              Subjects and topics live inside a specialty. A specialty with
-              subjects can&apos;t be deleted.
+              Subjects live inside a specialty. A specialty with subjects
+              can&apos;t be deleted.
             </p>
           </div>
 

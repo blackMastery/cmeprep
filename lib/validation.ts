@@ -11,7 +11,6 @@ export const uuid = () => z.guid();
 export const createTestSchema = z.object({
   examId: uuid(),
   subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
-  topicIds: z.array(uuid()).default([]),
   difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
   numQuestions: z.number().int().min(5).max(100),
   durationMin: z.number().int().min(5).max(240),
@@ -48,7 +47,7 @@ export const questionOptionSchema = z.object({
 
 export const questionSchema = z
   .object({
-    topicId: uuid(),
+    subjectId: uuid(),
     type: z.enum(QUESTION_TYPES),
     difficulty: z.enum(DIFFICULTIES),
     stem: z.string().trim().min(10, "Write the question stem").max(5000),
@@ -120,11 +119,6 @@ export const subjectSchema = z.object({
   name: z.string().trim().min(2, "Subject name is too short").max(80),
 });
 
-export const topicSchema = z.object({
-  subjectId: uuid(),
-  name: z.string().trim().min(2, "Topic name is too short").max(80),
-});
-
 /**
  * FormData → plain object, kept pure so it can be unit-tested.
  *
@@ -146,7 +140,7 @@ export function parseQuestionForm(fd: FormData): unknown {
   const imagePath = String(fd.get("imagePath") ?? "").trim();
 
   return {
-    topicId: String(fd.get("topicId") ?? ""),
+    subjectId: String(fd.get("subjectId") ?? ""),
     type: String(fd.get("type") ?? ""),
     difficulty: String(fd.get("difficulty") ?? ""),
     stem: String(fd.get("stem") ?? ""),

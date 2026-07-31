@@ -71,7 +71,7 @@ export async function saveQuestion(
     const { data: created, error } = await admin
       .from("questions")
       .insert({
-        topic_id: input.topicId,
+        subject_id: input.subjectId,
         type: input.type,
         difficulty: input.difficulty,
         stem: input.stem,
@@ -102,13 +102,13 @@ export async function saveQuestion(
     }
 
     await audit(user.id, "question.create", created.id, {
-      topicId: input.topicId,
+      subjectId: input.subjectId,
       type: input.type,
       published: input.isPublished,
     });
 
     // Must come BEFORE redirect(), which throws NEXT_REDIRECT — anything
-    // after it never runs, and the subject/topic counts would go stale.
+    // after it never runs, and the subject counts would go stale.
     revalidatePath("/admin/questions");
     revalidatePath("/admin/subjects");
 
@@ -182,7 +182,7 @@ export async function saveQuestion(
   const { error: updateError } = await admin
     .from("questions")
     .update({
-      topic_id: input.topicId,
+      subject_id: input.subjectId,
       type: input.type,
       difficulty: input.difficulty,
       stem: input.stem,
@@ -215,7 +215,7 @@ export async function saveQuestion(
 
   revalidatePath("/admin/questions");
   revalidatePath(`/admin/questions/${id.data}`);
-  // The topic may have changed, which moves counts between topics.
+  // The subject may have changed, which moves counts between subjects.
   revalidatePath("/admin/subjects");
   return { success: "Saved." };
 }
@@ -289,7 +289,7 @@ export async function setQuestionDeleted(
 
   await audit(user.id, restore ? "question.restore" : "question.delete", id.data);
   revalidatePath("/admin/questions");
-  // Subject/topic counts are derived from questions, so they go stale too.
+  // Subject counts are derived from questions, so they go stale too.
   revalidatePath("/admin/subjects");
   return { success: restore ? "Restored as a draft." : "Question deleted." };
 }

@@ -6,7 +6,7 @@ import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Difficulty, Question, QuestionType } from "@/lib/supabase/types";
 import type { ExistingOption } from "@/lib/admin/option-diff";
-import type { TopicOption } from "@/lib/admin/taxonomy";
+import type { SubjectOption } from "@/lib/admin/taxonomy";
 import { saveQuestion, type QuestionState } from "@/app/admin/questions/actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,12 +24,12 @@ import { ConfirmAction } from "@/components/confirm-dialog";
 type Row = { key: string; id?: string; label: string; isCorrect: boolean };
 
 export function QuestionEditor({
-  topics,
+  subjects,
   question,
   options,
   usageCount = 0,
 }: {
-  topics: TopicOption[];
+  subjects: SubjectOption[];
   question?: Question;
   options?: ExistingOption[];
   usageCount?: number;
@@ -39,34 +39,35 @@ export function QuestionEditor({
     null
   );
 
-  // Exam is chosen, but never submitted: the question stores only `topic_id`,
-  // and the exam is whatever that topic hangs off. The select is here so the
-  // choice is explicit rather than buried in a flat list of every topic in
-  // every exam.
+  // Exam is chosen, but never submitted: the question stores only
+  // `subject_id`, and the exam is whatever that subject hangs off. The
+  // select is here so the choice is explicit rather than buried in a flat
+  // list of every subject in every exam.
   const exams = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const t of topics) if (!seen.has(t.examId)) seen.set(t.examId, t.examName);
+    for (const s of subjects) if (!seen.has(s.examId)) seen.set(s.examId, s.examName);
     return [...seen].map(([id, name]) => ({ id, name }));
-  }, [topics]);
+  }, [subjects]);
 
   const [examId, setExamId] = useState(
     () =>
-      topics.find((t) => t.id === question?.topic_id)?.examId ??
+      subjects.find((s) => s.id === question?.subject_id)?.examId ??
       exams[0]?.id ??
       ""
   );
-  const [topicId, setTopicId] = useState(question?.topic_id ?? "");
+  const [subjectId, setSubjectId] = useState(question?.subject_id ?? "");
 
-  const examTopics = useMemo(
-    () => topics.filter((t) => t.examId === examId),
-    [topics, examId]
+  const examSubjects = useMemo(
+    () => subjects.filter((s) => s.examId === examId),
+    [subjects, examId]
   );
 
   function changeExam(next: string) {
     setExamId(next);
-    // The topic list is about to be replaced wholesale; a topic from the old
-    // exam would submit fine and silently file the question under it.
-    if (!topics.some((t) => t.id === topicId && t.examId === next)) setTopicId("");
+    // The subject list is about to be replaced wholesale; a subject from the
+    // old exam would submit fine and silently file the question under it.
+    if (!subjects.some((s) => s.id === subjectId && s.examId === next))
+      setSubjectId("");
   }
 
   const [type, setType] = useState<QuestionType>(question?.type ?? "mcq_single");
@@ -177,19 +178,19 @@ export function QuestionEditor({
               )}
 
               <AdminSelect
-                label="Topic"
-                name="topicId"
+                label="Subject"
+                name="subjectId"
                 required
-                value={topicId}
-                onChange={(e) => setTopicId(e.target.value)}
-                error={fieldError("topicId")}
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
+                error={fieldError("subjectId")}
               >
                 <option value="" disabled>
-                  Choose a topic…
+                  Choose a subject…
                 </option>
-                {examTopics.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.specialtyName} › {t.subjectName} › {t.name}
+                {examSubjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.specialtyName} › {s.name}
                   </option>
                 ))}
               </AdminSelect>

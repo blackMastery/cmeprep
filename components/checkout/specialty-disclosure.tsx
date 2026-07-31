@@ -6,7 +6,7 @@ import type { CatalogSpecialty } from "@/lib/catalog-core";
 import { cn } from "@/lib/utils";
 
 /**
- * One specialty row that opens to reveal its subjects and their topics.
+ * One specialty row that opens to reveal its subjects and their question counts.
  *
  * Hand-rolled rather than a Radix Accordion, matching the repo's existing
  * disclosure idiom (bookmark-card, subject-detail): there is no animation
@@ -60,15 +60,17 @@ export function SpecialtyDisclosure({
             </p>
           ) : (
             specialty.subjects.map((subject) => (
-              <div key={subject.id}>
+              <div
+                key={subject.id}
+                className="flex items-baseline justify-between gap-3"
+              >
                 <p className="text-sm font-medium wrap-break-word">
                   {subject.name}
                 </p>
-                {subject.topics.length > 0 && (
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {subject.topics.map((topic) => topic.name).join(" · ")}
-                  </p>
-                )}
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  {subject.questionCount} question
+                  {subject.questionCount === 1 ? "" : "s"}
+                </p>
               </div>
             ))
           )}

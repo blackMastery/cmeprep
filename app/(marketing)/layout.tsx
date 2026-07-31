@@ -101,6 +101,12 @@ export default async function MarketingLayout({
                 >
                   Contact
                 </a>
+                <Link
+                  href="/privacy"
+                  className="block text-[#a9a29b] hover:text-white"
+                >
+                  Privacy
+                </Link>
               </div>
             </div>
           </div>

@@ -21,7 +21,6 @@ export type BookmarkRow = {
   type: QuestionType;
   imagePath: string | null;
   subjectName: string;
-  topicName: string;
   note: string | null;
   lastAttempt: {
     answeredAt: string;
@@ -61,7 +60,7 @@ type EmbeddedBookmark = {
     type: QuestionType;
     image_path: string | null;
     explanation: string;
-    topics: { name: string; subjects: { name: string } | null } | null;
+    subjects: { name: string } | null;
   } | null;
 };
 
@@ -78,7 +77,7 @@ export async function getBookmarksPage(
   const { data, count } = await supabase
     .from("bookmarks")
     .select(
-      "question_id, created_at, questions(id, stem, type, image_path, explanation, topics(name, subjects(name)))",
+      "question_id, created_at, questions(id, stem, type, image_path, explanation, subjects(name))",
       { count: "exact" }
     )
     .eq("user_id", userId)
@@ -165,8 +164,7 @@ export async function getBookmarksPage(
       stem: q?.stem ?? "",
       type: q?.type ?? "mcq_single",
       imagePath: q?.image_path ?? null,
-      subjectName: q?.topics?.subjects?.name ?? "",
-      topicName: q?.topics?.name ?? "",
+      subjectName: q?.subjects?.name ?? "",
       note: noteByQuestion.get(b.question_id) ?? null,
       lastAttempt: attempt,
       detail:

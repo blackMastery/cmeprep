@@ -92,9 +92,6 @@ function ReviewCard({
             Q{question.position + 1}
           </span>
           <Badge variant="secondary">{question.subjectName}</Badge>
-          <span className="text-xs text-muted-foreground">
-            {question.topicName}
-          </span>
           <span
             className={cn(
               "ml-auto flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",

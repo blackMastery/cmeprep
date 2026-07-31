@@ -11,7 +11,6 @@ export type ReviewQuestion = {
   difficulty: Difficulty;
   imagePath: string | null;
   explanation: string;
-  topicName: string;
   subjectName: string;
   options: { id: string; label: string; isCorrect: boolean }[];
   selectedOptionIds: string[];
@@ -19,8 +18,7 @@ export type ReviewQuestion = {
   answered: boolean;
 };
 
-export type TopicBreakdown = {
-  topicName: string;
+export type SubjectBreakdown = {
   subjectName: string;
   total: number;
   correct: number;
@@ -30,7 +28,7 @@ export type TopicBreakdown = {
 export type TestResults = {
   test: Test;
   questions: ReviewQuestion[];
-  breakdown: TopicBreakdown[];
+  breakdown: SubjectBreakdown[];
   correct: number;
   total: number;
   answered: number;
@@ -44,7 +42,7 @@ type QuestionRow = {
   difficulty: Difficulty;
   image_path: string | null;
   explanation: string;
-  topics: { name: string; subjects: { name: string } | null } | null;
+  subjects: { name: string } | null;
 };
 
 /**
@@ -73,7 +71,7 @@ export async function getTestResults(
       admin
         .from("questions")
         .select(
-          "id, stem, type, difficulty, image_path, explanation, topics(name, subjects(name))"
+          "id, stem, type, difficulty, image_path, explanation, subjects(name)"
         )
         .in("id", questionIds.length > 0 ? questionIds : [""]),
       admin
@@ -111,8 +109,7 @@ export async function getTestResults(
         difficulty: q.difficulty,
         imagePath: q.image_path,
         explanation: q.explanation,
-        topicName: q.topics?.name ?? "",
-        subjectName: q.topics?.subjects?.name ?? "",
+        subjectName: q.subjects?.name ?? "",
         options: link.option_order.flatMap((id: string) => {
           const opt = optionById.get(id);
           return opt
@@ -126,25 +123,24 @@ export async function getTestResults(
     ];
   });
 
-  // Per-topic accuracy for the results bars
-  const byTopic = new Map<string, TopicBreakdown>();
+  // Per-subject accuracy for the results bars
+  const bySubject = new Map<string, SubjectBreakdown>();
   for (const q of reviewQuestions) {
-    const key = `${q.subjectName}::${q.topicName}`;
+    const key = q.subjectName;
     const entry =
-      byTopic.get(key) ??
+      bySubject.get(key) ??
       ({
-        topicName: q.topicName,
         subjectName: q.subjectName,
         total: 0,
         correct: 0,
         accuracy: 0,
-      } satisfies TopicBreakdown);
+      } satisfies SubjectBreakdown);
     entry.total += 1;
     if (q.isCorrect) entry.correct += 1;
-    byTopic.set(key, entry);
+    bySubject.set(key, entry);
   }
 
-  const breakdown = [...byTopic.values()]
+  const breakdown = [...bySubject.values()]
     .map((b) => ({
       ...b,
       accuracy: b.total === 0 ? 0 : Math.round((b.correct / b.total) * 100),

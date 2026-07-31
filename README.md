@@ -21,7 +21,7 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
 - **Dashboard** — attempted / accuracy / streak, weak areas, past tests,
   trial usage with upgrade prompt.
 
-- **Admin** — role-gated `/admin`: subjects & topics CRUD with reorder and
+- **Admin** — role-gated `/admin`: subjects CRUD with reorder and
   safe delete, question list (search, filters, pagination), question editor
   with dynamic option rows and a live student preview, publish/draft, soft
   delete, image upload to Supabase Storage, and an audit log.

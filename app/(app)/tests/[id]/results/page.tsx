@@ -56,25 +56,20 @@ export default async function ResultsPage(
 
       <EcgDivider className="my-8 text-primary/30" />
 
-      {/* Per-topic accuracy */}
+      {/* Per-subject accuracy */}
       {results.breakdown.length > 0 && (
         <Card className="[--card-spacing:--spacing(6)]">
           <CardContent className="space-y-4">
-            <h2 className="font-display text-lg">Accuracy by topic</h2>
+            <h2 className="font-display text-lg">Accuracy by subject</h2>
             <ul className="space-y-3.5">
-              {results.breakdown.map((topic) => (
-                <li key={`${topic.subjectName}-${topic.topicName}`}>
+              {results.breakdown.map((subject) => (
+                <li key={subject.subjectName}>
                   <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate">
-                      {topic.topicName}
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {topic.subjectName}
-                      </span>
-                    </span>
+                    <span className="truncate">{subject.subjectName}</span>
                     <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {topic.correct}/{topic.total}
+                      {subject.correct}/{subject.total}
                       <span className="ml-2 font-semibold text-foreground">
-                        {topic.accuracy}%
+                        {subject.accuracy}%
                       </span>
                     </span>
                   </div>
@@ -82,7 +77,7 @@ export default async function ResultsPage(
                   <div className="h-2 overflow-hidden rounded-full bg-secondary">
                     <div
                       className="h-full rounded-full bg-primary transition-[width]"
-                      style={{ width: `${topic.accuracy}%` }}
+                      style={{ width: `${subject.accuracy}%` }}
                     />
                   </div>
                 </li>

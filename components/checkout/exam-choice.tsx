@@ -162,14 +162,12 @@ function ExamMeta({
   until?: string;
   id?: string;
 }) {
-  // Question counts are deliberately absent from checkout — a bank that is
-  // still filling out reads as thin, and the number moves after purchase
-  // anyway. Coverage (specialties → topics) is the honest signal here.
   return (
     <p id={id} className="mt-1 text-sm text-muted-foreground">
       {exam.specialtyCount} specialt{exam.specialtyCount === 1 ? "y" : "ies"} ·{" "}
       {exam.subjectCount} subject{exam.subjectCount === 1 ? "" : "s"} ·{" "}
-      {exam.topicCount} topic{exam.topicCount === 1 ? "" : "s"}
+      {exam.questionCount.toLocaleString()} question
+      {exam.questionCount === 1 ? "" : "s"}
       {until && (
         <>
           {" "}

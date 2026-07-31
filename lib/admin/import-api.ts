@@ -34,7 +34,6 @@ export type ImportCommitResponse =
       createdExams: string[];
       createdSpecialties: string[];
       createdSubjects: string[];
-      createdTopics: string[];
     }
   | { ok: false; error: string; report?: ImportReport };
 

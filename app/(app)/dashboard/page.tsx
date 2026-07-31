@@ -7,7 +7,7 @@ import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
 import { examAccessFor, type SubscriptionScope } from "@/lib/entitlements-core";
 import { listExamCatalog } from "@/lib/catalog";
-import type { Test, TopicAccuracy } from "@/lib/supabase/types";
+import type { Test, SubjectAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { WeakAreas } from "@/components/dashboard/weak-areas";
@@ -25,13 +25,13 @@ export default async function DashboardPage() {
   // queries; RLS scopes everything to this user automatically.
   const [
     { stats: userStats, streak },
-    { data: topics },
+    { data: subjects },
     { data: tests },
     { data: subs },
   ] = await Promise.all([
     getLifetimeStats(user.id),
     supabase
-      .from("topic_accuracy")
+      .from("subject_accuracy")
       .select("*")
       .eq("user_id", user.id)
       .gte("attempts", 5)
@@ -118,7 +118,7 @@ export default async function DashboardPage() {
           <PastTests tests={(tests ?? []) as Test[]} />
         </div>
         <div className="space-y-6">
-          <WeakAreas topics={(topics ?? []) as TopicAccuracy[]} />
+          <WeakAreas subjects={(subjects ?? []) as SubjectAccuracy[]} />
           <AccountPanel profile={user.profile} examNames={entitledExamNames} />
         </div>
       </div>

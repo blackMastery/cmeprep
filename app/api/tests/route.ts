@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { examId, subjectIds, topicIds, difficulty, numQuestions, durationMin } =
+  const { examId, subjectIds, difficulty, numQuestions, durationMin } =
     parsed.data;
   const admin = createAdminClient();
 
@@ -105,15 +105,10 @@ export async function POST(request: Request) {
   // ── Select candidate questions
   let query = admin
     .from("questions")
-    .select("id, topic_id, topics!inner(subject_id)")
+    .select("id, subject_id")
     .eq("is_published", true)
-    .is("deleted_at", null);
-
-  if (topicIds.length > 0) {
-    query = query.in("topic_id", topicIds);
-  } else {
-    query = query.in("topics.subject_id", subjectIds);
-  }
+    .is("deleted_at", null)
+    .in("subject_id", subjectIds);
 
   if (difficulty !== "mixed") {
     query = query.eq("difficulty", difficulty);
@@ -173,7 +168,6 @@ export async function POST(request: Request) {
 
   const config: TestConfig = {
     subject_ids: subjectIds,
-    topic_ids: topicIds,
     difficulty,
     num_questions: picked.length,
     duration_sec: durationMin * 60,

@@ -37,7 +37,7 @@ const FEATURES = [
   {
     icon: SlidersHorizontal,
     title: "Build any test",
-    body: "Pick your subjects, topics, question count, difficulty and time limit. A ten-question drill on Cardiology, or a full paper across every subject.",
+    body: "Pick your subjects, question count, difficulty and time limit. A ten-question drill on Cardiology, or a full paper across every subject.",
   },
   {
     icon: Timer,
@@ -52,7 +52,7 @@ const FEATURES = [
   {
     icon: Target,
     title: "Know your weak areas",
-    body: "Per-topic accuracy after every paper, and a dashboard that surfaces your lowest-scoring topics — so your last weeks go where they count.",
+    body: "Per-subject accuracy after every paper, and a dashboard that surfaces your lowest-scoring subjects — so your last weeks go where they count.",
   },
   {
     icon: LineChart,
@@ -136,7 +136,7 @@ export default async function MarketingPage() {
             </h1>
 
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/90">
-              Practice questions, timed mock exams and per-topic analytics that
+              Practice questions, timed mock exams and per-subject analytics that
               show you exactly where to focus.
             </p>
 
@@ -191,7 +191,7 @@ export default async function MarketingPage() {
             Everything you need to walk in prepared
           </h2>
           <p className="mt-3 text-lg text-muted-foreground">
-            Built around how you actually revise — drill a topic, sit a full
+            Built around how you actually revise — drill a subject, sit a full
             paper, then find out what to fix.
           </p>
         </div>

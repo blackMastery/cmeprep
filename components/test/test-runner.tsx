@@ -345,9 +345,6 @@ export function TestRunner({ state }: { state: TakeState }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{current.subjectName}</Badge>
-            <span className="text-xs text-muted-foreground">
-              {current.topicName}
-            </span>
             <Button
               variant="ghost"
               size="sm"

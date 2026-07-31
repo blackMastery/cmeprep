@@ -62,10 +62,6 @@ export default async function NewTestPage() {
       subjects: specialty.subjects.map((subject) => ({
         id: subject.id,
         name: subject.name,
-        topics: subject.topics.map((topic) => ({
-          id: topic.id,
-          name: topic.name,
-        })),
       })),
     })),
   }));

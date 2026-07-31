@@ -63,8 +63,8 @@ export function ExamManager({ exams }: { exams: ExamCard[] }) {
       {exams.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No exams yet. Add one above — specialties, subjects and topics all
-            live under an exam.
+            No exams yet. Add one above — specialties and subjects all live
+            under an exam.
           </CardContent>
         </Card>
       ) : (
@@ -127,10 +127,9 @@ function ExamSummaryCard({
       </CardHeader>
 
       <CardContent>
-        <dl className="grid grid-cols-4 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
+        <dl className="grid grid-cols-3 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
           <Stat label="Specialties" value={exam.specialtyCount} />
           <Stat label="Subjects" value={exam.subjectCount} />
-          <Stat label="Topics" value={exam.topicCount} />
           <Stat label="Questions" value={exam.questionCount} />
         </dl>
       </CardContent>

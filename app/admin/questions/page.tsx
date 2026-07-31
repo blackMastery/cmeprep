@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileUp, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { listQuestions, PAGE_SIZE } from "@/lib/admin/questions";
 import { listHierarchy } from "@/lib/admin/taxonomy";
 import { pageWindow } from "@/lib/pagination";
@@ -32,7 +32,6 @@ export default async function AdminQuestionsPage(
       examId: one(sp.exam),
       specialtyId: one(sp.specialty),
       subjectId: one(sp.subject),
-      topicId: one(sp.topic),
       difficulty: DIFFICULTIES.includes(difficulty as Difficulty)
         ? (difficulty as Difficulty)
         : undefined,
@@ -59,12 +58,6 @@ export default async function AdminQuestionsPage(
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="lg" variant="outline" asChild>
-            <Link href="/admin/questions/import">
-              <FileUp data-icon="inline-start" />
-              Import
-            </Link>
-          </Button>
           <Button size="lg" asChild>
             <Link href="/admin/questions/new">
               <Plus data-icon="inline-start" />

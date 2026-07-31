@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getQuestionForEdit } from "@/lib/admin/questions";
-import { listTopicOptions } from "@/lib/admin/taxonomy";
+import { listSubjectOptions } from "@/lib/admin/taxonomy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QuestionEditor } from "@/components/admin/question-editor";
@@ -15,9 +15,9 @@ export default async function EditQuestionPage(
 ) {
   const { id } = await props.params;
 
-  const [record, topics] = await Promise.all([
+  const [record, subjects] = await Promise.all([
     getQuestionForEdit(id),
-    listTopicOptions(),
+    listSubjectOptions(),
   ]);
 
   if (!record) notFound();
@@ -50,7 +50,7 @@ export default async function EditQuestionPage(
       </div>
 
       <QuestionEditor
-        topics={topics}
+        subjects={subjects}
         question={record.question}
         options={record.visibleOptions}
         usageCount={record.usageCount}

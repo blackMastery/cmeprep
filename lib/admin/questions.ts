@@ -16,7 +16,6 @@ export type QuestionListFilters = {
   examId?: string;
   specialtyId?: string;
   subjectId?: string;
-  topicId?: string;
   difficulty?: Difficulty;
   type?: QuestionType;
   published?: boolean;
@@ -32,7 +31,6 @@ export type QuestionListRow = {
   is_published: boolean;
   deleted_at: string | null;
   updated_at: string | null;
-  topicName: string;
   subjectName: string;
   specialtyName: string;
   optionCount: number;
@@ -51,17 +49,12 @@ type EmbeddedRow = {
   is_published: boolean;
   deleted_at: string | null;
   updated_at: string | null;
-  topic_id: string;
-  topics: {
+  subject_id: string;
+  subjects: {
     id: string;
     name: string;
-    subject_id: string;
-    subjects: {
-      id: string;
-      name: string;
-      specialty_id: string;
-      specialties: { id: string; name: string; exam_id: string } | null;
-    } | null;
+    specialty_id: string;
+    specialties: { id: string; name: string; exam_id: string } | null;
   } | null;
 };
 
@@ -78,9 +71,8 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
   let query = admin
     .from("questions")
     .select(
-      "id, stem, type, difficulty, is_published, deleted_at, updated_at, topic_id, " +
-        "topics!inner(id, name, subject_id, subjects!inner(id, name, specialty_id, " +
-        "specialties!inner(id, name, exam_id)))",
+      "id, stem, type, difficulty, is_published, deleted_at, updated_at, subject_id, " +
+        "subjects!inner(id, name, specialty_id, specialties!inner(id, name, exam_id))",
       { count: "exact" }
     )
     .order("updated_at", { ascending: false, nullsFirst: false })
@@ -88,13 +80,11 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
 
   if (!filters.includeDeleted) query = query.is("deleted_at", null);
   // Most-specific level wins; the !inner joins above make parent filters work.
-  if (filters.topicId) query = query.eq("topic_id", filters.topicId);
-  else if (filters.subjectId)
-    query = query.eq("topics.subject_id", filters.subjectId);
+  if (filters.subjectId) query = query.eq("subject_id", filters.subjectId);
   else if (filters.specialtyId)
-    query = query.eq("topics.subjects.specialty_id", filters.specialtyId);
+    query = query.eq("subjects.specialty_id", filters.specialtyId);
   else if (filters.examId)
-    query = query.eq("topics.subjects.specialties.exam_id", filters.examId);
+    query = query.eq("subjects.specialties.exam_id", filters.examId);
   if (filters.difficulty) query = query.eq("difficulty", filters.difficulty);
   if (filters.type) query = query.eq("type", filters.type);
   if (filters.published !== undefined)
@@ -150,9 +140,8 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
       is_published: r.is_published,
       deleted_at: r.deleted_at,
       updated_at: r.updated_at,
-      topicName: r.topics?.name ?? "",
-      subjectName: r.topics?.subjects?.name ?? "",
-      specialtyName: r.topics?.subjects?.specialties?.name ?? "",
+      subjectName: r.subjects?.name ?? "",
+      specialtyName: r.subjects?.specialties?.name ?? "",
       optionCount: optionCount.get(r.id) ?? 0,
       correctCount: correctCount.get(r.id) ?? 0,
       usageCount: usageCount.get(r.id) ?? 0,
@@ -215,14 +204,13 @@ export async function getQuestionForEdit(
 export async function contentCounts() {
   const admin = createAdminClient();
 
-  const [users, plans, exams, specialties, subjects, topics, published, drafts] =
+  const [users, plans, exams, specialties, subjects, published, drafts] =
     await Promise.all([
       admin.from("profiles").select("id", { count: "exact", head: true }),
       admin.from("plans").select("id", { count: "exact", head: true }),
       admin.from("exams").select("id", { count: "exact", head: true }),
       admin.from("specialties").select("id", { count: "exact", head: true }),
       admin.from("subjects").select("id", { count: "exact", head: true }),
-      admin.from("topics").select("id", { count: "exact", head: true }),
       admin
         .from("questions")
         .select("id", { count: "exact", head: true })
@@ -241,7 +229,6 @@ export async function contentCounts() {
     exams: exams.count ?? 0,
     specialties: specialties.count ?? 0,
     subjects: subjects.count ?? 0,
-    topics: topics.count ?? 0,
     published: published.count ?? 0,
     drafts: drafts.count ?? 0,
   };

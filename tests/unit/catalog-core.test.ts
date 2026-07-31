@@ -10,9 +10,6 @@ const EXAM = "e0000000-0000-0000-0000-000000000001";
 const SPEC = "5c000000-0000-0000-0000-000000000001";
 const SUBJ = "11111111-1111-1111-1111-111111111111";
 const SUBJ_2 = "22222222-2222-2222-2222-222222222222";
-const TOPIC = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
-const TOPIC_2 = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
-const TOPIC_3 = "cccccccc-3333-4333-8333-cccccccccccc";
 
 function rows(overrides: Partial<CatalogRows> = {}): CatalogRows {
   return {
@@ -24,28 +21,22 @@ function rows(overrides: Partial<CatalogRows> = {}): CatalogRows {
       { id: SUBJ, name: "Cardiology", specialty_id: SPEC },
       { id: SUBJ_2, name: "Neurology", specialty_id: SPEC },
     ],
-    topics: [
-      { id: TOPIC, name: "Arrhythmias", subject_id: SUBJ },
-      { id: TOPIC_2, name: "Heart failure", subject_id: SUBJ },
-      { id: TOPIC_3, name: "Stroke", subject_id: SUBJ_2 },
-    ],
     counts: [
-      { topic_id: TOPIC, question_count: 12 },
-      { topic_id: TOPIC_2, question_count: 8 },
-      { topic_id: TOPIC_3, question_count: 5 },
+      { subject_id: SUBJ, question_count: 20 },
+      { subject_id: SUBJ_2, question_count: 5 },
     ],
     ...overrides,
   };
 }
 
 describe("assembleCatalog", () => {
-  it("nests exam → specialty → subject → topic", () => {
+  it("nests exam → specialty → subject", () => {
     const [exam] = assembleCatalog(rows());
     expect(exam.name).toBe("Medical Board Exam");
     expect(exam.code).toBe("CAMC");
-    expect(exam.specialties[0].subjects[0].topics.map((t) => t.name)).toEqual([
-      "Arrhythmias",
-      "Heart failure",
+    expect(exam.specialties[0].subjects.map((s) => s.name)).toEqual([
+      "Cardiology",
+      "Neurology",
     ]);
   });
 
@@ -60,34 +51,29 @@ describe("assembleCatalog", () => {
     expect(exam.questionCount).toBe(25);
   });
 
-  it("counts subjects and topics at every level", () => {
+  it("counts subjects at every level", () => {
     const [exam] = assembleCatalog(rows());
     expect(exam.specialtyCount).toBe(1);
     expect(exam.subjectCount).toBe(2);
-    expect(exam.topicCount).toBe(3);
     expect(exam.specialties[0].subjectCount).toBe(2);
-    expect(exam.specialties[0].topicCount).toBe(3);
-    expect(exam.specialties[0].subjects[0].topicCount).toBe(2);
   });
 
-  it("treats a topic with no counts row as zero, not missing", () => {
-    // topic_question_counts only lists topics that HAVE published questions.
+  it("treats a subject with no counts row as zero, not missing", () => {
+    // subject_question_counts only lists subjects that HAVE published questions.
     const [exam] = assembleCatalog(rows({ counts: [] }));
     expect(exam.questionCount).toBe(0);
-    expect(exam.topicCount).toBe(3);
-    expect(exam.specialties[0].subjects[0].topics[0].questionCount).toBe(0);
+    expect(exam.specialties[0].subjects[0].questionCount).toBe(0);
   });
 
   it("keeps empty branches rather than dropping them", () => {
-    const [exam] = assembleCatalog(rows({ topics: [], counts: [] }));
+    const [exam] = assembleCatalog(rows({ counts: [] }));
     expect(exam.subjectCount).toBe(2);
-    expect(exam.topicCount).toBe(0);
-    expect(exam.specialties[0].subjects[0].topics).toEqual([]);
+    expect(exam.specialties[0].subjects).toHaveLength(2);
   });
 
   it("returns an exam with no specialties as a zeroed shell", () => {
     const [exam] = assembleCatalog(
-      rows({ specialties: [], subjects: [], topics: [], counts: [] })
+      rows({ specialties: [], subjects: [], counts: [] })
     );
     expect(exam.specialties).toEqual([]);
     expect(exam.specialtyCount).toBe(0);
@@ -100,7 +86,6 @@ describe("assembleCatalog", () => {
         exams: [],
         specialties: [],
         subjects: [],
-        topics: [],
         counts: [],
       })
     ).toEqual([]);

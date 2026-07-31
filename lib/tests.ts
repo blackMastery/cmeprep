@@ -19,7 +19,6 @@ export type TakeQuestion = {
   type: QuestionType;
   difficulty: Difficulty;
   imagePath: string | null;
-  topicName: string;
   subjectName: string;
   /** Options in the order frozen for this test. Never includes correctness. */
   options: { id: string; label: string }[];
@@ -40,7 +39,7 @@ type QuestionRow = {
   type: QuestionType;
   difficulty: Difficulty;
   image_path: string | null;
-  topics: { name: string; subjects: { name: string } | null } | null;
+  subjects: { name: string } | null;
 };
 
 export async function getTestForUser(
@@ -86,9 +85,7 @@ export async function getTakeState(
     await Promise.all([
       admin
         .from("questions")
-        .select(
-          "id, stem, type, difficulty, image_path, topics(name, subjects(name))"
-        )
+        .select("id, stem, type, difficulty, image_path, subjects(name)")
         .in("id", questionIds),
       admin
         .from("question_options")
@@ -124,8 +121,7 @@ export async function getTakeState(
         type: q.type,
         difficulty: q.difficulty,
         imagePath: q.image_path,
-        topicName: q.topics?.name ?? "",
-        subjectName: q.topics?.subjects?.name ?? "",
+        subjectName: q.subjects?.name ?? "",
         options: link.option_order.flatMap((id: string) => {
           const opt = optionById.get(id);
           return opt ? [{ id: opt.id, label: opt.label }] : [];

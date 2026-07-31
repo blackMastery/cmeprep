@@ -25,8 +25,8 @@ export type SideNavItem = {
 
 /**
  * Route matching: an item matches on its exact path or any sub-path, and the
- * LONGEST matching href wins, so "/admin" yields to "/admin/questions" which
- * yields to "/admin/questions/import" — overlapping items need no flags.
+ * LONGEST matching href wins, so "/admin" yields to "/admin/questions" —
+ * overlapping items need no flags.
  */
 function activeHref(items: readonly SideNavItem[], pathname: string) {
   return items

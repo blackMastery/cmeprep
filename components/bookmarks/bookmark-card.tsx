@@ -58,7 +58,6 @@ export function BookmarkCard({ row }: { row: BookmarkRow }) {
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{row.subjectName}</Badge>
-          <span className="text-xs text-muted-foreground">{row.topicName}</span>
           <span className="ml-auto text-xs tabular-nums text-muted-foreground">
             Saved {dateFormatter.format(new Date(row.bookmarkedAt))}
           </span>

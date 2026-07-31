@@ -174,7 +174,7 @@ const SUPPORT_TERMS: Feature[] = [
 
 const RISK_SIGNALS = [
   "Practice accuracy trending below the pass threshold",
-  "Weak topics left unattempted close to exam day",
+  "Weak subjects left unattempted close to exam day",
   "Mock-exam scores falling behind the cohort",
 ];
 
