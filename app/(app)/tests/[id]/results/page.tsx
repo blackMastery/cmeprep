@@ -9,6 +9,7 @@ import { formatDuration } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
+import { TrialResultsUpsell } from "@/components/app/trial-results-upsell";
 
 export const metadata: Metadata = { title: "Results" };
 
@@ -87,9 +88,11 @@ export default async function ResultsPage(
         </Card>
       )}
 
+      <TrialResultsUpsell profile={user.profile} />
+
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
         {wrongCount > 0 ? (
-          <Button size="lg" className="flex-1" asChild>
+          <Button size="xl" className="flex-1" asChild>
             <Link href={`/tests/${id}/review?filter=wrong`}>
               Review {wrongCount} wrong{" "}
               {wrongCount === 1 ? "answer" : "answers"}
@@ -97,14 +100,14 @@ export default async function ResultsPage(
             </Link>
           </Button>
         ) : (
-          <Button size="lg" className="flex-1" asChild>
+          <Button size="xl" className="flex-1" asChild>
             <Link href={`/tests/${id}/review`}>
               Review all answers
               <ArrowRight data-icon="inline-end" />
             </Link>
           </Button>
         )}
-        <Button size="lg" variant="outline" className="flex-1" asChild>
+        <Button size="xl" variant="outline" className="flex-1" asChild>
           <Link href="/dashboard">
             <LayoutDashboard data-icon="inline-start" />
             Back to dashboard

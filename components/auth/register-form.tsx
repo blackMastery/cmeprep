@@ -38,9 +38,6 @@ export function RegisterForm() {
         hint="At least 8 characters."
       />
       <SubmitButton>Create account</SubmitButton>
-      <p className="text-center text-xs text-muted-foreground">
-        We&apos;ll email you a link to verify your address.
-      </p>
     </form>
   );
 }
