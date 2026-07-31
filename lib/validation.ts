@@ -50,9 +50,9 @@ export const questionSchema = z
     subjectId: uuid(),
     type: z.enum(QUESTION_TYPES),
     difficulty: z.enum(DIFFICULTIES),
-    stem: z.string().trim().min(10, "Write the question stem").max(5000),
-    explanation: z.string().trim().min(10, "Explain the answer").max(5000),
-    imagePath: z.string().trim().min(1).max(300).nullable().default(null),
+    stem: z.string().trim().min(10, "Write the question stem"),
+    explanation: z.string().trim().min(10, "Explain the answer"),
+    imagePath: z.string().trim().min(1).max(3000).nullable().default(null),
     isPublished: z.boolean().default(false),
     options: z
       .array(questionOptionSchema)

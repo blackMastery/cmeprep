@@ -377,12 +377,12 @@ describe("schema rules surface as row errors", () => {
     expect(errorsOf(multi, 2)[0]).toMatch(/at least two correct/i);
   });
 
-  it("enforces stem/explanation boundaries (9/10 and 5000/5001)", () => {
+  it("enforces stem/explanation minimum length (no max)", () => {
     expect(errorsOf(run([goodRow({ stem: "x".repeat(9) })]), 2).length).toBeGreaterThan(0);
     expect(run([goodRow({ stem: "x".repeat(10) })]).counts.valid).toBe(1);
-    expect(run([goodRow({ stem: "x".repeat(5000) })]).counts.valid).toBe(1);
-    expect(errorsOf(run([goodRow({ stem: "x".repeat(5001) })]), 2).length).toBeGreaterThan(0);
+    expect(run([goodRow({ stem: "x".repeat(5001) })]).counts.valid).toBe(1);
     expect(errorsOf(run([goodRow({ explanation: "short" })]), 2).length).toBeGreaterThan(0);
+    expect(run([goodRow({ explanation: "y".repeat(5001) })]).counts.valid).toBe(1);
   });
 
   it("enforces option label length 500/501", () => {

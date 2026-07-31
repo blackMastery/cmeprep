@@ -240,7 +240,7 @@ async function taxonomySnapshot(): Promise<TaxonomySnapshot> {
  * Preview-only warnings: stems that already exist in the DB (excluding
  * soft-deleted questions — re-importing a stem you deleted is legitimate).
  *
- * Deliberately NOT `.in("stem", …)`: stems run to 5000 chars and supabase-js
+ * Deliberately NOT `.in("stem", …)`: stems can be long and supabase-js
  * puts .in() values in the URL, so a single long stem would 414 at the
  * gateway. Instead fetch candidate stems by target subject and compare
  * normalised in JS — the bank is small and the fetch is scoped.
