@@ -15,6 +15,39 @@ export type SubjectWithCount = Subject & {
 };
 
 /**
+ * PostgREST caps a single response at 1000 rows by default. A bank with
+ * more questions than that (PLAB alone is already near the limit) would
+ * under-count every exam whose rows fell past the cut-off. Page through
+ * until a short page proves we've seen them all.
+ */
+const QUESTION_PAGE = 1000;
+
+async function questionCountsBySubject(): Promise<{
+  liveBySubject: Map<string, number>;
+  deletedBySubject: Map<string, number>;
+}> {
+  const admin = createAdminClient();
+  const liveBySubject = new Map<string, number>();
+  const deletedBySubject = new Map<string, number>();
+
+  for (let from = 0; ; from += QUESTION_PAGE) {
+    const { data } = await admin
+      .from("questions")
+      .select("subject_id, deleted_at")
+      .range(from, from + QUESTION_PAGE - 1);
+
+    for (const q of data ?? []) {
+      const bucket = q.deleted_at ? deletedBySubject : liveBySubject;
+      bucket.set(q.subject_id, (bucket.get(q.subject_id) ?? 0) + 1);
+    }
+
+    if ((data?.length ?? 0) < QUESTION_PAGE) break;
+  }
+
+  return { liveBySubject, deletedBySubject };
+}
+
+/**
  * Subjects with their question counts.
  *
  * Live and soft-deleted counts are kept apart on purpose: the live count is
@@ -33,17 +66,8 @@ export async function listTaxonomy(
     .order("name");
   if (specialtyId) subjectsQuery = subjectsQuery.eq("specialty_id", specialtyId);
 
-  const [{ data: subjects }, { data: questions }] = await Promise.all([
-    subjectsQuery,
-    admin.from("questions").select("subject_id, deleted_at"),
-  ]);
-
-  const liveBySubject = new Map<string, number>();
-  const deletedBySubject = new Map<string, number>();
-  for (const q of questions ?? []) {
-    const bucket = q.deleted_at ? deletedBySubject : liveBySubject;
-    bucket.set(q.subject_id, (bucket.get(q.subject_id) ?? 0) + 1);
-  }
+  const [{ data: subjects }, { liveBySubject, deletedBySubject }] =
+    await Promise.all([subjectsQuery, questionCountsBySubject()]);
 
   return (subjects ?? []).map((subject) => ({
     ...subject,
