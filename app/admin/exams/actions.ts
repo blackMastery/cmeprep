@@ -174,19 +174,40 @@ export async function deleteExam(
   // Pre-flight in code even though the FK would cascade — cascading an exam
   // delete through specialties into subjects would be a data catastrophe, so
   // the UI never lets it fire.
-  const { count } = await admin
+  const { count: specialtyCount } = await admin
     .from("specialties")
     .select("id", { count: "exact", head: true })
     .eq("exam_id", id.data);
 
-  if ((count ?? 0) > 0) {
+  if ((specialtyCount ?? 0) > 0) {
     return {
-      error: `That exam still has ${count} specialt${count === 1 ? "y" : "ies"}. Delete or move them first.`,
+      error: `That exam still has ${specialtyCount} specialt${specialtyCount === 1 ? "y" : "ies"}. Delete or move them first.`,
+    };
+  }
+
+  // subscriptions.exam_id is ON DELETE RESTRICT on purpose — deleting an exam
+  // that was sold would either wipe purchase history or (with SET NULL) promote
+  // every buyer to all-access. Block with a clear reason instead.
+  const { count: subscriptionCount } = await admin
+    .from("subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("exam_id", id.data);
+
+  if ((subscriptionCount ?? 0) > 0) {
+    return {
+      error: `That exam still has ${subscriptionCount} subscription${subscriptionCount === 1 ? "" : "s"} tied to it. Withdraw it from checkout instead — sold exams can't be deleted.`,
     };
   }
 
   const { error } = await admin.from("exams").delete().eq("id", id.data);
-  if (error) return { error: "Could not delete the exam." };
+  if (error) {
+    return {
+      error:
+        error.code === FK_VIOLATION
+          ? "That exam still has subscriptions or other records tied to it, so it can't be deleted."
+          : "Could not delete the exam.",
+    };
+  }
 
   await audit(user.id, "exam.delete", id.data);
   revalidateTaxonomy();

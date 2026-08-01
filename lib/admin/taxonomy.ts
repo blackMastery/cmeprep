@@ -103,7 +103,11 @@ export async function listExamCards(): Promise<ExamCard[]> {
 }
 
 export type SpecialtyWithMeta = Specialty & TaxonomyCounts;
-export type ExamWithSpecialties = Exam & { specialties: SpecialtyWithMeta[] };
+export type ExamWithSpecialties = Exam & {
+  specialties: SpecialtyWithMeta[];
+  /** Rows in `subscriptions` scoped to this exam — blocks hard delete. */
+  subscriptionCount: number;
+};
 
 /** One exam and its specialties — everything the detail page manages. */
 export async function getExam(id: string): Promise<ExamWithSpecialties | null> {
@@ -111,9 +115,16 @@ export async function getExam(id: string): Promise<ExamWithSpecialties | null> {
   const found = hierarchy.find((e) => e.id === id);
   if (!found) return null;
 
+  const admin = createAdminClient();
+  const { count: subscriptionCount } = await admin
+    .from("subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("exam_id", id);
+
   const { specialties, ...exam } = found;
   return {
     ...exam,
+    subscriptionCount: subscriptionCount ?? 0,
     specialties: specialties.map(({ subjects, ...sp }) => ({
       ...sp,
       ...rollUp(subjects),

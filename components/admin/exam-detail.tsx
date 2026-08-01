@@ -218,18 +218,24 @@ function DangerZone({ exam }: { exam: ExamWithSpecialties }) {
     null
   );
 
-  const blocked = exam.specialties.length > 0;
+  const specialtyBlock = exam.specialties.length > 0;
+  const subscriptionBlock = exam.subscriptionCount > 0;
+  const blocked = specialtyBlock || subscriptionBlock;
 
   return (
     <Card className="[--card-spacing:--spacing(5)]">
       <CardContent className="space-y-3">
         <h2 className="font-display text-lg">Delete this exam</h2>
         <p className="text-sm text-muted-foreground">
-          {blocked
+          {specialtyBlock
             ? `${exam.name} still has ${exam.specialties.length} specialt${
                 exam.specialties.length === 1 ? "y" : "ies"
               }. Delete or move them first.`
-            : "This exam holds no specialties, so deleting it loses nothing else."}
+            : subscriptionBlock
+              ? `${exam.name} still has ${exam.subscriptionCount} subscription${
+                  exam.subscriptionCount === 1 ? "" : "s"
+                } tied to it. Withdraw it from checkout instead — sold exams can't be deleted.`
+              : "This exam holds no specialties or subscriptions, so deleting it loses nothing else."}
         </p>
         <FormMessage error={deleteState?.error} />
         <form action={deleteAction}>
