@@ -31,6 +31,7 @@ export type QuestionListRow = {
   is_published: boolean;
   deleted_at: string | null;
   updated_at: string | null;
+  examName: string;
   subjectName: string;
   specialtyName: string;
   optionCount: number;
@@ -54,7 +55,12 @@ type EmbeddedRow = {
     id: string;
     name: string;
     specialty_id: string;
-    specialties: { id: string; name: string; exam_id: string } | null;
+    specialties: {
+      id: string;
+      name: string;
+      exam_id: string;
+      exams: { id: string; name: string } | null;
+    } | null;
   } | null;
 };
 
@@ -72,7 +78,7 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
     .from("questions")
     .select(
       "id, stem, type, difficulty, is_published, deleted_at, updated_at, subject_id, " +
-        "subjects!inner(id, name, specialty_id, specialties!inner(id, name, exam_id))",
+        "subjects!inner(id, name, specialty_id, specialties!inner(id, name, exam_id, exams!inner(id, name)))",
       { count: "exact" }
     )
     .order("updated_at", { ascending: false, nullsFirst: false })
@@ -140,6 +146,7 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
       is_published: r.is_published,
       deleted_at: r.deleted_at,
       updated_at: r.updated_at,
+      examName: r.subjects?.specialties?.exams?.name ?? "",
       subjectName: r.subjects?.name ?? "",
       specialtyName: r.subjects?.specialties?.name ?? "",
       optionCount: optionCount.get(r.id) ?? 0,

@@ -47,7 +47,7 @@ export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
 
   return (
     <>
-      {/* Below md the six columns can't fit, and Publish/Delete would sit
+      {/* Below md the columns can't fit, and Publish/Delete would sit
           off-screen behind a horizontal scroll nobody discovers. Cards put
           every action in reach instead. */}
       <ul className="space-y-3 md:hidden">
@@ -64,6 +64,7 @@ export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Question</TableHead>
+                <TableHead>Exam</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Options</TableHead>
@@ -96,6 +97,7 @@ function QuestionCard({ row }: { row: QuestionListRow }) {
         </Link>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {row.examName && <span>{row.examName}</span>}
           <span>
             {row.subjectName} · {row.specialtyName}
           </span>
@@ -153,6 +155,10 @@ function QuestionRow({ row }: { row: QuestionListRow }) {
         >
           {row.stem}
         </Link>
+      </TableCell>
+
+      <TableCell className="whitespace-nowrap text-sm">
+        {row.examName}
       </TableCell>
 
       <TableCell className="whitespace-nowrap text-sm">
