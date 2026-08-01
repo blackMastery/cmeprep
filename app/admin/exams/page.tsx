@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { listExamCards } from "@/lib/admin/taxonomy";
 import { ExamManager } from "@/components/admin/exam-manager";
 
-export const metadata: Metadata = { title: "Exams & specialties" };
+export const metadata: Metadata = { title: "Exams" };
 
 export default async function AdminExamsPage() {
   const exams = await listExamCards();

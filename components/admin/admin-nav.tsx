@@ -16,7 +16,7 @@ import {
 const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin", label: "Overview", icon: Gauge },
   { href: "/admin/questions", label: "Questions", icon: ListChecks },
-  { href: "/admin/exams", label: "Exams & specialties", icon: GraduationCap },
+  { href: "/admin/exams", label: "Exams", icon: GraduationCap },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/plans", label: "Plans", icon: CreditCard },
 ];
