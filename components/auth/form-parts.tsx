@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ export function Field({
   defaultValue,
   placeholder,
   hint,
+  error,
 }: {
   label: string;
   name: string;
@@ -24,6 +26,8 @@ export function Field({
   defaultValue?: string;
   placeholder?: string;
   hint?: string;
+  /** Replaces the hint and marks the input invalid. */
+  error?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -36,9 +40,21 @@ export function Field({
         required={required}
         defaultValue={defaultValue}
         placeholder={placeholder}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={hint || error ? `${name}-hint` : undefined}
         className="h-11"
       />
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {(hint || error) && (
+        <p
+          id={`${name}-hint`}
+          className={cn(
+            "text-xs",
+            error ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          {error ?? hint}
+        </p>
+      )}
     </div>
   );
 }

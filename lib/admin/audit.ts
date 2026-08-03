@@ -42,7 +42,10 @@ export type AuditAction =
   | "plan.create"
   | "plan.update"
   | "plan.delete"
-  | "plan.reorder";
+  | "plan.reorder"
+  | "message.handle"
+  | "message.reopen"
+  | "message.delete";
 
 /**
  * Append an admin action to `audit_logs`.

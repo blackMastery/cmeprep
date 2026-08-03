@@ -261,6 +261,39 @@ export const emailSchema = z
   .toLowerCase()
   .email("Enter a valid email address");
 
+/* ── Contact form ───────────────────────────────────────────────── */
+
+export const CONTACT_SUBJECTS = [
+  "General enquiry",
+  "Billing or payment",
+  "Technical problem",
+  "Question or content feedback",
+  "Teams & enterprise",
+  "Other",
+] as const;
+
+/**
+ * Public, unauthenticated input — the only schema in this file that anyone on
+ * the internet can reach, so the length caps are the real defence rather than
+ * a UX nicety.
+ */
+export const contactSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Enter your name")
+    .max(120, "That name is too long"),
+  email: emailSchema,
+  subject: z.enum(CONTACT_SUBJECTS, { message: "Pick a subject" }),
+  body: z
+    .string()
+    .trim()
+    .min(20, "Tell us a little more — 20 characters at least")
+    .max(4000, "Keep it under 4000 characters"),
+});
+
+export type ContactInput = z.infer<typeof contactSchema>;
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters");

@@ -222,6 +222,19 @@ export type Plan = Timestamps & {
   updated_at: string | null;
 };
 
+/** Contact form submission. Service-role read/write only — never client-read. */
+export type ContactMessage = Timestamps & {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  body: string;
+  /** Set when a signed-in visitor submitted; null for anonymous senders. */
+  user_id: string | null;
+  handled_at: string | null;
+  handled_by: string | null;
+};
+
 /** auth.users bridge (public.user_emails view) — service-role read only. */
 export type UserEmail = {
   id: string;
@@ -256,6 +269,7 @@ export type Database = {
       subscriptions: Table<Subscription>;
       payment_events: Table<PaymentEvent>;
       plans: Table<Plan>;
+      contact_messages: Table<ContactMessage>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;

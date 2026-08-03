@@ -5,15 +5,20 @@ import {
   FolderTree,
   GraduationCap,
   ListChecks,
+  Mail,
   Plus,
   Users,
 } from "lucide-react";
 import { contentCounts } from "@/lib/admin/questions";
+import { unhandledMessageCount } from "@/lib/admin/messages";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default async function AdminOverviewPage() {
-  const counts = await contentCounts();
+  const [counts, openMessages] = await Promise.all([
+    contentCounts(),
+    unhandledMessageCount(),
+  ]);
 
   const stats = [
     { icon: ListChecks, label: "Published questions", value: counts.published },
@@ -23,6 +28,7 @@ export default async function AdminOverviewPage() {
     { icon: FolderTree, label: "Subjects", value: counts.subjects },
     { icon: Users, label: "Users", value: counts.users },
     { icon: CreditCard, label: "Plans", value: counts.plans },
+    { icon: Mail, label: "Open messages", value: openMessages },
   ];
 
   return (

@@ -31,6 +31,47 @@ export const SITE_DESCRIPTION =
 export const SUPPORT_EMAIL = "support@cmeprep.me";
 
 /**
+ * WhatsApp contact.
+ *
+ * Stored in E.164 (leading +, no spaces) as the canonical form, with the
+ * grouped version kept separately for display — +592 is Guyana and the
+ * national number is seven digits, which no generic formatter gets right.
+ */
+export const WHATSAPP_NUMBER = "+5926419483";
+export const WHATSAPP_DISPLAY = "+592 641 9483";
+
+/**
+ * wa.me takes digits only — a leading + or any spaces produce a "phone number
+ * shared via url is invalid" page rather than a chat.
+ */
+export const WHATSAPP_HREF = `https://wa.me/${WHATSAPP_NUMBER.replace(/\D/g, "")}`;
+
+/**
+ * Social profiles, rendered by components/marketing/social-links.tsx.
+ *
+ * Fill in the `href` to publish a link. An entry with an empty href renders
+ * nothing at all — same rule as the SECTIONS array on the About page: an
+ * unfinished entry must never reach a live marketing page, and a social icon
+ * that goes nowhere is worse than no icon.
+ */
+export type SocialPlatform = "instagram" | "facebook" | "whatsapp";
+
+export const SOCIAL_LINKS: readonly {
+  platform: SocialPlatform;
+  label: string;
+  href: string;
+}[] = [
+  { platform: "instagram", label: "Instagram", href: "https://www.instagram.com/cmeprep/" },
+  { platform: "facebook", label: "Facebook", href: "https://www.facebook.com/CmePrep" },
+  { platform: "whatsapp", label: "WhatsApp", href: WHATSAPP_HREF },
+];
+
+/** Only the profiles that actually have a URL. */
+export function activeSocialLinks() {
+  return SOCIAL_LINKS.filter((link) => link.href.trim() !== "");
+}
+
+/**
  * The generated social cards (app/opengraph-image.tsx, app/twitter-image.tsx).
  *
  * These MUST be repeated on any page that declares its own `openGraph` or

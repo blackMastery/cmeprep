@@ -1,9 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Mail } from "lucide-react";
-import { OG_IMAGE, SUPPORT_EMAIL, TWITTER_IMAGE } from "@/lib/site";
+import { Mail, MessageCircle } from "lucide-react";
+import {
+  OG_IMAGE,
+  SUPPORT_EMAIL,
+  TWITTER_IMAGE,
+  WHATSAPP_DISPLAY,
+  WHATSAPP_HREF,
+} from "@/lib/site";
+import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { EcgDivider } from "@/components/brand/ecg-line";
+import { ContactForm } from "@/components/marketing/contact-form";
+import { SocialLinks } from "@/components/marketing/social-links";
 
 const ABOUT_TITLE = "About";
 const ABOUT_DESCRIPTION =
@@ -59,7 +68,11 @@ const SECTIONS: readonly AboutSection[] = [
   // },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  // Only to pre-fill the reply-to address — a signed-in visitor should not
+  // have to retype what we already know.
+  const user = await getCurrentUser();
+
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:py-16">
       {SECTIONS.map((section, index) => (
@@ -89,6 +102,52 @@ export default function AboutPage() {
 
       <EcgDivider className="my-12 text-primary/30" />
 
+      <section id="contact" className="scroll-mt-20">
+        <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+          Contact us
+        </h2>
+        <p className="mt-3 text-lg leading-relaxed text-muted-foreground">
+          Questions about a plan, a question in the bank, or access for your
+          institution? Send us a message and we&apos;ll come back to you.
+        </p>
+
+        <div className="mt-8 rounded-2xl border border-border p-6 sm:p-7">
+          <ContactForm defaultEmail={user?.email} />
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="space-y-1.5">
+            <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+              <Mail className="size-4 shrink-0" aria-hidden="true" />
+              Prefer email?
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+            </p>
+            <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+              <MessageCircle className="size-4 shrink-0" aria-hidden="true" />
+              WhatsApp
+              <a
+                href={WHATSAPP_HREF}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                {WHATSAPP_DISPLAY}
+              </a>
+            </p>
+          </div>
+          <SocialLinks
+            linkClassName="text-muted-foreground hover:text-foreground"
+          />
+        </div>
+      </section>
+
+      <EcgDivider className="my-12 text-primary/30" />
+
       <section className="rounded-2xl bg-secondary/40 p-7">
         <h2 className="font-display text-2xl font-semibold tracking-tight">
           Start practising
@@ -106,17 +165,6 @@ export default function AboutPage() {
             <Link href="/#pricing">See pricing</Link>
           </Button>
         </div>
-
-        <p className="mt-6 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-          <Mail className="size-4 shrink-0" aria-hidden="true" />
-          Questions?
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            className="font-medium text-primary underline underline-offset-2"
-          >
-            {SUPPORT_EMAIL}
-          </a>
-        </p>
       </section>
     </div>
   );

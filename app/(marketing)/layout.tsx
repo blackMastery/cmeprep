@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { MarketingMobileNav } from "@/components/marketing/mobile-nav";
+import { SocialLinks } from "@/components/marketing/social-links";
+import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/site";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -76,6 +78,10 @@ export default async function MarketingLayout({
                 Practice questions and timed mock exams for medical board and
                 exit examinations.
               </p>
+              <SocialLinks
+                className="mt-4 -ml-2"
+                linkClassName="text-[#a9a29b] hover:bg-white/10 hover:text-white"
+              />
             </div>
             <div className="flex gap-12 text-sm">
               <div className="space-y-2">
@@ -95,11 +101,19 @@ export default async function MarketingLayout({
               </div>
               <div className="space-y-2">
                 <p className="font-medium text-white">Support</p>
-                <a
-                  href="mailto:support@cmeprep.me"
+                <Link
+                  href="/about#contact"
                   className="block text-[#a9a29b] hover:text-white"
                 >
                   Contact
+                </Link>
+                <a
+                  href={WHATSAPP_HREF}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-[#a9a29b] hover:text-white"
+                >
+                  WhatsApp {WHATSAPP_DISPLAY}
                 </a>
                 <Link
                   href="/privacy"

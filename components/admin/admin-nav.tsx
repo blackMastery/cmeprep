@@ -5,6 +5,7 @@ import {
   Gauge,
   GraduationCap,
   ListChecks,
+  Mail,
   Users,
 } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin/exams", label: "Exams", icon: GraduationCap },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/plans", label: "Plans", icon: CreditCard },
+  { href: "/admin/messages", label: "Messages", icon: Mail },
 ];
 
 export function AdminSidebar() {
