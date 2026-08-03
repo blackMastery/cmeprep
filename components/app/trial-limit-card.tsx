@@ -35,7 +35,7 @@ export function TrialLimitCard({
 
         {shown.length > 0 && (
           <>
-            <EcgDivider className="text-primary/30" />
+            <EcgDivider />
             <div
               className={
                 shown.length > 1 ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"

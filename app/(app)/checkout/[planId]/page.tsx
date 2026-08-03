@@ -136,7 +136,7 @@ export default async function CheckoutPage(
               {plan.features.map((feature) => (
                 <li key={feature} className="flex items-start gap-2.5">
                   <Check
-                    className="mt-0.5 size-4 shrink-0 text-success"
+                    className="mt-0.5 size-4 shrink-0 text-teal"
                     strokeWidth={3}
                     aria-hidden="true"
                   />
@@ -146,7 +146,7 @@ export default async function CheckoutPage(
             </ul>
           )}
 
-          <EcgDivider className="text-primary/30" />
+          <EcgDivider />
 
           <section aria-labelledby="exam-choice-heading" className="space-y-3">
             <div>
@@ -186,7 +186,7 @@ export default async function CheckoutPage(
             </p>
           )}
 
-          <EcgDivider className="text-primary/30" />
+          <EcgDivider />
 
           {selected ? (
             <PayPalCheckoutButtons planId={plan.id} examId={selected.id} />

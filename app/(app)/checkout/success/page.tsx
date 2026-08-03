@@ -71,7 +71,7 @@ export default async function CheckoutSuccessPage() {
             </p>
           </div>
 
-          <EcgDivider className="text-primary/30" />
+          <EcgDivider />
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Button size="lg" asChild>

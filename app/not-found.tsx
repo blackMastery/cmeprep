@@ -7,7 +7,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 px-4 text-center">
       <Logo tagline="stacked" />
-      <EcgDivider className="max-w-xs text-primary/30" />
+      <EcgDivider className="max-w-xs" />
       <div className="space-y-2">
         <h1 className="font-display text-3xl font-semibold">Page not found</h1>
         <p className="max-w-sm text-muted-foreground">

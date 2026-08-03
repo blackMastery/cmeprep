@@ -107,6 +107,8 @@ function Option({
           : "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[0.55rem] text-muted-foreground"
       }
     >
+      {/* Stays --success: this mock depicts the real correct-answer state,
+          and it sits in a border-success/bg-success container. */}
       {correct && (
         <Check
           className="size-2.5 shrink-0 text-success"

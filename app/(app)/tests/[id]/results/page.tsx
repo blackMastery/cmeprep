@@ -5,7 +5,8 @@ import { ArrowRight, LayoutDashboard } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { finalizeIfExpired, getTestForUser } from "@/lib/tests";
 import { getTestResults } from "@/lib/results";
-import { formatDuration } from "@/lib/format";
+import { accuracyTone, formatDuration } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
@@ -55,7 +56,7 @@ export default async function ResultsPage(
         </p>
       </div>
 
-      <EcgDivider className="my-8 text-primary/30" />
+      <EcgDivider className="my-8" />
 
       {/* Per-subject accuracy */}
       {results.breakdown.length > 0 && (
@@ -74,10 +75,14 @@ export default async function ResultsPage(
                       </span>
                     </span>
                   </div>
-                  {/* crimson fill on a blush track */}
+                  {/* Fill is toned by value on a blush track — a subject you
+                      scored 30% on must not read as a confident green bar. */}
                   <div className="h-2 overflow-hidden rounded-full bg-secondary">
                     <div
-                      className="h-full rounded-full bg-primary transition-[width]"
+                      className={cn(
+                        "h-full rounded-full transition-[width]",
+                        accuracyTone(subject.accuracy)
+                      )}
                       style={{ width: `${subject.accuracy}%` }}
                     />
                   </div>

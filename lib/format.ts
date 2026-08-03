@@ -23,6 +23,25 @@ export function priceLabel(cents: number): string {
     : `$${dollars.toFixed(2)}`;
 }
 
+/**
+ * Accuracy meters read fail→pass, so their fill is chosen by value rather
+ * than being a flat brand colour: the "Weak areas" card lists your LOWEST
+ * scoring subjects, and painting a 32% subject confident green would say the
+ * opposite of what the card is for.
+ *
+ * Both thresholds are exported so retuning them is one edit, not a hunt
+ * through components. They are a starting guess, not a published pass mark.
+ */
+export const ACCURACY_WEAK = 50;
+export const ACCURACY_PASS = 75;
+
+/** Bar-fill class for an accuracy percentage — red below a pass, green at one. */
+export function accuracyTone(pct: number): string {
+  if (pct >= ACCURACY_PASS) return "bg-teal";
+  if (pct >= ACCURACY_WEAK) return "bg-sun";
+  return "bg-destructive";
+}
+
 /** Seconds → `M:SS`, or `H:MM:SS` past an hour. */
 export function formatDuration(totalSec: number): string {
   const s = Math.max(0, Math.floor(totalSec));

@@ -153,7 +153,7 @@ export default function PrivacyPage() {
         Last updated {LAST_UPDATED}
       </p>
 
-      <EcgDivider className="my-10 text-primary/30" />
+      <EcgDivider className="my-10" />
 
       <div className="space-y-10">
         {SECTIONS.map((section) => (
@@ -191,7 +191,7 @@ export default function PrivacyPage() {
         ))}
       </div>
 
-      <EcgDivider className="my-10 text-primary/30" />
+      <EcgDivider className="my-10" />
 
       <p className="text-sm text-muted-foreground">
         See also our{" "}

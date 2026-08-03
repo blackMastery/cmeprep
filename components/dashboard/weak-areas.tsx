@@ -1,4 +1,6 @@
 import type { SubjectAccuracy } from "@/lib/supabase/types";
+import { accuracyTone } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function WeakAreas({ subjects }: { subjects: SubjectAccuracy[] }) {
@@ -29,7 +31,10 @@ export function WeakAreas({ subjects }: { subjects: SubjectAccuracy[] }) {
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
                   <div
-                    className="h-full rounded-full bg-primary"
+                    className={cn(
+                      "h-full rounded-full",
+                      accuracyTone(subject.accuracy_pct)
+                    )}
                     style={{ width: `${subject.accuracy_pct}%` }}
                   />
                 </div>

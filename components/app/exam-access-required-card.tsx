@@ -45,7 +45,7 @@ export function ExamAccessRequiredCard({
 
         {exams.length > 0 && (
           <>
-            <EcgDivider className="text-primary/30" />
+            <EcgDivider />
             <div className="grid gap-2.5">
               {exams.map((exam) => (
                 <LockedExamRow

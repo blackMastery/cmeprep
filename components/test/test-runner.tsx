@@ -333,8 +333,10 @@ export function TestRunner({ state }: { state: TakeState }) {
           </div>
         </div>
 
+        {/* Teal: this is forward progress through the paper, not a resource
+            being used up. */}
         <div
-          className="h-0.5 bg-primary transition-[width] duration-300"
+          className="h-0.5 bg-teal transition-[width] duration-300"
           style={{ width: `${((index + 1) / questions.length) * 100}%` }}
           aria-hidden="true"
         />

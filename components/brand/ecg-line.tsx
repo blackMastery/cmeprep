@@ -49,7 +49,10 @@ export function EcgDivider({
     <div
       aria-hidden="true"
       className={cn(
-        "flex w-full items-center gap-0 text-border",
+        // Teal by default so the motif lives in one place. A caller passing
+        // its own text-* still wins through cn(), which is how the few
+        // deliberately-coral placements stay coral.
+        "flex w-full items-center gap-0 text-teal/40",
         className
       )}
     >

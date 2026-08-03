@@ -77,7 +77,7 @@ export default async function AboutPage() {
     <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:py-16">
       {SECTIONS.map((section, index) => (
         <section key={section.heading}>
-          {index > 0 && <EcgDivider className="my-12 text-primary/30" />}
+          {index > 0 && <EcgDivider className="my-12" />}
 
           {index === 0 ? (
             <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -100,7 +100,7 @@ export default async function AboutPage() {
         </section>
       ))}
 
-      <EcgDivider className="my-12 text-primary/30" />
+      <EcgDivider className="my-12" />
 
       <section id="contact" className="scroll-mt-20">
         <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -146,7 +146,7 @@ export default async function AboutPage() {
         </div>
       </section>
 
-      <EcgDivider className="my-12 text-primary/30" />
+      <EcgDivider className="my-12" />
 
       <section className="rounded-2xl bg-secondary/40 p-7">
         <h2 className="font-display text-2xl font-semibold tracking-tight">

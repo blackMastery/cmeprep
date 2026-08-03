@@ -81,6 +81,12 @@
   --coral-light: #f37844;
   --coral-deep: #c44a18; /* mockup --coral-dark; button fill, 4.84:1 on white */
   --coral-deeper: #a63d12; /* hover fill + text on blush */
+  /* The brand green, and the same story as --coral above: on the cream
+     background --teal is 3.15:1, which clears WCAG 1.4.11 (3:1) for icons,
+     bars, borders and fills but falls short of AA for text. Teal TEXT uses
+     --teal-deep (4.92:1). Green here means "progress toward passing" —
+     --success below is reserved for "this answer was correct", and the two
+     must not be swapped. */
   --teal: #1d9e75;
   --teal-light: #2bb888;
   --teal-deep: #167a5b;

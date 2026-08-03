@@ -96,6 +96,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={TrendingUp}
           label="Accuracy"
+          tone="teal"
           value={
             userStats?.attempted ? `${Math.round(userStats.accuracy_pct)}%` : "—"
           }
@@ -108,6 +109,7 @@ export default async function DashboardPage() {
         <StatCard
           icon={Flame}
           label="Day streak"
+          tone="teal"
           value={streak}
           hint={streak > 0 ? "Keep it going" : "Answer a question today"}
         />

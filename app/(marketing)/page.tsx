@@ -235,7 +235,7 @@ export default async function MarketingPage() {
               {EXAMINATIONS.map((exam) => (
                 <li key={exam.code} className="flex items-start gap-2.5">
                   <Check
-                    className="mt-1 size-4 shrink-0 text-primary"
+                    className="mt-1 size-4 shrink-0 text-teal"
                     strokeWidth={3}
                     aria-hidden="true"
                   />

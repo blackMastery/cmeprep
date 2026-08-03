@@ -60,7 +60,9 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
                 <Check
                   className={cn(
                     "mt-0.5 size-4 shrink-0",
-                    plan.featured ? "text-primary-foreground" : "text-success"
+                    // --teal, not --success: these ticks are decorative, and
+                    // --success is reserved for "your answer was correct".
+                    plan.featured ? "text-primary-foreground" : "text-teal"
                   )}
                   strokeWidth={3}
                   aria-hidden="true"
