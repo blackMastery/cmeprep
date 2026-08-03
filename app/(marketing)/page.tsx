@@ -68,8 +68,8 @@ const FEATURES = [
 
 const EXAMINATIONS = [
   { code: "CAMC", name: "Caribbean Medical Board Exams" },
-  { code: "USMLE Pt 1", name: "USA Medical Board Exams — Basic Sciences" },
-  { code: "USMLE Pt 2 CK", name: "USA Medical Board Exams — Clinical Knowledge" },
+  { code: "USMLE Pt. 1", name: "USA Medical Board Exams — Basic Sciences" },
+  { code: "USMLE Pt. 2 CK", name: "USA Medical Board Exams — Clinical Knowledge" },
   { code: "PLAB", name: "UK Medical Board Exams" },
   { code: "NCLEX", name: "USA Nursing Board Exams" },
   { code: "MBBS", name: "Exit Exams" },
@@ -240,9 +240,12 @@ export default async function MarketingPage() {
                     aria-hidden="true"
                   />
                   <span>
-                    <span className="font-semibold">{exam.code}</span>{" "}
+                    {/* Description leads, abbreviation trails in brackets —
+                        the exam someone is sitting is the thing they scan for,
+                        not the acronym. */}
+                    <span className="font-semibold">{exam.name}</span>{" "}
                     <span className="text-sm text-muted-foreground">
-                      ({exam.name})
+                      ({exam.code})
                     </span>
                   </span>
                 </li>
