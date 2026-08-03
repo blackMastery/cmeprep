@@ -101,7 +101,7 @@ export function renderOgImage(input: {
             }}
           />
           <div style={{ display: "flex", fontSize: 24, color: INK_MUTED }}>
-            CAMC · USMLE · PLAB · NCLEX · MBBS · MDCN
+            CAMC · USMLE · PLAB · NCLEX · MBBS · OSCE
           </div>
         </div>
       </div>

@@ -49,7 +49,6 @@ export const metadata: Metadata = {
     "NCLEX practice questions",
     "CAMC exam prep",
     "MBBS exit exam",
-    "MDCN exam",
     "OSCE stations",
     "timed mock exams",
   ],

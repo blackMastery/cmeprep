@@ -73,9 +73,10 @@ const EXAMINATIONS = [
   { code: "PLAB", name: "UK Medical Board Exams" },
   { code: "NCLEX", name: "USA Nursing Board Exams" },
   { code: "MBBS", name: "Exit Exams" },
-  // MDCN = Medical and Dental Council of Nigeria. Was "MCDN", which is also
-  // the acronym people search for, so the metadata has to match.
-  { code: "MDCN", name: "Nigerian Medical Board Exams" },
+  {
+    code: "Practical OSCE",
+    name: "Objective Structured Clinical Examination",
+  },
 ];
 
 // No metadata export on purpose: the root layout's title, description,

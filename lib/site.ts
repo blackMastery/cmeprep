@@ -26,7 +26,7 @@ export const SITE_TAGLINE =
  * characters — Google truncates search snippets around there.
  */
 export const SITE_DESCRIPTION =
-  "Practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and MDCN. Start free.";
+  "Practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE. Start free.";
 
 export const SUPPORT_EMAIL = "support@cmeprep.me";
 
