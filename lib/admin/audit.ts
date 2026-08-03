@@ -10,6 +10,12 @@ export type AuditAction =
   | "question.delete"
   | "question.restore"
   | "question.bulk_import"
+  // Bulk actions write ONE summary row with target null and the ids in meta,
+  // matching question.bulk_import — twenty rows per click would drown the log.
+  | "question.bulk_publish"
+  | "question.bulk_unpublish"
+  | "question.bulk_delete"
+  | "question.bulk_restore"
   | "question.image.remove"
   | "option.correctness_change"
   | "exam.create"

@@ -137,11 +137,21 @@ export function AdminSubmit({
   className,
   variant,
   size = "default",
+  name,
+  value,
+  disabled = false,
 }: {
   children: React.ReactNode;
   className?: string;
   variant?: React.ComponentProps<typeof Button>["variant"];
   size?: React.ComponentProps<typeof Button>["size"];
+  /**
+   * Lets one form carry two opposite submits (publish / unpublish): the
+   * submitter's name and value land in FormData, so no hidden input is needed.
+   */
+  name?: string;
+  value?: string;
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -149,7 +159,9 @@ export function AdminSubmit({
       type="submit"
       variant={variant}
       size={size}
-      disabled={pending}
+      name={name}
+      value={value}
+      disabled={pending || disabled}
       aria-busy={pending}
       className={className}
     >
