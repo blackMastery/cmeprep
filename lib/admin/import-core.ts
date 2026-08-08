@@ -35,6 +35,16 @@ export const IMPORT_ROW_CAP = 2000;
 export const TEMPLATE_VALIDATION_ROWS = 500;
 
 /**
+ * Images accepted per upload.
+ *
+ * Each one costs a Storage round-trip inside the commit route's 60s
+ * `maxDuration`, on top of the inserts — a much tighter budget than
+ * IMPORT_ROW_CAP, which only has to pay for chunked inserts. Rows without
+ * images are unaffected.
+ */
+export const IMPORT_IMAGE_CAP = 200;
+
+/**
  * Stand-in subjectId for rows whose subject will be auto-created at commit.
  * All-zeros is a valid Postgres uuid (and passes z.guid()), so rows can be
  * schema-validated at preview time before the real id exists.
@@ -156,6 +166,13 @@ export const COLUMNS: readonly ColumnDef[] = [
     note: 'Required. Letters of the correct option column(s), e.g. "A" or "A,C". Multi questions need at least two.',
     width: 10,
   },
+  {
+    key: "image",
+    header: "Image",
+    required: false,
+    note: "Optional. Insert a picture into this cell (either Place over Cells or Place in Cell works), or paste an https:// link to one. PNG, JPEG or WebP, up to 5 MB.",
+    width: 55,
+  },
 ];
 
 /**
@@ -192,6 +209,25 @@ export const EXAMPLE_ROWS: readonly Record<string, string>[] = [
   },
 ];
 
+/**
+ * What the server found in a row's Image cell, reduced to something this
+ * module can reason about.
+ *
+ * Metadata only — the picture bytes stay on the server side of the boundary
+ * (lib/admin/import-images.ts), so the core stays cheap to run and trivial to
+ * unit-test. `sha256` is what commit turns into a content-addressed Storage
+ * path, which is why the hash is computed during extraction rather than at
+ * upload time.
+ */
+export type RowImageMeta =
+  | { kind: "embedded"; sha256: string; contentType: string; byteLength: number }
+  | { kind: "error"; message: string };
+
+/** The image a valid row will end up with, resolved at commit. */
+export type RowImageRef =
+  | { kind: "embedded"; sha256: string; contentType: string }
+  | { kind: "url"; url: string };
+
 export type Severity = "error" | "warning" | "info";
 
 export type ReportLine = {
@@ -209,6 +245,13 @@ export type ValidRow = {
   subjectName: string;
   /** Ready for questionSchema/insert. */
   input: QuestionInput;
+  /**
+   * Image to attach, if any. Deliberately NOT folded into `input.imagePath`:
+   * the Storage path does not exist until commit uploads the bytes, and the
+   * question type stays mcq_single/mcq_multi either way, so questionSchema
+   * has nothing to say about it.
+   */
+  image?: RowImageRef;
   /** Normalised stem, for duplicate detection against the DB. */
   stemNorm: string;
 };
@@ -232,6 +275,8 @@ export type ImportAnalysis = {
     errorRows: number;
     warnings: number;
     skipped: number;
+    /** Valid rows carrying an image, embedded or by URL. */
+    withImages: number;
   };
 };
 
@@ -262,6 +307,27 @@ export function normalizeKey(value: string): string {
 /** Stem comparison for duplicate detection (in-file and against the DB). */
 export function normalizeStem(value: string): string {
   return normalizeKey(value);
+}
+
+/**
+ * Accept an https:// image link, reject everything else.
+ *
+ * http:// is refused rather than upgraded: the server would be fetching an
+ * unauthenticated resource over the wire and pinning it into the question
+ * bank forever. Other schemes (file:, data:, gs:) are not fetchable at all.
+ */
+export function parseImageUrl(value: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  return parsed.protocol === "https:" ? parsed.toString() : null;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
 
 // ── Cell coercion ───────────────────────────────────────────
@@ -392,7 +458,9 @@ function isExampleRow(
 export function parseMatrix(
   input: {
     header: unknown[];
-    rows: { rowNumber: number; cells: unknown[] }[];
+    rows: { rowNumber: number; cells: unknown[]; image?: RowImageMeta }[];
+    /** File-level notes from image extraction (pictures outside the column…). */
+    imageWarnings?: readonly string[];
   },
   taxonomy: TaxonomySnapshot,
   opts: {
@@ -414,7 +482,13 @@ export function parseMatrix(
     errorRows: 0,
     warnings: 0,
     skipped: 0,
+    withImages: 0,
   };
+
+  for (const message of input.imageWarnings ?? []) {
+    counts.warnings += 1;
+    lines.push({ row: null, severity: "warning", message });
+  }
 
   const { map: headerMap, errors: headerErrors } = buildHeaderMap(input.header);
   if (headerErrors.length > 0) {
@@ -447,6 +521,7 @@ export function parseMatrix(
     rowNumber: number;
     fields: Map<string, string>;
     cellErrors: string[];
+    image?: RowImageMeta;
   };
   const prepared: PreparedRow[] = [];
 
@@ -462,7 +537,13 @@ export function parseMatrix(
       }
       const coerced = coerceCellValue(row.cells[index]);
       if ("cellError" in coerced) {
-        cellErrors.push(`${column.header} ${coerced.cellError}`);
+        // An "Place in Cell" picture IS an error cell (t="e", #VALUE!) with a
+        // rich-value pointer alongside — the cell only means anything once
+        // the image has been extracted. Reporting the raw #VALUE! would tell
+        // an admin their perfectly good picture is a broken formula.
+        if (column.key !== "image") {
+          cellErrors.push(`${column.header} ${coerced.cellError}`);
+        }
         fields.set(column.key, "");
       } else {
         fields.set(column.key, coerced.text.replace(NBSP, " ").trim());
@@ -470,12 +551,20 @@ export function parseMatrix(
     }
 
     // Blank = every MAPPED column empty (content in unknown columns ignored).
+    // A picture with no text alongside it is NOT blank: dropping it silently
+    // would swallow a misplaced image instead of telling anyone.
     const isBlank =
       cellErrors.length === 0 &&
+      row.image === undefined &&
       [...fields.values()].every((v) => v === "");
     if (isBlank) continue;
 
-    prepared.push({ rowNumber: row.rowNumber, fields, cellErrors });
+    prepared.push({
+      rowNumber: row.rowNumber,
+      fields,
+      cellErrors,
+      image: row.image,
+    });
   }
 
   if (prepared.length > IMPORT_ROW_CAP) {
@@ -490,7 +579,22 @@ export function parseMatrix(
     };
   }
 
-  for (const { rowNumber, fields, cellErrors } of prepared) {
+  const imageRowCount = prepared.filter(
+    (row) => row.image !== undefined || (row.fields.get("image") ?? "") !== ""
+  ).length;
+  if (imageRowCount > IMPORT_IMAGE_CAP) {
+    return {
+      fileErrors: [
+        `This file has ${imageRowCount} rows with images — the limit is ${IMPORT_IMAGE_CAP} per upload. Split it into smaller files (nothing was imported).`,
+      ],
+      lines,
+      validRows,
+      creationPlan,
+      counts,
+    };
+  }
+
+  for (const { rowNumber, fields, cellErrors, image } of prepared) {
     counts.dataRows += 1;
     const rowErrors: string[] = [...cellErrors];
     const rowWarnings: string[] = [];
@@ -543,8 +647,10 @@ export function parseMatrix(
     if (rawType !== "") {
       const alias = TYPE_ALIASES[rawType];
       if (alias === "image") {
+        // An image is orthogonal to the answer shape now: put the picture in
+        // the Image column and leave Type saying how many answers are right.
         rowErrors.push(
-          "Image questions can't be bulk-imported — create them in the question editor, where the image can be uploaded."
+          'Type "image" is no longer used — leave Type blank or use single/multi, and put the picture in the Image column.'
         );
       } else if (!alias) {
         rowErrors.push(
@@ -569,6 +675,34 @@ export function parseMatrix(
         rowErrors.push(
           `Difficulty "${fields.get("difficulty")}" isn't recognised — use easy, medium or hard.`
         );
+      }
+    }
+
+    // Image: an inserted picture, or an https:// link typed in the cell.
+    // Never both — that is an admin who changed their mind halfway, and
+    // guessing which one they meant is how the wrong figure ships.
+    let imageRef: RowImageRef | undefined;
+    const imageCellText = fields.get("image") ?? "";
+    if (image?.kind === "error") {
+      rowErrors.push(`Image: ${image.message}`);
+    } else if (image?.kind === "embedded" && imageCellText !== "") {
+      rowErrors.push(
+        "Image has both a picture and text in the cell — remove one."
+      );
+    } else if (image?.kind === "embedded") {
+      imageRef = {
+        kind: "embedded",
+        sha256: image.sha256,
+        contentType: image.contentType,
+      };
+    } else if (imageCellText !== "") {
+      const url = parseImageUrl(imageCellText);
+      if (!url) {
+        rowErrors.push(
+          `Image must be an inserted picture or an https:// link — "${truncate(imageCellText, 60)}" is neither.`
+        );
+      } else {
+        imageRef = { kind: "url", url };
       }
     }
 
@@ -704,6 +838,10 @@ export function parseMatrix(
       difficulty,
       stem: fields.get("stem") ?? "",
       explanation: fields.get("explanation") ?? "",
+      // Always null here — the Storage path is not minted until commit
+      // uploads the bytes. `imageRef` on the ValidRow carries the intent, and
+      // since the type stays mcq_single/mcq_multi, questionSchema's only rule
+      // about imagePath (image_based needs one) never fires.
       imagePath: null,
       isPublished: false,
       options: collected.map(({ label, isCorrect }) => ({ label, isCorrect })),
@@ -752,12 +890,14 @@ export function parseMatrix(
     }
 
     counts.valid += 1;
+    if (imageRef) counts.withImages += 1;
     validRows.push({
       rowNumber,
       examName,
       specialtyName,
       subjectName,
       input: candidate,
+      image: imageRef,
       stemNorm,
     });
   }

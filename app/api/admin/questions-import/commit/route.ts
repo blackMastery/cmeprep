@@ -2,7 +2,12 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { requireAdminJson } from "@/lib/admin/api-auth";
 import { audit } from "@/lib/admin/audit";
-import { analyzeUpload } from "@/lib/admin/import";
+import {
+  analyzeUpload,
+  deleteImportObject,
+  deleteUploadedImages,
+  uploadRowImages,
+} from "@/lib/admin/import";
 import type { ImportCommitResponse, ImportReport } from "@/lib/admin/import-api";
 import {
   PLACEHOLDER_SUBJECT_ID,
@@ -46,12 +51,13 @@ function fail(
 
 /**
  * POST /api/admin/questions-import/commit
- * FormData: file (.xlsx), autoCreate ("true"|"false"), fileSha256, examId
+ * JSON: { objectPath, examId, autoCreate, fileName, fileSha256 }
  *
  * Re-parses and re-validates the file from scratch (same code path as
  * preview), creates any planned specialties/subjects under the forced exam,
- * then inserts every valid row as a DRAFT question. All-or-nothing: any
- * insert failure deletes everything this request inserted.
+ * uploads any images the sheet carries, then inserts every valid row as a
+ * DRAFT question. All-or-nothing: any insert failure deletes everything this
+ * request created — questions AND the image objects it added.
  */
 
 /**
@@ -59,8 +65,9 @@ function fail(
  * `compensate()`. A platform timeout kills the process instead, leaving
  * orphaned drafts and no error — so this must stay comfortably above the
  * worst-case run: a full IMPORT_ROW_CAP file, re-parsed, plus one round-trip
- * per newly created taxonomy row. 60s is Vercel's Hobby ceiling and within
- * Pro's, so it is safe on either plan.
+ * per newly created taxonomy row and per image (bounded by IMPORT_IMAGE_CAP,
+ * six at a time). 60s is Vercel's Hobby ceiling and within Pro's, so it is
+ * safe on either plan.
  */
 export const maxDuration = 60;
 
@@ -69,15 +76,18 @@ export async function POST(request: Request) {
   if ("response" in gate) return gate.response;
   const { user } = gate;
 
-  const form = await request.formData().catch(() => null);
-  if (!form) return fail(400, "Invalid upload.");
+  const body = (await request.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (!body) return fail(400, "Invalid request.");
 
-  const expectedSha = String(form.get("fileSha256") ?? "");
+  const expectedSha = String(body.fileSha256 ?? "");
   if (!/^[a-f0-9]{64}$/.test(expectedSha)) {
     return fail(400, "Run preview first — the commit is missing its file fingerprint.");
   }
 
-  const examIdParsed = uuid().safeParse(String(form.get("examId") ?? ""));
+  const examIdParsed = uuid().safeParse(String(body.examId ?? ""));
   if (!examIdParsed.success) {
     return fail(400, "Open import from an exam page — examId is required.");
   }
@@ -90,8 +100,10 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (!exam) return fail(404, "That exam no longer exists.");
 
-  const autoCreate = form.get("autoCreate") === "true";
-  const result = await analyzeUpload(form.get("file"), autoCreate, {
+  const objectPath = String(body.objectPath ?? "");
+  const fileName = String(body.fileName ?? "");
+  const autoCreate = body.autoCreate === true;
+  const result = await analyzeUpload(objectPath, autoCreate, {
     id: exam.id,
     name: exam.name,
   });
@@ -282,6 +294,25 @@ export async function POST(request: Request) {
     rows.push({ ...row, subjectId });
   }
 
+  // ── Upload images before any question exists ────────────────
+  // Deliberately ahead of the insert loop: a picture that cannot be saved
+  // should stop the import outright rather than leave half the batch with
+  // images and half without. Objects created here are tracked so a later
+  // insert failure can undo them too.
+  const uploaded = await uploadRowImages(rows, result.images);
+
+  if (uploaded.failures.length > 0) {
+    await deleteUploadedImages(uploaded.created);
+    const [first] = uploaded.failures;
+    return fail(
+      422,
+      uploaded.failures.length === 1
+        ? `Row ${first.rowNumber}: ${first.message} Nothing was imported.`
+        : `${uploaded.failures.length} images could not be saved (row ${first.rowNumber}: ${first.message}) Nothing was imported.`,
+      reportOf(analysis)
+    );
+  }
+
   // ── Chunked inserts with all-or-nothing compensation ────────
   // Hard-deleting on failure is safe here for three reasons: the questions
   // were inserted THIS request, they are drafts (is_published: false), and
@@ -290,6 +321,10 @@ export async function POST(request: Request) {
   const insertedQuestionIds: string[] = [];
 
   const compensate = async (): Promise<string | null> => {
+    // Only paths this request CREATED — a content-addressed path that already
+    // existed is shared with an earlier import, and deleting it would blank
+    // the image on live questions.
+    await deleteUploadedImages(uploaded.created);
     if (insertedQuestionIds.length === 0) return null;
     const { error } = await admin
       .from("questions")
@@ -310,7 +345,7 @@ export async function POST(request: Request) {
       difficulty: row.input.difficulty,
       stem: row.input.stem,
       explanation: row.input.explanation,
-      image_path: null,
+      image_path: uploaded.pathByRow.get(row.rowNumber) ?? null,
       is_published: false, // drafts, always — publishing stays a deliberate act
       created_by: user.id,
       updated_at: now,
@@ -352,14 +387,19 @@ export async function POST(request: Request) {
 
   await audit(user.id, "question.bulk_import", null, {
     imported: insertedQuestionIds.length,
-    fileName: result.fileName,
+    fileName,
     fileSha256: result.fileSha256,
     examId: exam.id,
     createdSpecialties,
     createdSubjects,
     errorRows: analysis.counts.errorRows,
     skipped: analysis.counts.skipped,
+    images: uploaded.pathByRow.size,
+    imagesUploaded: uploaded.created.length,
   });
+
+  // The workbook has served its purpose; nothing reads it again.
+  await deleteImportObject(objectPath);
 
   revalidatePath("/admin/questions");
   revalidatePath("/admin/subjects");
@@ -368,6 +408,7 @@ export async function POST(request: Request) {
   return NextResponse.json<ImportCommitResponse>({
     ok: true,
     imported: insertedQuestionIds.length,
+    images: uploaded.pathByRow.size,
     createdExams: [],
     createdSpecialties,
     createdSubjects,

@@ -125,6 +125,14 @@ public = true
 file_size_limit = "5MiB"
 allowed_mime_types = ["image/png", "image/jpeg", "image/webp"]
 
+# Uploaded bulk-import workbooks. Private — only the server reads them, and
+# commit deletes each object when it is done. Mirrored by
+# migrations/..._storage_question_imports.sql.
+[storage.buckets."question-imports"]
+public = false
+file_size_limit = "25MiB"
+allowed_mime_types = ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true

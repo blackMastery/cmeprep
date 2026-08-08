@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   COLUMNS,
   EXAMPLE_ROWS,
+  IMPORT_IMAGE_CAP,
   IMPORT_ROW_CAP,
   PLACEHOLDER_SUBJECT_ID,
   coerceCellValue,
   normalizeStem,
+  parseImageUrl,
   parseMatrix,
   type ImportAnalysis,
+  type RowImageMeta,
   type TaxonomySnapshot,
 } from "@/lib/admin/import-core";
 
@@ -104,6 +107,12 @@ function goodRow(overrides: Record<string, unknown> = {}): Record<string, unknow
   };
 }
 
+/**
+ * `__image` stands in for what the server-side extractor found in the row's
+ * Image cell; it never corresponds to a spreadsheet column.
+ */
+const IMAGE_META = "__image";
+
 function run(
   rows: Record<string, unknown>[],
   opts: {
@@ -112,13 +121,22 @@ function run(
     startRow?: number;
     taxonomy?: TaxonomySnapshot;
     forcedExam?: { id: string; name: string };
+    imageWarnings?: string[];
   } = {}
 ): ImportAnalysis {
   const startRow = opts.startRow ?? 2;
   return parseMatrix(
     {
       header: opts.header ?? HEADERS,
-      rows: rows.map((r, i) => ({ rowNumber: startRow + i, cells: cells(r) })),
+      rows: rows.map((r, i) => {
+        const { [IMAGE_META]: image, ...fields } = r;
+        return {
+          rowNumber: startRow + i,
+          cells: cells(fields),
+          image: image as RowImageMeta | undefined,
+        };
+      }),
+      imageWarnings: opts.imageWarnings,
     },
     opts.taxonomy ?? TAXONOMY,
     {
@@ -126,6 +144,17 @@ function run(
       forcedExam: opts.forcedExam ?? FORCED,
     }
   );
+}
+
+/** A well-formed embedded picture, as the extractor would report it. */
+function embedded(overrides: Partial<Extract<RowImageMeta, { kind: "embedded" }>> = {}) {
+  return {
+    kind: "embedded" as const,
+    sha256: "a".repeat(64),
+    contentType: "image/png",
+    byteLength: 2048,
+    ...overrides,
+  };
 }
 
 // A sheet from BEFORE the Exam/Specialty columns existed.
@@ -279,9 +308,9 @@ describe("type and difficulty", () => {
     expect(a.validRows[1].input.type).toBe("mcq_multi");
   });
 
-  it("rejects image rows with a pointer to the editor", () => {
+  it("rejects Type=image with a pointer to the Image column", () => {
     const a = run([goodRow({ type: "image" })]);
-    expect(errorsOf(a, 2)[0]).toMatch(/editor/i);
+    expect(errorsOf(a, 2)[0]).toMatch(/Image column/i);
   });
 
   it("rejects unknown type and difficulty values", () => {
@@ -760,5 +789,177 @@ describe("legacy Topic column", () => {
       "11111111-1111-1111-1111-111111111111"
     );
     expect(a.creationPlan.subjects).toEqual([]);
+  });
+});
+
+// ── Image column ────────────────────────────────────────────
+
+describe("image column", () => {
+  it("attaches an embedded picture without changing the question type", () => {
+    const a = run([goodRow({ [IMAGE_META]: embedded() })]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.counts.withImages).toBe(1);
+    expect(a.validRows[0].image).toEqual({
+      kind: "embedded",
+      sha256: "a".repeat(64),
+      contentType: "image/png",
+    });
+    // Image is orthogonal to answer shape — this stays a plain single-answer
+    // MCQ, and the Storage path is not known until commit.
+    expect(a.validRows[0].input.type).toBe("mcq_single");
+    expect(a.validRows[0].input.imagePath).toBeNull();
+  });
+
+  it("attaches an image to a multi-answer question too", () => {
+    const a = run([
+      goodRow({
+        type: "multi",
+        optionC: "Aortic dissection",
+        correct: "A,B",
+        [IMAGE_META]: embedded(),
+      }),
+    ]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].input.type).toBe("mcq_multi");
+    expect(a.validRows[0].image?.kind).toBe("embedded");
+  });
+
+  it("accepts an https:// link typed into the cell", () => {
+    const a = run([goodRow({ image: "https://cdn.example.com/ecg.png" })]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.counts.withImages).toBe(1);
+    expect(a.validRows[0].image).toEqual({
+      kind: "url",
+      url: "https://cdn.example.com/ecg.png",
+    });
+  });
+
+  it("rejects a non-https link", () => {
+    const a = run([goodRow({ image: "http://cdn.example.com/ecg.png" })]);
+    expect(errorsOf(a, 2)[0]).toMatch(/https:\/\//);
+    expect(a.counts.valid).toBe(0);
+  });
+
+  it("rejects cell text that is not a URL at all", () => {
+    const a = run([goodRow({ image: "see figure 3" })]);
+    expect(errorsOf(a, 2)[0]).toMatch(/inserted picture or an https/i);
+  });
+
+  it("surfaces an extraction error against its row", () => {
+    const a = run([
+      goodRow({
+        [IMAGE_META]: {
+          kind: "error",
+          message: "the picture in this row is 8.2 MB — images must be 5 MB or smaller.",
+        },
+      }),
+    ]);
+    expect(errorsOf(a, 2)[0]).toMatch(/8\.2 MB/);
+    expect(a.counts.valid).toBe(0);
+  });
+
+  it("refuses a row carrying both a picture and cell text", () => {
+    const a = run([
+      goodRow({
+        image: "https://cdn.example.com/ecg.png",
+        [IMAGE_META]: embedded(),
+      }),
+    ]);
+    expect(errorsOf(a, 2)[0]).toMatch(/both a picture and text/i);
+    expect(a.counts.valid).toBe(0);
+  });
+
+  it("leaves rows without images untouched", () => {
+    const a = run([goodRow()]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.counts.withImages).toBe(0);
+    expect(a.validRows[0].image).toBeUndefined();
+  });
+
+  it("counts only VALID rows as having images", () => {
+    const a = run([
+      goodRow({ [IMAGE_META]: embedded() }),
+      goodRow({ stem: "too short", [IMAGE_META]: embedded() }),
+    ]);
+    expect(a.counts.errorRows).toBe(1);
+    expect(a.counts.withImages).toBe(1);
+  });
+
+  it("treats a picture with no text alongside it as a row, not a blank", () => {
+    // Silently dropping it would swallow a picture pasted on the wrong row.
+    const a = run([{ [IMAGE_META]: embedded() }]);
+    expect(a.counts.dataRows).toBe(1);
+    expect(a.counts.errorRows).toBe(1);
+    expect(errorsOf(a, 2)).toContain("Subject is required.");
+  });
+
+  it("ignores the #VALUE! an in-cell picture leaves in the Image cell", () => {
+    // Excel stores a "Place in Cell" image AS an error cell; reporting the
+    // raw #VALUE! would call a working picture a broken formula.
+    const a = run([
+      goodRow({ image: { error: "#VALUE!" }, [IMAGE_META]: embedded() }),
+    ]);
+    expect(errorsOf(a, 2)).toEqual([]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].image?.kind).toBe("embedded");
+  });
+
+  it("still reports an Excel error in any OTHER column", () => {
+    const a = run([goodRow({ stem: { error: "#REF!" } })]);
+    expect(errorsOf(a, 2)[0]).toMatch(/#REF!/);
+  });
+
+  it("refuses a file with more images than the cap", () => {
+    const rows = Array.from({ length: IMPORT_IMAGE_CAP + 1 }, (_, i) =>
+      goodRow({ stem: `${"Stem number "}${i} — long enough to pass validation.`, [IMAGE_META]: embedded() })
+    );
+    const a = run(rows);
+    expect(a.fileErrors[0]).toMatch(
+      new RegExp(`${IMPORT_IMAGE_CAP + 1} rows with images`)
+    );
+    expect(a.validRows).toEqual([]);
+  });
+
+  it("allows exactly the cap", () => {
+    const rows = Array.from({ length: IMPORT_IMAGE_CAP }, (_, i) =>
+      goodRow({ stem: `Stem number ${i} — long enough to pass validation.`, [IMAGE_META]: embedded() })
+    );
+    const a = run(rows);
+    expect(a.fileErrors).toEqual([]);
+    expect(a.counts.withImages).toBe(IMPORT_IMAGE_CAP);
+  });
+
+  it("reports file-level extraction warnings with no row number", () => {
+    const a = run([goodRow()], {
+      imageWarnings: ["3 pictures sit outside the Image column and were ignored."],
+    });
+    const fileLines = a.lines.filter((l) => l.row === null);
+    expect(fileLines).toHaveLength(1);
+    expect(fileLines[0].severity).toBe("warning");
+    expect(a.counts.warnings).toBe(1);
+    // A warning never blocks the rest of the import.
+    expect(a.counts.valid).toBe(1);
+  });
+
+  it("ships an Image column in the generated template", () => {
+    expect(TEMPLATE_HEADERS).toContain("Image");
+  });
+});
+
+describe("parseImageUrl", () => {
+  it("accepts https and normalises it", () => {
+    expect(parseImageUrl("  https://example.com/a.png  ")).toBe(
+      "https://example.com/a.png"
+    );
+  });
+
+  it.each([
+    ["http://example.com/a.png", "plain http is not re-fetched over the wire"],
+    ["data:image/png;base64,AAAA", "data URIs are not fetchable"],
+    ["file:///etc/passwd", "local files are not fetchable"],
+    ["example.com/a.png", "a bare host is not a URL"],
+    ["", "empty"],
+  ])("rejects %s", (value) => {
+    expect(parseImageUrl(value)).toBeNull();
   });
 });

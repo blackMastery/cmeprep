@@ -33,3 +33,30 @@ const EXT_BY_TYPE: Record<string, string> = {
 export function extensionForType(contentType: string): string | null {
   return EXT_BY_TYPE[contentType] ?? null;
 }
+
+// ── Bulk-import workbooks ───────────────────────────────────
+
+export const QUESTION_IMPORT_BUCKET = "question-imports";
+
+export const IMPORT_XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/**
+ * Ceiling for an uploaded workbook. Matches the bucket's own file_size_limit;
+ * far above the old 4 MB multipart cap because the bytes go browser → Storage
+ * and never pass through a Next route.
+ */
+export const MAX_IMPORT_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Shape minted by `createImportUploadUrl`. Both import endpoints must run a
+ * caller-supplied path through this before touching Storage: the routes are
+ * admin-gated but the path itself is client-controlled, and the service-role
+ * client that reads it ignores RLS. Without this an admin could point commit
+ * at any object in the bucket.
+ */
+export function isImportObjectPath(path: string): boolean {
+  return /^imports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.xlsx$/.test(
+    path
+  );
+}

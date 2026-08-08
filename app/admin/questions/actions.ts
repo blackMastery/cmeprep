@@ -22,6 +22,7 @@ import {
   ALLOWED_IMAGE_TYPES,
   extensionForType,
   QUESTION_IMAGE_BUCKET,
+  QUESTION_IMPORT_BUCKET,
 } from "@/lib/storage";
 
 export type QuestionState = {
@@ -518,6 +519,32 @@ export async function createImageUploadUrl(
 
   const { data, error } = await createAdminClient()
     .storage.from(QUESTION_IMAGE_BUCKET)
+    .createSignedUploadUrl(path);
+
+  if (error || !data) return { ok: false, error: "Could not start the upload." };
+  return { ok: true, path: data.path, token: data.token };
+}
+
+/**
+ * Same trick for the bulk importer's workbook.
+ *
+ * A sheet with embedded pictures passes the ~4.5MB serverless body limit after
+ * about ten images, so the .xlsx goes browser → Storage and the import
+ * endpoints receive only this path. It also means the file is uploaded once
+ * rather than re-sent for preview and again for commit.
+ *
+ * The path shape is load-bearing: `isImportObjectPath` gates every server-side
+ * read of it. Keep the two in step.
+ */
+export async function createImportUploadUrl(): Promise<
+  { ok: true; path: string; token: string } | { ok: false; error: string }
+> {
+  await requireAdmin();
+
+  const path = `imports/${crypto.randomUUID()}.xlsx`;
+
+  const { data, error } = await createAdminClient()
+    .storage.from(QUESTION_IMPORT_BUCKET)
     .createSignedUploadUrl(path);
 
   if (error || !data) return { ok: false, error: "Could not start the upload." };

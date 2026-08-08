@@ -13,13 +13,18 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { createImportUploadUrl } from "@/app/admin/questions/actions";
 import type {
+  ImportCommitRequest,
   ImportCommitResponse,
   ImportPreviewResponse,
   ImportReport,
+  ImportRequest,
 } from "@/lib/admin/import-api";
 import { MAX_IMPORT_FILE_BYTES } from "@/lib/admin/import-api";
 import type { Severity } from "@/lib/admin/import-core";
+import { createClient } from "@/lib/supabase/client";
+import { QUESTION_IMPORT_BUCKET } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +40,7 @@ import {
 
 type Phase =
   | { name: "pick" }
+  | { name: "uploading" }
   | { name: "previewing" }
   | { name: "previewed"; fileSha256: string; report: ImportReport }
   | { name: "committing"; fileSha256: string; report: ImportReport }
@@ -48,9 +54,12 @@ export function ImportWizard({
   examName: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  // The File lives in React state so it survives past preview — commit
-  // re-sends the same bytes and the server verifies the sha256 matches.
   const [file, setFile] = useState<File | null>(null);
+  // Storage path of the uploaded workbook. Both endpoints read the file from
+  // there, so the bytes leave the browser exactly once no matter how many
+  // times preview is re-run — which matters because a sheet with embedded
+  // pictures is measured in megabytes, not kilobytes.
+  const [objectPath, setObjectPath] = useState<string | null>(null);
   const [autoCreate, setAutoCreate] = useState(true);
   const [phase, setPhase] = useState<Phase>({ name: "pick" });
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +68,8 @@ export function ImportWizard({
   function chooseFile(next: File | null) {
     setError(null);
     setPhase({ name: "pick" });
+    // A different file invalidates whatever is already in Storage.
+    setObjectPath(null);
     if (!next) {
       setFile(null);
       return;
@@ -68,24 +79,61 @@ export function ImportWizard({
       return;
     }
     if (next.size > MAX_IMPORT_FILE_BYTES) {
-      setError("Files are limited to 4 MB. Split the sheet and import in parts.");
+      setError("Files are limited to 25 MB. Split the sheet and import in parts.");
       return;
     }
     setFile(next);
   }
 
+  /**
+   * Upload once, reuse for preview and commit. Bytes go straight to Supabase
+   * Storage with a one-time signed URL — same trick as the question editor's
+   * image field — so they never hit the serverless request-body limit.
+   */
+  async function ensureUploaded(current: File): Promise<string | null> {
+    if (objectPath) return objectPath;
+
+    setPhase({ name: "uploading" });
+    const signed = await createImportUploadUrl();
+    if (!signed.ok) {
+      setError(signed.error);
+      setPhase({ name: "pick" });
+      return null;
+    }
+
+    const supabase = createClient();
+    const { error: uploadError } = await supabase.storage
+      .from(QUESTION_IMPORT_BUCKET)
+      .uploadToSignedUrl(signed.path, signed.token, current);
+
+    if (uploadError) {
+      setError("Upload failed — check your connection and try again.");
+      setPhase({ name: "pick" });
+      return null;
+    }
+
+    setObjectPath(signed.path);
+    return signed.path;
+  }
+
   async function preview() {
     if (!file) return;
     setError(null);
-    setPhase({ name: "previewing" });
     try {
-      const body = new FormData();
-      body.set("file", file);
-      body.set("autoCreate", String(autoCreate));
-      body.set("examId", examId);
+      const path = await ensureUploaded(file);
+      if (!path) return;
+
+      setPhase({ name: "previewing" });
+      const payload: ImportRequest = {
+        objectPath: path,
+        examId,
+        autoCreate,
+        fileName: file.name,
+      };
       const res = await fetch("/api/admin/questions-import/preview", {
         method: "POST",
-        body,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
       });
       const data = (await res.json()) as ImportPreviewResponse;
       if (!data.ok) {
@@ -105,19 +153,22 @@ export function ImportWizard({
   }
 
   async function commit() {
-    if (!file || phase.name !== "previewed") return;
+    if (!file || !objectPath || phase.name !== "previewed") return;
     setError(null);
     const { fileSha256, report } = phase;
     setPhase({ name: "committing", fileSha256, report });
     try {
-      const body = new FormData();
-      body.set("file", file);
-      body.set("autoCreate", String(autoCreate));
-      body.set("fileSha256", fileSha256);
-      body.set("examId", examId);
+      const payload: ImportCommitRequest = {
+        objectPath,
+        examId,
+        autoCreate,
+        fileName: file.name,
+        fileSha256,
+      };
       const res = await fetch("/api/admin/questions-import/commit", {
         method: "POST",
-        body,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
       });
       const data = (await res.json()) as ImportCommitResponse;
       if (!data.ok) {
@@ -129,6 +180,8 @@ export function ImportWizard({
         );
         return;
       }
+      // Commit consumed the object; a retry has to upload again.
+      setObjectPath(null);
       setPhase({ name: "done", result: data });
     } catch {
       setError("Import failed — check your connection and try again.");
@@ -146,7 +199,10 @@ export function ImportWizard({
     );
   }
 
-  const busy = phase.name === "previewing" || phase.name === "committing";
+  const busy =
+    phase.name === "uploading" ||
+    phase.name === "previewing" ||
+    phase.name === "committing";
   const report =
     phase.name === "previewed" || phase.name === "committing"
       ? phase.report
@@ -167,7 +223,10 @@ export function ImportWizard({
             <h2 className="font-display text-lg">1 · Fill in the template</h2>
             <p className="text-sm text-muted-foreground">
               One row per question for {examName}. The two example rows show
-              the format and are ignored on import.
+              the format and are ignored on import. For a question with a
+              figure, put a picture in the <strong>Image</strong> column — both
+              &ldquo;Place over Cells&rdquo; and &ldquo;Place in Cell&rdquo;
+              work — or paste an https:// link to one.
             </p>
           </div>
           <Button variant="outline" asChild>
@@ -223,7 +282,9 @@ export function ImportWizard({
                 <p className="font-medium">
                   Drop your .xlsx here, or click to browse
                 </p>
-                <p className="text-xs text-muted-foreground">Up to 4 MB</p>
+                <p className="text-xs text-muted-foreground">
+                  Up to 25 MB, including any pictures
+                </p>
               </>
             )}
           </div>
@@ -262,7 +323,12 @@ export function ImportWizard({
           )}
 
           <Button onClick={preview} disabled={!file || busy} size="lg">
-            {phase.name === "previewing" ? (
+            {phase.name === "uploading" ? (
+              <>
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+                Uploading…
+              </>
+            ) : phase.name === "previewing" ? (
               <>
                 <Loader2 className="animate-spin" data-icon="inline-start" />
                 Checking…
@@ -333,6 +399,9 @@ function ReportPanel({
             <Badge className="bg-success text-success-foreground">
               {counts.valid} valid
             </Badge>
+            {counts.withImages > 0 && (
+              <Badge variant="secondary">{counts.withImages} with images</Badge>
+            )}
             {counts.errorRows > 0 && (
               <Badge variant="destructive">{counts.errorRows} with errors</Badge>
             )}
@@ -453,6 +522,7 @@ function SuccessPanel({
           <h2 className="font-display text-2xl font-semibold">
             Imported {result.imported} draft
             {result.imported === 1 ? "" : "s"}
+            {result.images > 0 && ` with ${result.images} image${result.images === 1 ? "" : "s"}`}
           </h2>
           {(result.createdSpecialties.length > 0 ||
             result.createdSubjects.length > 0) && (

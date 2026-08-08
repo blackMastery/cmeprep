@@ -7,15 +7,30 @@ import {
   IMPORT_ROW_CAP,
   PLACEHOLDER_SUBJECT_ID,
   TEMPLATE_VALIDATION_ROWS,
+  coerceCellValue,
+  normalizeKey,
   normalizeStem,
   parseMatrix,
   type ImportAnalysis,
   type ReportLine,
+  type RowImageMeta,
   type TaxonomySnapshot,
   type ValidRow,
 } from "@/lib/admin/import-core";
+import {
+  extractRowImages,
+  fetchImageFromUrl,
+  type EmbeddedImage,
+} from "@/lib/admin/import-images";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listHierarchy } from "@/lib/admin/taxonomy";
+import {
+  extensionForType,
+  isImportObjectPath,
+  MAX_IMPORT_UPLOAD_BYTES,
+  QUESTION_IMAGE_BUCKET,
+  QUESTION_IMPORT_BUCKET,
+} from "@/lib/storage";
 import {
   DEFAULT_EXAM_ID,
   DEFAULT_SPECIALTY_ID,
@@ -43,26 +58,36 @@ export function sha256(data: ArrayBuffer | Uint8Array): string {
 
 export type WorkbookMatrix = {
   header: unknown[];
-  rows: { rowNumber: number; cells: unknown[] }[];
+  rows: { rowNumber: number; cells: unknown[]; image?: RowImageMeta }[];
+  imageWarnings: string[];
 };
 
 /**
- * Cell comments are never read by the importer, but exceljs still walks the
- * comment relationships while loading — and it only understands Excel's own
- * layout (`xl/commentsN.xml`, relative rel targets). openpyxl and other
- * generators write `xl/comments/commentN.xml` with absolute targets, which
- * makes exceljs dereference an unparsed part and throw a TypeError that looks
- * nothing like a format problem.
+ * Parts exceljs is known to trip over, dropped so a second load can succeed.
  *
- * So: drop the comment and VML parts, their relationships and their content
- * types, then retry. Only cell values matter here, so nothing is lost.
+ * Cell comments: exceljs walks the comment relationships while loading and
+ * only understands Excel's own layout (`xl/commentsN.xml`, relative rel
+ * targets). openpyxl and other generators write `xl/comments/commentN.xml`
+ * with absolute targets, which makes exceljs dereference an unparsed part and
+ * throw a TypeError that looks nothing like a format problem.
+ *
+ * Rich data: the parts behind Excel 365's in-cell pictures. exceljs has no
+ * model for them at all. Images are read from the ORIGINAL buffer with JSZip
+ * (lib/admin/import-images.ts), so removing them here costs nothing.
+ *
+ * Only cell values matter on this path, so nothing is lost either way.
  */
-async function stripCommentParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(buffer);
 
   for (const path of Object.keys(zip.files)) {
-    if (/^xl\/comments?[/\d]/i.test(path) || /\.vml$/i.test(path)) {
+    if (
+      /^xl\/comments?[/\d]/i.test(path) ||
+      /\.vml$/i.test(path) ||
+      /^xl\/richData\//i.test(path) ||
+      /^xl\/metadata\.xml$/i.test(path)
+    ) {
       zip.remove(path);
     }
   }
@@ -72,8 +97,14 @@ async function stripCommentParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   for (const path of Object.keys(zip.files)) {
     if (!/_rels\/[^/]*\.rels$/i.test(path)) continue;
     const xml = await zip.files[path].async("string");
+    // The trailing quote anchors on the END of the Type URL, so this matches
+    // `Type="…/richValueRel"` without also eating an unrelated Target path.
     const cleaned = xml.replace(/<Relationship\b[^>]*\/>/g, (rel) =>
-      /(comments|vmlDrawing)"/i.test(rel) ? "" : rel
+      /(comments|vmlDrawing|richValueRel|rdRichValue|rdRichValueStructure|sheetMetadata)"/i.test(
+        rel
+      )
+        ? ""
+        : rel
     );
     if (cleaned !== xml) zip.file(path, cleaned);
   }
@@ -84,7 +115,7 @@ async function stripCommentParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
     zip.file(
       "[Content_Types].xml",
       xml.replace(/<Override\b[^>]*\/>/g, (override) =>
-        /comment|vml/i.test(override) ? "" : override
+        /comment|vml|richvalue|rdrichvalue|metadata/i.test(override) ? "" : override
       )
     );
   }
@@ -96,9 +127,15 @@ async function stripCommentParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   ) as ArrayBuffer;
 }
 
+/** Picture bytes, keyed by spreadsheet row. Never crosses into the pure core. */
+export type ImagePayloads = Map<number, EmbeddedImage>;
+
 export async function workbookToMatrix(
   buffer: ArrayBuffer
-): Promise<{ ok: true; matrix: WorkbookMatrix } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; matrix: WorkbookMatrix; images: ImagePayloads }
+  | { ok: false; error: string }
+> {
   const ExcelJS = (await import("exceljs")).default;
   let workbook = new ExcelJS.Workbook();
 
@@ -107,7 +144,7 @@ export async function workbookToMatrix(
   } catch (firstError) {
     try {
       workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await stripCommentParts(buffer));
+      await workbook.xlsx.load(await stripUnsupportedParts(buffer));
     } catch (secondError) {
       // Genuinely unreadable — legacy .xls, a renamed .csv, a corrupt zip.
       // Both causes are logged: the message below cannot describe them all.
@@ -141,14 +178,6 @@ export async function workbookToMatrix(
 
   const header = readCells(1);
 
-  const rows: WorkbookMatrix["rows"] = [];
-  // Never iterate rowCount blindly — bound the scan and let the core apply
-  // its own row cap to the non-empty rows.
-  const last = Math.min(worksheet.rowCount, MAX_SCAN_ROWS);
-  for (let rowNumber = 2; rowNumber <= last; rowNumber++) {
-    rows.push({ rowNumber, cells: readCells(rowNumber) });
-  }
-
   if (worksheet.rowCount > MAX_SCAN_ROWS) {
     return {
       ok: false,
@@ -156,43 +185,103 @@ export async function workbookToMatrix(
     };
   }
 
-  return { ok: true, matrix: { header, rows } };
+  // Images are matched to rows by their column, so the Image header has to be
+  // located before extraction. exceljs columns are 1-based; the matrix is not.
+  const imageHeaderIndex = header.findIndex((cell) => {
+    const coerced = coerceCellValue(cell);
+    return "text" in coerced && normalizeKey(coerced.text) === "image";
+  });
+  const { byRow, warnings } = await extractRowImages(
+    buffer,
+    workbook,
+    worksheet,
+    imageHeaderIndex >= 0 ? imageHeaderIndex + 1 : null
+  );
+
+  const rows: WorkbookMatrix["rows"] = [];
+  // Never iterate rowCount blindly — bound the scan and let the core apply
+  // its own row cap to the non-empty rows.
+  const last = Math.min(worksheet.rowCount, MAX_SCAN_ROWS);
+  for (let rowNumber = 2; rowNumber <= last; rowNumber++) {
+    rows.push({
+      rowNumber,
+      cells: readCells(rowNumber),
+      image: imageMeta(byRow.get(rowNumber)),
+    });
+  }
+
+  return {
+    ok: true,
+    matrix: { header, rows, imageWarnings: warnings },
+    images: byRow,
+  };
 }
 
-const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+/** Strip the bytes off an extracted image; only metadata reaches the core. */
+function imageMeta(image: EmbeddedImage | undefined): RowImageMeta | undefined {
+  if (!image) return undefined;
+  return image.ok
+    ? {
+        kind: "embedded",
+        sha256: image.sha256,
+        contentType: image.contentType,
+        byteLength: image.byteLength,
+      }
+    : { kind: "error", message: image.message };
+}
 
 /**
  * Shared front half of preview and commit: same file checks, same parse, same
  * taxonomy snapshot — the two endpoints cannot drift because this IS the
  * single path.
+ *
+ * Takes a Storage object path rather than an uploaded File. A sheet carrying
+ * embedded pictures passes the serverless request-body limit after about ten
+ * images, so the wizard puts the .xlsx in the question-imports bucket with a
+ * signed URL and both endpoints read it from there. The sha256 handshake
+ * between preview and commit is unchanged — it just hashes bytes that came
+ * from Storage instead of from a multipart part.
  */
 export async function analyzeUpload(
-  file: unknown,
+  objectPath: unknown,
   autoCreateTaxonomy: boolean,
   forcedExam: { id: string; name: string }
 ): Promise<
   | {
       ok: true;
-      fileName: string;
       fileSha256: string;
       analysis: ImportAnalysis;
+      images: ImagePayloads;
     }
   | { ok: false; error: string }
 > {
-  if (!(file instanceof File)) {
-    return { ok: false, error: "Attach an .xlsx file." };
+  if (typeof objectPath !== "string" || !isImportObjectPath(objectPath)) {
+    return { ok: false, error: "Upload the .xlsx again — its reference is missing or malformed." };
   }
-  if (file.size === 0) {
-    return { ok: false, error: "That file is empty." };
-  }
-  if (file.size > MAX_UPLOAD_BYTES) {
+
+  const { data, error } = await createAdminClient()
+    .storage.from(QUESTION_IMPORT_BUCKET)
+    .download(objectPath);
+
+  if (error || !data) {
     return {
       ok: false,
-      error: "Files are limited to 4 MB. Split the sheet and import in parts.",
+      error: "That upload is no longer available — choose the file again.",
+    };
+  }
+  if (data.size === 0) {
+    return { ok: false, error: "That file is empty." };
+  }
+  // The bucket enforces this too; checking here turns a Storage-side rejection
+  // into a message that names the actual limit.
+  if (data.size > MAX_IMPORT_UPLOAD_BYTES) {
+    return {
+      ok: false,
+      error: "Files are limited to 25 MB. Split the sheet and import in parts.",
     };
   }
 
-  const buffer = await file.arrayBuffer();
+  const buffer = await data.arrayBuffer();
   const matrixResult = await workbookToMatrix(buffer);
   if (!matrixResult.ok) return { ok: false, error: matrixResult.error };
 
@@ -204,10 +293,137 @@ export async function analyzeUpload(
 
   return {
     ok: true,
-    fileName: file.name,
     fileSha256: sha256(buffer),
     analysis,
+    images: matrixResult.images,
   };
+}
+
+// ── Image upload (commit only) ──────────────────────────────
+
+export type UploadedImages = {
+  /** Spreadsheet row → Storage path to write into questions.image_path. */
+  pathByRow: Map<number, string>;
+  /**
+   * Paths this request actually created. Compensation deletes only these —
+   * a content-addressed path that already existed belongs to an earlier
+   * import, and removing it would blank the image on live questions.
+   */
+  created: string[];
+  failures: { rowNumber: number; message: string }[];
+};
+
+/** Concurrent uploads in flight. Each is a Storage round-trip inside a 60s budget. */
+const IMAGE_UPLOAD_CONCURRENCY = 6;
+
+/**
+ * Put every valid row's image in the question-images bucket.
+ *
+ * Paths are content-addressed (`q/import/<sha256>.<ext>`), which buys two
+ * things: re-running the same import reuses the objects instead of littering
+ * the bucket with copies, and a figure repeated across twenty questions is
+ * stored once.
+ */
+export async function uploadRowImages(
+  rows: readonly ValidRow[],
+  payloads: ImagePayloads
+): Promise<UploadedImages> {
+  const targets = rows.filter((row) => row.image !== undefined);
+  const result: UploadedImages = {
+    pathByRow: new Map(),
+    created: [],
+    failures: [],
+  };
+  if (targets.length === 0) return result;
+
+  const storage = createAdminClient().storage.from(QUESTION_IMAGE_BUCKET);
+
+  let cursor = 0;
+  const worker = async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= targets.length) return;
+      const row = targets[index];
+      const ref = row.image!;
+
+      let image: EmbeddedImage;
+      if (ref.kind === "url") {
+        image = await fetchImageFromUrl(ref.url);
+      } else {
+        const payload = payloads.get(row.rowNumber);
+        image = payload ?? {
+          ok: false,
+          message: "the picture could not be read back from the file.",
+        };
+      }
+
+      if (!image.ok) {
+        result.failures.push({ rowNumber: row.rowNumber, message: image.message });
+        continue;
+      }
+
+      const ext = extensionForType(image.contentType);
+      if (!ext) {
+        result.failures.push({
+          rowNumber: row.rowNumber,
+          message: "the picture is not a PNG, JPEG or WebP.",
+        });
+        continue;
+      }
+
+      const path = `q/import/${image.sha256}.${ext}`;
+      const { error } = await storage.upload(path, image.bytes, {
+        contentType: image.contentType,
+        upsert: false,
+      });
+
+      if (error && !isDuplicateObject(error)) {
+        console.error("import_image_upload_failed", { path, error });
+        result.failures.push({
+          rowNumber: row.rowNumber,
+          message: "the picture could not be saved to storage.",
+        });
+        continue;
+      }
+      // No error means we created it; a duplicate means it was already there.
+      if (!error) result.created.push(path);
+      result.pathByRow.set(row.rowNumber, path);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(IMAGE_UPLOAD_CONCURRENCY, targets.length) }, worker)
+  );
+
+  return result;
+}
+
+/** Storage says 409/Duplicate when `upsert: false` hits an existing object. */
+function isDuplicateObject(error: unknown): boolean {
+  const e = error as { statusCode?: string | number; message?: string };
+  return (
+    String(e?.statusCode) === "409" || /already exists|duplicate/i.test(e?.message ?? "")
+  );
+}
+
+/** Remove image objects a failed commit created. Mirrors question compensation. */
+export async function deleteUploadedImages(paths: readonly string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await createAdminClient()
+    .storage.from(QUESTION_IMAGE_BUCKET)
+    .remove([...paths]);
+  if (error) console.error("import_image_cleanup_failed", { count: paths.length, error });
+}
+
+/** Best-effort cleanup of a workbook the importer is finished with. */
+export async function deleteImportObject(objectPath: string): Promise<void> {
+  if (!isImportObjectPath(objectPath)) return;
+  const { error } = await createAdminClient()
+    .storage.from(QUESTION_IMPORT_BUCKET)
+    .remove([objectPath]);
+  // An orphan in a private, admin-only bucket is not worth failing a
+  // successful import over.
+  if (error) console.error("import_object_cleanup_failed", { objectPath, error });
 }
 
 async function taxonomySnapshot(): Promise<TaxonomySnapshot> {

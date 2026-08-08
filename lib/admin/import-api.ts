@@ -14,14 +14,29 @@ export type ImportReport = {
     errorRows: number;
     warnings: number;
     skipped: number;
+    withImages: number;
   };
   creationPlan: CreationPlan;
 };
 
+/**
+ * Both endpoints take JSON, not multipart: the .xlsx itself goes
+ * browser → Storage via a signed URL first (see `createImportUploadUrl`), so
+ * all the routes need is a reference to it. `fileName` is carried purely for
+ * the audit trail — the server no longer sees the original file name.
+ */
+export type ImportRequest = {
+  objectPath: string;
+  examId: string;
+  autoCreate: boolean;
+  fileName: string;
+};
+
+export type ImportCommitRequest = ImportRequest & { fileSha256: string };
+
 export type ImportPreviewResponse =
   | {
       ok: true;
-      fileName: string;
       fileSha256: string;
       report: ImportReport;
     }
@@ -31,11 +46,15 @@ export type ImportCommitResponse =
   | {
       ok: true;
       imported: number;
+      images: number;
       createdExams: string[];
       createdSpecialties: string[];
       createdSubjects: string[];
     }
   | { ok: false; error: string; report?: ImportReport };
 
-/** Client-side guard only; the server enforces its own cap too. */
-export const MAX_IMPORT_FILE_BYTES = 4 * 1024 * 1024;
+/**
+ * Client-side guard only; Storage and the server enforce their own caps.
+ * Matches the question-imports bucket's file_size_limit.
+ */
+export const MAX_IMPORT_FILE_BYTES = 25 * 1024 * 1024;
