@@ -203,8 +203,74 @@ export type PaymentEvent = {
   paypal_event_id: string;
   type: string;
   payload: Record<string, unknown>;
+  /** Null = the handler threw; the reconciliation sweep replays these. */
   processed_at: string | null;
+  /** At MAX_REPLAY_ATTEMPTS the row is quarantined, not retried. */
+  replay_attempts: number;
+  last_attempt_at: string | null;
+  last_error: string | null;
   created_at: string;
+};
+
+export type PaymentStatus =
+  | "captured"
+  | "partially_refunded"
+  | "refunded"
+  | "denied"
+  | "reversed";
+
+/** Which code path wrote the row; 'backfill' = reconstructed from payment_events. */
+export type PaymentSource =
+  | "capture_route"
+  | "webhook_capture"
+  | "webhook_approved"
+  | "reconcile"
+  | "backfill";
+
+/** Why a captured payment never became a subscription. */
+export type PaymentGrantFailure =
+  | "unknown_user"
+  | "unknown_plan"
+  | "no_duration"
+  | "unknown_exam"
+  | "insert_failed";
+
+/**
+ * One captured PayPal ORDER. Written by both grant paths BEFORE the grant is
+ * attempted, so `subscription_id === null` means money with nothing behind it.
+ *
+ * status/source/grant_failure are text + check constraints, NOT pg enums — they
+ * are deliberately absent from Database["public"]["Enums"] below.
+ */
+export type Payment = Timestamps & {
+  id: string;
+  /** Null only if the buyer's profile vanished; custom_id keeps the raw id. */
+  user_id: string | null;
+  /** Null = captured with no grant. See grant_failure. */
+  subscription_id: string | null;
+  plan_id: string | null;
+  plan_name: string | null;
+  /** plans.price_cents AT capture time — the expected side of the amount check. */
+  plan_price_cents: number | null;
+  /**
+   * Exam bought. null + grant_failure null = grandfathered all-access;
+   * null + grant_failure set = unresolved, see custom_id.
+   */
+  exam_id: string | null;
+  paypal_order_id: string;
+  paypal_capture_id: string | null;
+  /** The purchase unit's custom_id verbatim: "userId:planId:examId". */
+  custom_id: string | null;
+  /** What PayPal moved. Null when the capture carried no amount at all. */
+  amount_cents: number | null;
+  currency: string | null;
+  /** Running total across partial refunds; status is derived from it. */
+  refunded_cents: number;
+  status: PaymentStatus;
+  source: PaymentSource;
+  grant_failure: PaymentGrantFailure | null;
+  captured_at: string;
+  updated_at: string | null;
 };
 
 export type Plan = Timestamps & {
@@ -268,6 +334,7 @@ export type Database = {
       audit_logs: Table<AuditLog>;
       subscriptions: Table<Subscription>;
       payment_events: Table<PaymentEvent>;
+      payments: Table<Payment>;
       plans: Table<Plan>;
       contact_messages: Table<ContactMessage>;
     };

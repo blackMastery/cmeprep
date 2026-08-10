@@ -1,40 +1,20 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/lib/admin/audit";
-import {
-  capturePaypalOrder,
-  verifyWebhookSignature,
-  type PaypalOrder,
-} from "@/lib/paypal";
-import {
-  grantPlanPurchase,
-  syncRoleFromSubscriptions,
-} from "@/lib/subscriptions";
-import { parsePurchaseCustomId } from "@/lib/subscriptions-core";
-
-type AdminClient = ReturnType<typeof createAdminClient>;
+import { verifyWebhookSignature } from "@/lib/paypal";
+import { dispatchPaypalEvent, type WebhookEvent } from "@/lib/paypal-events";
 
 /** Postgres unique violation — this event was already recorded. */
 const UNIQUE_VIOLATION = "23505";
 
-type WebhookEvent = {
-  id: string;
-  event_type: string;
-  resource?: {
-    id?: string;
-    custom_id?: string;
-    status?: string;
-    purchase_units?: PaypalOrder["purchase_units"];
-    supplementary_data?: { related_ids?: { order_id?: string } };
-  };
-};
-
 /**
  * POST /api/paypal/webhook — reconciliation only. The capture route grants
  * access on the happy path; this covers browsers that died after approval,
- * plus refunds/denials. Unauthenticated by design: PayPal's signature
- * verification IS the auth, and `payment_events.paypal_event_id` unique
- * makes redelivery a no-op.
+ * plus refunds/denials/chargebacks. Unauthenticated by design: PayPal's
+ * signature verification IS the auth, and `payment_events.paypal_event_id`
+ * unique makes redelivery a no-op.
+ *
+ * The handlers live in lib/paypal-events.ts so the reconciliation sweep
+ * (lib/reconcile.ts) can replay the very same code rather than a copy.
  */
 export async function POST(request: Request) {
   // Not configured (local dev without a public URL): tell PayPal to retry
@@ -80,24 +60,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    switch (event.event_type) {
-      case "PAYMENT.CAPTURE.COMPLETED":
-        await handleCaptureCompleted(admin, event);
-        break;
-      case "PAYMENT.CAPTURE.REFUNDED":
-      case "PAYMENT.CAPTURE.DENIED":
-        await handleCaptureReversed(admin, event);
-        break;
-      case "CHECKOUT.ORDER.APPROVED":
-        await handleOrderApproved(admin, event);
-        break;
-      default:
-        // Subscribed-but-unhandled event types are recorded and ignored.
-        break;
-    }
+    await dispatchPaypalEvent(admin, event);
   } catch (error) {
-    // The event row stays without processed_at so it is findable; PayPal
-    // must not retry (we already stored it), so still answer 200.
+    // The event row stays without processed_at so the reconciliation sweep
+    // finds it; PayPal must not retry (we already stored it, so a retry would
+    // hit the duplicate branch and do nothing), so still answer 200.
     console.error("paypal_webhook_handler_failed", {
       event: event.id,
       type: event.event_type,
@@ -112,100 +79,4 @@ export async function POST(request: Request) {
     .eq("paypal_event_id", event.id);
 
   return NextResponse.json({ received: true });
-}
-
-/** Capture completed — grant if the capture route never ran (browser died). */
-async function handleCaptureCompleted(admin: AdminClient, event: WebhookEvent) {
-  const resource = event.resource;
-  const parsed = parsePurchaseCustomId(resource?.custom_id);
-  const orderId = resource?.supplementary_data?.related_ids?.order_id;
-  if (!parsed || !orderId) return;
-
-  const { data: plan } = await admin
-    .from("plans")
-    .select("*")
-    .eq("id", parsed.planId)
-    .maybeSingle();
-  if (!plan || plan.duration_months === null) {
-    console.error("paypal_webhook_unknown_plan", { event: event.id, ...parsed });
-    return;
-  }
-
-  await grantPlanPurchase(admin, {
-    userId: parsed.userId,
-    plan,
-    examId: parsed.examId,
-    paypalOrderId: orderId,
-    captureId: resource?.id ?? null,
-    meta: {
-      via: "paypal_webhook",
-      ...(parsed.examId === null ? { legacyCustomId: true } : {}),
-    },
-  });
-}
-
-/** Refund or denial — cancel the matching subscription and re-sync the role. */
-async function handleCaptureReversed(admin: AdminClient, event: WebhookEvent) {
-  const orderId = event.resource?.supplementary_data?.related_ids?.order_id;
-  if (!orderId) return;
-
-  // One PayPal order maps to exactly one subscription row, so cancelling by
-  // order id still revokes precisely the right exam's access.
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("id, user_id, plan, status, exam_id")
-    .eq("paypal_subscription_id", orderId)
-    .maybeSingle();
-  if (!sub || sub.status === "cancelled") return;
-
-  const { error } = await admin
-    .from("subscriptions")
-    .update({ status: "cancelled" })
-    .eq("id", sub.id);
-  if (error) throw new Error(error.message);
-
-  await audit(sub.user_id, "subscription.cancel", sub.user_id, {
-    subscriptionId: sub.id,
-    plan: sub.plan,
-    examId: sub.exam_id,
-    paypalOrderId: orderId,
-    via: "paypal_webhook",
-    eventType: event.event_type,
-  });
-  await syncRoleFromSubscriptions(admin, sub.user_id, sub.user_id);
-}
-
-/** Order approved but never captured — the buyer's browser died mid-flow. */
-async function handleOrderApproved(admin: AdminClient, event: WebhookEvent) {
-  const orderId = event.resource?.id;
-  const parsed = parsePurchaseCustomId(
-    event.resource?.purchase_units?.[0]?.custom_id
-  );
-  if (!orderId || !parsed) return;
-
-  const captured = await capturePaypalOrder(orderId);
-  // already_captured ⇒ the capture route (or a COMPLETED event) handled it.
-  if (captured.kind !== "completed") return;
-
-  const { data: plan } = await admin
-    .from("plans")
-    .select("*")
-    .eq("id", parsed.planId)
-    .maybeSingle();
-  if (!plan || plan.duration_months === null) return;
-
-  const capture =
-    captured.order.purchase_units?.[0]?.payments?.captures?.[0] ?? null;
-
-  await grantPlanPurchase(admin, {
-    userId: parsed.userId,
-    plan,
-    examId: parsed.examId,
-    paypalOrderId: orderId,
-    captureId: capture?.id ?? null,
-    meta: {
-      via: "paypal_webhook_approved",
-      ...(parsed.examId === null ? { legacyCustomId: true } : {}),
-    },
-  });
 }

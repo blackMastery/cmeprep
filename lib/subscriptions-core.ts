@@ -81,6 +81,10 @@ export function centsToValue(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+// The inverse, valueToCents, lives in lib/payments-core.ts with the rest of the
+// money-record arithmetic — this module is imported by the order-CREATION route,
+// which never reads an amount back.
+
 /** The fields status logic needs; satisfied by a full Subscription row. */
 export type SubscriptionLike = {
   status: "active" | "expired" | "cancelled";

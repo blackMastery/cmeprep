@@ -26,8 +26,13 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   with dynamic option rows and a live student preview, publish/draft, soft
   delete, image upload to Supabase Storage, and an audit log.
 
-**Not built yet:** bulk upload, users table, question-bank browser, PayPal,
-admin analytics, Sentry, CI, Playwright.
+- **Payments** — PayPal one-time captures scoped per exam, with the money
+  recorded in `payments` before any grant is attempted, amount-aware refunds,
+  and a `pg_cron` reconciliation sweep at `/api/cron/reconcile`. Gaps are
+  tracked in [payments-backlog.md](payments-backlog.md).
+
+**Not built yet:** admin analytics, receipts and transactional email, an admin
+payments view, Sentry, CI, Playwright.
 
 ## Getting started
 

@@ -2,8 +2,11 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import { CURRENCY } from "@/lib/paypal";
+import { checkCaptureAmount } from "@/lib/payments-core";
+import { recordCapture, recordPaymentGrant } from "@/lib/payments";
 import { computePeriodEnd, stackBase } from "@/lib/subscriptions-core";
-import type { Plan, Profile } from "@/lib/supabase/types";
+import type { PaymentSource, Plan, Profile } from "@/lib/supabase/types";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -99,10 +102,25 @@ export async function activePeriodEndForExam(
   return data?.current_period_end ?? null;
 }
 
+/**
+ * Why a grant did not happen. Typed rather than a bare "error" so the payment
+ * row can say WHICH way it failed without support reconstructing it from logs.
+ */
+export type GrantFailure =
+  | "unknown_plan"
+  | "no_duration"
+  | "unknown_exam"
+  | "insert_failed";
+
 export type GrantResult =
-  | { outcome: "granted"; subscriptionId: string; currentPeriodEnd: string }
-  | { outcome: "duplicate" }
-  | { outcome: "error" };
+  | {
+      outcome: "granted";
+      subscriptionId: string;
+      currentPeriodEnd: string;
+      examId: string | null;
+    }
+  | { outcome: "duplicate"; subscriptionId: string; examId: string | null }
+  | { outcome: "error"; reason: GrantFailure };
 
 /**
  * Record a completed PayPal purchase: insert the subscription row and flip
@@ -132,14 +150,24 @@ export async function grantPlanPurchase(
   }
 ): Promise<GrantResult> {
   const { userId, plan, examId, paypalOrderId, captureId } = input;
-  if (plan.duration_months === null) return { outcome: "error" };
+  if (plan.duration_months === null) {
+    return { outcome: "error", reason: "no_duration" };
+  }
 
   const { data: existing } = await admin
     .from("subscriptions")
-    .select("id")
+    .select("id, exam_id")
     .eq("paypal_subscription_id", paypalOrderId)
     .maybeSingle();
-  if (existing) return { outcome: "duplicate" };
+  if (existing) {
+    // exam_id read back from the row, not from the caller: the payment link is
+    // written from it, and an unresolved id would trip the FK.
+    return {
+      outcome: "duplicate",
+      subscriptionId: existing.id,
+      examId: existing.exam_id,
+    };
+  }
 
   // The money is already captured by the time we get here, so an exam that
   // vanished mid-checkout must NOT be quietly downgraded to all-access —
@@ -154,7 +182,7 @@ export async function grantPlanPurchase(
       .maybeSingle();
     if (!exam) {
       console.error("paypal_grant_unknown_exam", { userId, paypalOrderId, examId });
-      return { outcome: "error" };
+      return { outcome: "error", reason: "unknown_exam" };
     }
   }
 
@@ -179,9 +207,23 @@ export async function grantPlanPurchase(
     .single();
 
   if (error || !data) {
-    if (error?.code === UNIQUE_VIOLATION) return { outcome: "duplicate" };
+    if (error?.code === UNIQUE_VIOLATION) {
+      // The race-loser re-reads the winner's row so the payment still links.
+      const { data: winner } = await admin
+        .from("subscriptions")
+        .select("id, exam_id")
+        .eq("paypal_subscription_id", paypalOrderId)
+        .maybeSingle();
+      if (winner) {
+        return {
+          outcome: "duplicate",
+          subscriptionId: winner.id,
+          examId: winner.exam_id,
+        };
+      }
+    }
     console.error("paypal_grant_failed", { userId, paypalOrderId, error });
-    return { outcome: "error" };
+    return { outcome: "error", reason: "insert_failed" };
   }
 
   await audit(userId, "subscription.create", userId, {
@@ -202,5 +244,180 @@ export async function grantPlanPurchase(
     outcome: "granted",
     subscriptionId: data.id,
     currentPeriodEnd: periodEnd,
+    examId,
   };
+}
+
+export type CapturedOrder = {
+  userId: string;
+  /** From custom_id, so unvalidated until the plan is read back. */
+  planId: string;
+  examId: string | null;
+  paypalOrderId: string;
+  captureId: string | null;
+  customId: string | null;
+  amountCents: number | null;
+  currency: string | null;
+  capturedAt: string | null;
+  source: PaymentSource;
+};
+
+export type PurchaseOutcome =
+  | {
+      outcome: "granted";
+      paymentId: string | null;
+      plan: Plan;
+      subscriptionId: string;
+      currentPeriodEnd: string;
+    }
+  | {
+      outcome: "duplicate";
+      paymentId: string | null;
+      plan: Plan;
+      subscriptionId: string;
+    }
+  | {
+      outcome: "error";
+      paymentId: string | null;
+      plan: Plan | null;
+      reason: GrantFailure;
+    };
+
+/**
+ * Record a captured PayPal order and grant what it bought, in that order.
+ *
+ * THE ORDERING IS THE POINT. Every early return this replaced — plan vanished,
+ * duration null, exam vanished, insert failed — happened before anything
+ * durable was written, so a captured payment could disappear into a
+ * console.error. The payment row is now written FIRST, from data that cannot
+ * fail an FK, and the grant outcome is attached to it afterwards. A payments row
+ * with subscription_id null is money that owes someone access, and the
+ * reconciliation sweep goes looking for exactly that.
+ *
+ * Called by app/api/paypal/orders/[orderId]/capture/route.ts and by both grant
+ * paths in lib/paypal-events.ts, which is also why the plan lookup moved in
+ * here: it used to be duplicated across all three callers, and each copy was
+ * its own money hole.
+ *
+ * grantPlanPurchase itself writes nothing to `payments`, so admin comp grants
+ * stay unaffected — no 0-cent rows polluting revenue sums.
+ */
+export async function recordCapturedPurchase(
+  admin: AdminClient,
+  order: CapturedOrder
+): Promise<PurchaseOutcome> {
+  // First statement, before any validation.
+  const payment = await recordCapture(admin, order);
+  const paymentId = payment?.id ?? null;
+
+  const { data: plan } = await admin
+    .from("plans")
+    .select("*")
+    .eq("id", order.planId)
+    .maybeSingle();
+
+  if (!plan || plan.duration_months === null) {
+    const reason: GrantFailure = !plan ? "unknown_plan" : "no_duration";
+    console.error("paypal_captured_unknown_plan", {
+      paypalOrderId: order.paypalOrderId,
+      planId: order.planId,
+      reason,
+    });
+    if (paymentId) {
+      await recordPaymentGrant(admin, paymentId, {
+        kind: "failed",
+        reason,
+        // A plan with no duration still identifies the product bought.
+        planId: plan?.id ?? null,
+        planName: plan?.name ?? null,
+        planPriceCents: plan?.price_cents ?? null,
+      });
+    }
+    await audit(order.userId, "payment.grant_failed", order.userId, {
+      paymentId,
+      paypalOrderId: order.paypalOrderId,
+      planId: order.planId,
+      reason,
+      via: order.source,
+    });
+    return { outcome: "error", paymentId, plan: plan ?? null, reason };
+  }
+
+  // Never blocks the grant — the money is already captured. Both figures are on
+  // the payments row now, so the canonical query is
+  // `where amount_cents is distinct from plan_price_cents`.
+  const amountCheck = checkCaptureAmount({
+    cents: order.amountCents,
+    currency: order.currency,
+    planPriceCents: plan.price_cents,
+    expectedCurrency: CURRENCY,
+  });
+  if (amountCheck !== "ok") {
+    console.error("paypal_amount_mismatch", {
+      paypalOrderId: order.paypalOrderId,
+      check: amountCheck,
+      expectedCents: plan.price_cents,
+      got: { cents: order.amountCents, currency: order.currency },
+    });
+  }
+
+  const grant = await grantPlanPurchase(admin, {
+    userId: order.userId,
+    plan,
+    examId: order.examId,
+    paypalOrderId: order.paypalOrderId,
+    captureId: order.captureId,
+    meta: {
+      via: order.source,
+      paymentId,
+      ...(amountCheck !== "ok" ? { amountCheck } : {}),
+      ...(order.examId === null ? { legacyCustomId: true } : {}),
+    },
+  });
+
+  if (grant.outcome === "error") {
+    if (paymentId) {
+      await recordPaymentGrant(admin, paymentId, {
+        kind: "failed",
+        reason: grant.reason,
+        planId: plan.id,
+        planName: plan.name,
+        planPriceCents: plan.price_cents,
+      });
+    }
+    await audit(order.userId, "payment.grant_failed", order.userId, {
+      paymentId,
+      paypalOrderId: order.paypalOrderId,
+      planId: plan.id,
+      reason: grant.reason,
+      via: order.source,
+    });
+    return { outcome: "error", paymentId, plan, reason: grant.reason };
+  }
+
+  if (paymentId) {
+    await recordPaymentGrant(admin, paymentId, {
+      kind: "granted",
+      subscriptionId: grant.subscriptionId,
+      planId: plan.id,
+      planName: plan.name,
+      planPriceCents: plan.price_cents,
+      examId: grant.examId,
+    });
+  }
+
+  return grant.outcome === "granted"
+    ? {
+        outcome: "granted",
+        paymentId,
+        plan,
+        subscriptionId: grant.subscriptionId,
+        currentPeriodEnd: grant.currentPeriodEnd,
+      }
+    : {
+        outcome: "duplicate",
+        paymentId,
+        plan,
+        subscriptionId: grant.subscriptionId,
+      };
 }

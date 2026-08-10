@@ -5,14 +5,11 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   capturePaypalOrder,
   getPaypalOrder,
-  CURRENCY,
   type PaypalOrder,
 } from "@/lib/paypal";
-import { grantPlanPurchase } from "@/lib/subscriptions";
-import {
-  centsToValue,
-  parsePurchaseCustomId,
-} from "@/lib/subscriptions-core";
+import { parseCaptureAmount } from "@/lib/payments-core";
+import { recordCapturedPurchase } from "@/lib/subscriptions";
+import { parsePurchaseCustomId } from "@/lib/subscriptions-core";
 
 /** PayPal order ids are short alphanumeric tokens, not uuids. */
 const ORDER_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
@@ -78,47 +75,34 @@ export async function POST(
   }
 
   const admin = createAdminClient();
-  const { data: plan } = await admin
-    .from("plans")
-    .select("*")
-    .eq("id", parsed.planId)
-    .maybeSingle();
+  const { cents, currency } = parseCaptureAmount(capture.amount);
 
-  if (!plan || plan.duration_months === null) {
-    // Money was captured but the plan vanished — surface loudly for support.
-    console.error("paypal_captured_unknown_plan", { orderId, ...parsed });
-    return NextResponse.json({ error: "plan_unavailable" }, { status: 500 });
-  }
-
-  // The money is already captured, so a mismatch never blocks the grant —
-  // it gets flagged in the audit trail instead.
-  const amountMismatch =
-    capture.amount?.value !== centsToValue(plan.price_cents) ||
-    (capture.amount?.currency_code ?? CURRENCY) !== CURRENCY;
-  if (amountMismatch) {
-    console.error("paypal_amount_mismatch", {
-      orderId,
-      expected: centsToValue(plan.price_cents),
-      got: capture.amount,
-    });
-  }
-
-  const result = await grantPlanPurchase(admin, {
+  // Records the money BEFORE resolving the plan. The old order returned
+  // plan_unavailable here with the capture already settled and nothing written
+  // down anywhere but a log line.
+  const result = await recordCapturedPurchase(admin, {
     userId: user.id,
-    plan,
+    planId: parsed.planId,
     examId: parsed.examId,
     paypalOrderId: order.id,
     captureId: capture.id,
-    meta: {
-      ...(amountMismatch ? { amountMismatch: true } : {}),
-      ...(parsed.examId === null ? { legacyCustomId: true } : {}),
-    },
+    customId: capture.custom_id ?? unit?.custom_id ?? null,
+    amountCents: cents,
+    currency,
+    capturedAt: capture.create_time ?? null,
+    source: "capture_route",
   });
 
   if (result.outcome === "error") {
-    // Captured but not recorded — the webhook retry will reconcile; tell the
-    // user support has it rather than prompting them to pay again.
-    return NextResponse.json({ error: "grant_failed" }, { status: 500 });
+    // Captured, and now RECORDED whichever way it failed — findable with
+    // `select … from payments where subscription_id is null`, and repaired by
+    // the reconciliation sweep. The webhook retry may still beat it there, so
+    // the buyer is told support has it rather than prompted to pay again.
+    const error =
+      result.reason === "unknown_plan" || result.reason === "no_duration"
+        ? "plan_unavailable"
+        : "grant_failed";
+    return NextResponse.json({ error }, { status: 500 });
   }
 
   revalidatePath("/dashboard");
@@ -127,7 +111,7 @@ export async function POST(
 
   return NextResponse.json({
     status: "COMPLETED",
-    plan: plan.name,
+    plan: result.plan.name,
     currentPeriodEnd:
       result.outcome === "granted" ? result.currentPeriodEnd : null,
   });

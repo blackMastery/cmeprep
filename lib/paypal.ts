@@ -82,6 +82,10 @@ export type PaypalOrder = {
         id: string;
         status?: string;
         custom_id?: string;
+        // PayPal's own timestamp for when the money moved. Revenue is reported
+        // on this, not on when our row landed — the webhook reconciliation path
+        // can write hours later.
+        create_time?: string;
         amount?: { currency_code?: string; value?: string };
       }>;
     };

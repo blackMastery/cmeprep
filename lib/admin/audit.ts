@@ -45,7 +45,24 @@ export type AuditAction =
   | "plan.reorder"
   | "message.handle"
   | "message.reopen"
-  | "message.delete";
+  | "message.delete"
+  // Money-side events. A SUCCESSFUL capture gets no action of its own — the
+  // payments row IS the record, and subscription.create already carries
+  // paymentId/paypalOrderId/captureId in its meta. There is no
+  // payment.amount_mismatch either: with amount_cents and plan_price_cents on
+  // the row a mismatch is a SQL predicate, and an audit line would rot the
+  // moment someone edited a plan price.
+  | "payment.grant_failed"
+  | "payment.refund"
+  | "payment.refund_currency_mismatch"
+  | "payment.denied"
+  | "payment.reversed"
+  // Reconciliation sweep. payment.reconcile is written every run, even a clean
+  // one: a heartbeat in audit_logs is the only way anyone notices the cron has
+  // stopped.
+  | "payment.reconcile"
+  | "payment.reconcile_repair"
+  | "payment.reconcile_failed";
 
 /**
  * Append an admin action to `audit_logs`.
@@ -55,9 +72,13 @@ export type AuditAction =
  * describes. `target` stays a bare uuid so it is greppable; the entity type
  * lives in `action`. Put a diff in `meta`, not a snapshot — full stems would
  * bloat the table quickly.
+ *
+ * `actorId` is nullable because the reconciliation sweep has no actor.
+ * audit_logs.actor_id is already nullable with an FK to profiles, so a sentinel
+ * uuid would violate the FK — null is the only honest value.
  */
 export async function audit(
-  actorId: string,
+  actorId: string | null,
   action: AuditAction,
   target?: string | null,
   meta?: Record<string, unknown>
