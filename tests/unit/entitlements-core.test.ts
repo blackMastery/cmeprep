@@ -5,14 +5,18 @@ import {
   canAccessExam,
   examAccessFor,
   expiryWarnings,
+  orgExamAllowed,
   visibleExamsFor,
   type ExamAccess,
+  type OrgGrantContext,
   type SubscriptionScope,
 } from "@/lib/entitlements-core";
 
 // The seed exam id is not RFC-v4 — kept here so the fixtures match reality.
 const EXAM_A = "e0000000-0000-0000-0000-000000000001";
 const EXAM_B = "e0000000-0000-0000-0000-000000000002";
+const ORG_1 = "a0000000-0000-0000-0000-000000000001";
+const ORG_2 = "a0000000-0000-0000-0000-000000000002";
 
 const NOW = new Date("2026-07-23T12:00:00Z");
 const FUTURE = "2026-10-01T12:00:00Z";
@@ -29,16 +33,24 @@ const sub = (
   current_period_end: end,
 });
 
+/** An entitled, unsuspended org unless the fixture says otherwise. */
+const org = (over: Partial<OrgGrantContext> = {}): OrgGrantContext => ({
+  org_id: ORG_1,
+  suspended_at: null,
+  subs: [{ status: "active", current_period_end: FUTURE }],
+  ...over,
+});
+
 describe("examAccessFor", () => {
   it("gives admins every exam, with or without subscriptions", () => {
-    expect(examAccessFor("admin", [], NOW)).toEqual({
+    expect(examAccessFor("admin", [], null, NOW)).toEqual({
       kind: "all",
       reason: "admin",
     });
   });
 
   it("gives trial users every exam — the quota is their limiter", () => {
-    expect(examAccessFor("trial", [], NOW)).toEqual({
+    expect(examAccessFor("trial", [], null, NOW)).toEqual({
       kind: "all",
       reason: "trial",
     });
@@ -46,21 +58,68 @@ describe("examAccessFor", () => {
 
   it("does not narrow a trial user who has bought a single exam", () => {
     // Role sync may not have run yet; buying must never REMOVE access.
-    expect(examAccessFor("trial", [sub(EXAM_A, FUTURE)], NOW)).toEqual({
+    expect(examAccessFor("trial", [sub(EXAM_A, FUTURE)], null, NOW)).toEqual({
+      kind: "all",
+      reason: "trial",
+    });
+  });
+
+  it("covers a member of an entitled org outright", () => {
+    expect(examAccessFor("student", [], org(), NOW)).toEqual({
+      kind: "all",
+      reason: "org",
+      orgId: ORG_1,
+    });
+  });
+
+  it("marks a trial-role member as org, not trial — quota consumers key off it", () => {
+    expect(examAccessFor("trial", [], org(), NOW)).toEqual({
+      kind: "all",
+      reason: "org",
+      orgId: ORG_1,
+    });
+  });
+
+  it("keeps granting through the 14-day grace after the org period ends", () => {
+    const lapsed = org({
+      subs: [{ status: "active", current_period_end: "2026-07-20T12:00:00Z" }],
+    });
+    expect(examAccessFor("student", [], lapsed, NOW)).toEqual({
+      kind: "all",
+      reason: "org",
+      orgId: ORG_1,
+    });
+  });
+
+  it("stops granting once grace has run out, falling back to personal rows", () => {
+    const locked = org({ subs: [sub(null, PAST)] });
+    expect(examAccessFor("student", [sub(EXAM_A, FUTURE)], locked, NOW)).toEqual(
+      { kind: "scoped", examIds: [EXAM_A] }
+    );
+    expect(examAccessFor("student", [], locked, NOW)).toEqual({ kind: "none" });
+  });
+
+  it("ignores a suspended org regardless of its subscription", () => {
+    const suspended = org({ suspended_at: PAST });
+    expect(examAccessFor("student", [], suspended, NOW)).toEqual({
+      kind: "none",
+    });
+    // A trial-role member of a suspended org falls back to being a trial.
+    expect(examAccessFor("trial", [], suspended, NOW)).toEqual({
       kind: "all",
       reason: "trial",
     });
   });
 
   it("treats a live null-exam row as grandfathered all-access", () => {
-    expect(examAccessFor("student", [sub(null, FUTURE)], NOW)).toEqual({
+    expect(examAccessFor("student", [sub(null, FUTURE)], null, NOW)).toEqual({
       kind: "all",
       reason: "legacy",
     });
   });
 
   it("does not grandfather a lapsed null-exam row", () => {
-    expect(examAccessFor("student", [sub(null, PAST)], NOW)).toEqual({
+    expect(examAccessFor("student", [sub(null, PAST)], null, NOW)).toEqual({
       kind: "none",
     });
   });
@@ -69,6 +128,7 @@ describe("examAccessFor", () => {
     const access = examAccessFor(
       "student",
       [sub(EXAM_A, FUTURE), sub(EXAM_B, LATER)],
+      null,
       NOW
     );
     expect(access).toEqual({ kind: "scoped", examIds: [EXAM_A, EXAM_B] });
@@ -76,7 +136,12 @@ describe("examAccessFor", () => {
 
   it("dedupes stacked rows for the same exam", () => {
     expect(
-      examAccessFor("student", [sub(EXAM_A, FUTURE), sub(EXAM_A, LATER)], NOW)
+      examAccessFor(
+        "student",
+        [sub(EXAM_A, FUTURE), sub(EXAM_A, LATER)],
+        null,
+        NOW
+      )
     ).toEqual({ kind: "scoped", examIds: [EXAM_A] });
   });
 
@@ -85,6 +150,7 @@ describe("examAccessFor", () => {
       examAccessFor(
         "student",
         [sub(EXAM_A, FUTURE, "cancelled"), sub(EXAM_B, LATER, "expired")],
+        null,
         NOW
       )
     ).toEqual({ kind: "none" });
@@ -92,34 +158,75 @@ describe("examAccessFor", () => {
 
   it("gives a student with no live row nothing", () => {
     // The intentional behaviour change: role is not a second source of truth.
-    expect(examAccessFor("student", [sub(EXAM_A, PAST)], NOW)).toEqual({
+    expect(examAccessFor("student", [sub(EXAM_A, PAST)], null, NOW)).toEqual({
       kind: "none",
     });
   });
 });
 
+describe("orgExamAllowed", () => {
+  const ORG_ACCESS: ExamAccess = { kind: "all", reason: "org", orgId: ORG_1 };
+
+  it("lets anyone at a public exam", () => {
+    expect(orgExamAllowed({ kind: "none" }, null)).toBe(true);
+    expect(orgExamAllowed({ kind: "all", reason: "trial" }, null)).toBe(true);
+  });
+
+  it("lets members and platform admins into their org's bank", () => {
+    expect(orgExamAllowed(ORG_ACCESS, ORG_1)).toBe(true);
+    expect(orgExamAllowed({ kind: "all", reason: "admin" }, ORG_1)).toBe(true);
+  });
+
+  it("never lets kind:'all' cross an org wall", () => {
+    expect(orgExamAllowed(ORG_ACCESS, ORG_2)).toBe(false);
+    expect(orgExamAllowed({ kind: "all", reason: "trial" }, ORG_1)).toBe(false);
+    expect(orgExamAllowed({ kind: "all", reason: "legacy" }, ORG_1)).toBe(
+      false
+    );
+  });
+});
+
 describe("canAccessExam", () => {
-  it("passes everything for all-access", () => {
+  const publicExam = (id: string) => ({ id, orgId: null });
+
+  it("passes everything public for all-access", () => {
     expect(
-      canAccessExam({ kind: "all", reason: "trial" }, EXAM_A)
+      canAccessExam({ kind: "all", reason: "trial" }, publicExam(EXAM_A))
     ).toBe(true);
   });
 
   it("passes only named exams when scoped", () => {
     const access: ExamAccess = { kind: "scoped", examIds: [EXAM_A] };
-    expect(canAccessExam(access, EXAM_A)).toBe(true);
-    expect(canAccessExam(access, EXAM_B)).toBe(false);
+    expect(canAccessExam(access, publicExam(EXAM_A))).toBe(true);
+    expect(canAccessExam(access, publicExam(EXAM_B))).toBe(false);
   });
 
   it("blocks everything when there is no access", () => {
-    expect(canAccessExam({ kind: "none" }, EXAM_A)).toBe(false);
+    expect(canAccessExam({ kind: "none" }, publicExam(EXAM_A))).toBe(false);
+  });
+
+  it("opens a private bank to its own org only", () => {
+    const orgExam = { id: EXAM_A, orgId: ORG_1 };
+    expect(
+      canAccessExam({ kind: "all", reason: "org", orgId: ORG_1 }, orgExam)
+    ).toBe(true);
+    expect(
+      canAccessExam({ kind: "all", reason: "org", orgId: ORG_2 }, orgExam)
+    ).toBe(false);
+    expect(
+      canAccessExam({ kind: "all", reason: "legacy" }, orgExam)
+    ).toBe(false);
   });
 });
 
 describe("visibleExamsFor", () => {
-  const live = { id: EXAM_A, isActive: true };
-  const retired = { id: EXAM_B, isActive: false };
+  const live = { id: EXAM_A, isActive: true, orgId: null };
+  const retired = { id: EXAM_B, isActive: false, orgId: null };
   const catalog = [live, retired];
+
+  const ORG_EXAM_ID = "e0000000-0000-0000-0000-000000000003";
+  const orgExam = { id: ORG_EXAM_ID, isActive: true, orgId: ORG_1 };
+  const ORG_ACCESS: ExamAccess = { kind: "all", reason: "org", orgId: ORG_1 };
 
   it("hides retired exams from trial users", () => {
     // Trials are all-access for PRACTICE, but they are also prospects — a
@@ -129,10 +236,10 @@ describe("visibleExamsFor", () => {
     ]);
   });
 
-  it("shows admins everything, retired included", () => {
-    expect(visibleExamsFor(catalog, { kind: "all", reason: "admin" })).toEqual(
-      catalog
-    );
+  it("shows admins everything, retired and org banks included", () => {
+    expect(
+      visibleExamsFor([...catalog, orgExam], { kind: "all", reason: "admin" })
+    ).toEqual([...catalog, orgExam]);
   });
 
   it("keeps a retired exam the buyer actually owns", () => {
@@ -155,6 +262,22 @@ describe("visibleExamsFor", () => {
 
   it("hides retired exams from a lapsed student", () => {
     expect(visibleExamsFor(catalog, { kind: "none" })).toEqual([live]);
+  });
+
+  it("shows an org member the whole catalogue plus their own bank", () => {
+    expect(visibleExamsFor([...catalog, orgExam], ORG_ACCESS)).toEqual([
+      ...catalog,
+      orgExam,
+    ]);
+  });
+
+  it("hides another org's bank from everyone else", () => {
+    const foreign = { ...orgExam, orgId: ORG_2 };
+    expect(visibleExamsFor([...catalog, foreign], ORG_ACCESS)).toEqual(catalog);
+    expect(
+      visibleExamsFor([foreign], { kind: "all", reason: "legacy" })
+    ).toEqual([]);
+    expect(visibleExamsFor([foreign], { kind: "none" })).toEqual([]);
   });
 });
 

@@ -2,6 +2,7 @@
 
 import {
   Bookmark,
+  Building2,
   FilePlus2,
   History,
   LayoutDashboard,
@@ -30,8 +31,19 @@ const ADMIN_ITEM: SideNavItem = {
   icon: ShieldCheck,
 };
 
-function itemsFor(role: SessionUser["profile"]["role"]) {
-  return role === "admin" ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
+const ORG_ITEM: SideNavItem = {
+  href: "/org/members",
+  label: "Organisation",
+  icon: Building2,
+};
+
+function itemsFor(role: SessionUser["profile"]["role"], orgAdmin: boolean) {
+  const items = [...NAV_ITEMS];
+  // Membership lives on org_members, not the profile — the (app) layout
+  // looks it up and passes the flag down.
+  if (orgAdmin) items.push(ORG_ITEM);
+  if (role === "admin") items.push(ADMIN_ITEM);
+  return items;
 }
 
 /** Compact trials-remaining meter, shown to trial users only. */
@@ -57,20 +69,32 @@ function TrialMeter({ profile }: { profile: SessionUser["profile"] }) {
 }
 
 /** Desktop rail for the authenticated learner area. */
-export function AppSidebar({ user }: { user: SessionUser }) {
+export function AppSidebar({
+  user,
+  orgAdmin = false,
+}: {
+  user: SessionUser;
+  orgAdmin?: boolean;
+}) {
   return (
     <Sidebar
-      items={itemsFor(user.profile.role)}
+      items={itemsFor(user.profile.role, orgAdmin)}
       footer={<TrialMeter profile={user.profile} />}
     />
   );
 }
 
 /** Hamburger + sheet for narrow screens. */
-export function MobileNav({ user }: { user: SessionUser }) {
+export function MobileNav({
+  user,
+  orgAdmin = false,
+}: {
+  user: SessionUser;
+  orgAdmin?: boolean;
+}) {
   return (
     <MobileNavSheet
-      items={itemsFor(user.profile.role)}
+      items={itemsFor(user.profile.role, orgAdmin)}
       logoHref="/dashboard"
       footer={<TrialMeter profile={user.profile} />}
     />

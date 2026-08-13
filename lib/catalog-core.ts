@@ -32,6 +32,8 @@ export type CatalogExam = {
    * who bought one before it was retired — callers that SELL filter on this.
    */
   isActive: boolean;
+  /** Private-bank owner; null = public catalog. Org exams are never sold. */
+  orgId: string | null;
   specialtyCount: number;
   subjectCount: number;
   questionCount: number;
@@ -42,7 +44,13 @@ export type CatalogExamDetail = CatalogExam & {
 };
 
 export type CatalogRows = {
-  exams: { id: string; name: string; code: string | null; is_active: boolean }[];
+  exams: {
+    id: string;
+    name: string;
+    code: string | null;
+    is_active: boolean;
+    org_id: string | null;
+  }[];
   specialties: { id: string; name: string; exam_id: string }[];
   subjects: { id: string; name: string; specialty_id: string }[];
   /** Only subjects with at least one published question appear here. */
@@ -95,6 +103,7 @@ export function assembleCatalog(rows: CatalogRows): CatalogExamDetail[] {
       name: exam.name,
       code: exam.code,
       isActive: exam.is_active,
+      orgId: exam.org_id,
       specialties,
       specialtyCount: specialties.length,
       subjectCount: sum(specialties, (sp) => sp.subjectCount),
@@ -110,6 +119,7 @@ export function toExamSummary(exam: CatalogExamDetail): CatalogExam {
     name: exam.name,
     code: exam.code,
     isActive: exam.isActive,
+    orgId: exam.orgId,
     specialtyCount: exam.specialtyCount,
     subjectCount: exam.subjectCount,
     questionCount: exam.questionCount,
@@ -121,10 +131,12 @@ export function toExamSummary(exam: CatalogExamDetail): CatalogExam {
  *
  * Deliberately not applied inside assembleCatalog: retiring an exam must not
  * blank its name on a receipt or an expiry banner, so the catalogue stays
- * complete and only the selling surfaces narrow.
+ * complete and only the selling surfaces narrow. Org exams are excluded even
+ * when is_active — a member browsing checkout must never be offered their
+ * own org's private bank as a product.
  */
-export function sellableExams<T extends { isActive: boolean }>(
-  exams: readonly T[]
-): T[] {
-  return exams.filter((exam) => exam.isActive);
+export function sellableExams<
+  T extends { isActive: boolean; orgId: string | null },
+>(exams: readonly T[]): T[] {
+  return exams.filter((exam) => exam.isActive && exam.orgId === null);
 }

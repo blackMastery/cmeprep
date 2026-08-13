@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
+import { getOrgMembership } from "@/lib/orgs";
 import { AppHeader } from "@/components/app/app-header";
 import { AppChrome } from "@/components/app/app-chrome";
 import { AppSidebar } from "@/components/app/app-nav";
@@ -24,15 +25,19 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
+  // Nav flag only — pages that ACT on org-admin status run requireOrgAdmin
+  // themselves.
+  const membership = await getOrgMembership(user.id);
+  const orgAdmin = membership?.membership.role === "admin";
 
   return (
     <div className="flex min-h-svh flex-col">
       <AppChrome>
-        <AppHeader user={user} />
+        <AppHeader user={user} orgAdmin={orgAdmin} />
       </AppChrome>
       <div className="flex flex-1">
         <AppChrome>
-          <AppSidebar user={user} />
+          <AppSidebar user={user} orgAdmin={orgAdmin} />
         </AppChrome>
         <main className="min-w-0 flex-1">{children}</main>
       </div>

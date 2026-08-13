@@ -6,6 +6,7 @@
  * here; it lives once in isEffectivelyActive.
  */
 
+import { orgGrantHolds } from "@/lib/orgs-core";
 import {
   daysUntil,
   EXPIRY_WARNING_DAYS,
@@ -17,8 +18,22 @@ import type { UserRole } from "@/lib/supabase/types";
 /** A subscription row as the entitlement rules see it. */
 export type SubscriptionScope = SubscriptionLike & { exam_id: string | null };
 
+/**
+ * The caller's org, as the grant rules see it: membership + the org's
+ * subscription rows + the suspension flag. null = not a member of any org.
+ * Whether the grant HOLDS (grace, suspension) is decided here via
+ * orgGrantHolds — callers just fetch and pass.
+ */
+export type OrgGrantContext = {
+  org_id: string;
+  suspended_at: string | null;
+  subs: readonly SubscriptionLike[];
+};
+
 export type ExamAccess =
   | { kind: "all"; reason: "admin" | "trial" | "legacy" }
+  /** Org grant: every public exam plus this org's own private bank. */
+  | { kind: "all"; reason: "org"; orgId: string }
   | { kind: "scoped"; examIds: string[] }
   | { kind: "none" };
 
@@ -26,13 +41,16 @@ export type ExamAccess =
  * Branch order is load-bearing:
  *
  *  1. admin  — staff must be able to QA every exam.
- *  2. trial  — trial users may practise ANY exam; the trial QUOTA is their
+ *  2. org    — an entitled org covers its members outright. Checked BEFORE
+ *              trial so a trial-ROLE member is unmetered: quota consumers key
+ *              off reason "org" to skip the credit claim (SPEC §3).
+ *  3. trial  — trial users may practise ANY exam; the trial QUOTA is their
  *              limiter, not the taxonomy. Checked BEFORE the scoped branch so
  *              a trial user who has just bought one exam is never narrowed by
  *              their own purchase in the window before the role sync runs.
- *  3. a live row with exam_id null — grandfathered all-access, and the shape
+ *  4. a live row with exam_id null — grandfathered all-access, and the shape
  *              admin comp grants use.
- *  4. otherwise exactly the exams named by live rows.
+ *  5. otherwise exactly the exams named by live rows.
  *
  * A `student` with no live row lands on "none" and is blocked everywhere.
  * That is deliberate: role must never become a second, weaker source of truth.
@@ -40,9 +58,13 @@ export type ExamAccess =
 export function examAccessFor(
   role: UserRole,
   subs: readonly SubscriptionScope[],
+  org: OrgGrantContext | null,
   now: Date
 ): ExamAccess {
   if (role === "admin") return { kind: "all", reason: "admin" };
+  if (org && orgGrantHolds(org, org.subs, now)) {
+    return { kind: "all", reason: "org", orgId: org.org_id };
+  }
   if (role === "trial") return { kind: "all", reason: "trial" };
 
   const live = subs.filter((s) => isEffectivelyActive(s, now));
@@ -57,10 +79,32 @@ export function examAccessFor(
   };
 }
 
-export function canAccessExam(access: ExamAccess, examId: string): boolean {
+/**
+ * May this access touch an exam owned by `examOrgId`? Stated ONCE: private
+ * banks are for their own org's members (and platform admins, for QA) —
+ * `kind: "all"` never crosses an org wall. RLS enforces the same rule in the
+ * database; this is the app-layer twin for pages that render locks.
+ */
+export function orgExamAllowed(
+  access: ExamAccess,
+  examOrgId: string | null
+): boolean {
+  if (examOrgId === null) return true;
+  return (
+    access.kind === "all" &&
+    (access.reason === "admin" ||
+      (access.reason === "org" && access.orgId === examOrgId))
+  );
+}
+
+export function canAccessExam(
+  access: ExamAccess,
+  exam: { id: string; orgId: string | null }
+): boolean {
+  if (!orgExamAllowed(access, exam.orgId)) return false;
   return (
     access.kind === "all" ||
-    (access.kind === "scoped" && access.examIds.includes(examId))
+    (access.kind === "scoped" && access.examIds.includes(exam.id))
   );
 }
 
@@ -74,20 +118,25 @@ export function canAccessExam(access: ExamAccess, examId: string): boolean {
  * exams as the upsell and dangling something no longer for sale is a dead
  * end. Trials are `kind: "all"` here, hence the explicit reason check.
  */
-export function visibleExamsFor<T extends { id: string; isActive: boolean }>(
-  exams: readonly T[],
-  access: ExamAccess
-): T[] {
+export function visibleExamsFor<
+  T extends { id: string; isActive: boolean; orgId: string | null },
+>(exams: readonly T[], access: ExamAccess): T[] {
   if (access.kind === "all" && access.reason === "admin") return [...exams];
 
-  return exams.filter(
-    (exam) =>
+  return exams.filter((exam) => {
+    // Private banks: membership decides, never the storefront — is_active
+    // is a checkout concept and org exams are not sold.
+    if (exam.orgId !== null) return orgExamAllowed(access, exam.orgId);
+
+    return (
       exam.isActive ||
       (access.kind === "scoped" && access.examIds.includes(exam.id)) ||
       // A grandfathered all-access row bought the whole catalogue, retired
-      // entries included.
-      (access.kind === "all" && access.reason === "legacy")
-  );
+      // entries included; an org subscription buys the same blanket.
+      (access.kind === "all" &&
+        (access.reason === "legacy" || access.reason === "org"))
+    );
+  });
 }
 
 /**

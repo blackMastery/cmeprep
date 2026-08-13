@@ -14,7 +14,7 @@ const SUBJ_2 = "22222222-2222-2222-2222-222222222222";
 function rows(overrides: Partial<CatalogRows> = {}): CatalogRows {
   return {
     exams: [
-      { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
+      { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true, org_id: null },
     ],
     specialties: [{ id: SPEC, name: "General", exam_id: EXAM }],
     subjects: [
@@ -96,8 +96,8 @@ describe("assembleCatalog", () => {
     const result = assembleCatalog(
       rows({
         exams: [
-          { id: second, name: "PLAB", code: null, is_active: true },
-          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
+          { id: second, name: "PLAB", code: null, is_active: true, org_id: null },
+          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true, org_id: null },
         ],
       })
     );
@@ -109,8 +109,8 @@ describe("assembleCatalog", () => {
     const result = assembleCatalog(
       rows({
         exams: [
-          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
-          { id: other, name: "PLAB", code: null, is_active: true },
+          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true, org_id: null },
+          { id: other, name: "PLAB", code: null, is_active: true, org_id: null },
         ],
       })
     );
@@ -131,7 +131,7 @@ describe("toExamSummary", () => {
   it("carries availability through to the summary", () => {
     const [exam] = assembleCatalog(
       rows({
-        exams: [{ id: EXAM, name: "Retired", code: null, is_active: false }],
+        exams: [{ id: EXAM, name: "Retired", code: null, is_active: false, org_id: null }],
       })
     );
     expect(exam.isActive).toBe(false);
@@ -146,8 +146,8 @@ describe("sellableExams", () => {
     const catalog = assembleCatalog(
       rows({
         exams: [
-          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true },
-          { id: retired, name: "PLAB", code: null, is_active: false },
+          { id: EXAM, name: "Medical Board Exam", code: "CAMC", is_active: true, org_id: null },
+          { id: retired, name: "PLAB", code: null, is_active: false, org_id: null },
         ],
       })
     );
@@ -156,11 +156,29 @@ describe("sellableExams", () => {
     ]);
   });
 
+  it("never offers an org's private bank for sale, even when active", () => {
+    // A member browsing checkout must not see their org's bank as a product.
+    const catalog = assembleCatalog(
+      rows({
+        exams: [
+          {
+            id: retired,
+            name: "St. Mary's Internal Bank",
+            code: null,
+            is_active: true,
+            org_id: "a0000000-0000-0000-0000-000000000001",
+          },
+        ],
+      })
+    );
+    expect(sellableExams(catalog)).toEqual([]);
+  });
+
   it("leaves the catalogue itself complete so names still resolve", () => {
     // A receipt or expiry banner has to name a retired exam the buyer owns.
     const catalog = assembleCatalog(
       rows({
-        exams: [{ id: retired, name: "PLAB", code: null, is_active: false }],
+        exams: [{ id: retired, name: "PLAB", code: null, is_active: false, org_id: null }],
       })
     );
     expect(catalog).toHaveLength(1);

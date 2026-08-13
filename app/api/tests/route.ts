@@ -39,9 +39,14 @@ export async function POST(request: Request) {
   // ── Entitlement: a paid plan buys ONE exam. This is the hard block — the
   // wizard only renders locks. Trial users pass (they may practise any exam);
   // the quota below is their limiter. Checked BEFORE the trial claim, so a
-  // blocked request never burns a credit.
-  const access = await examAccessFrom(admin, user.id, user.profile.role);
-  if (!canAccessExam(access, examId)) {
+  // blocked request never burns a credit. The exam row is fetched for its
+  // org_id: private banks are members-only and the admin client bypasses the
+  // RLS that would otherwise enforce that wall.
+  const [access, { data: exam }] = await Promise.all([
+    examAccessFrom(admin, user.id, user.profile.role),
+    admin.from("exams").select("id, org_id").eq("id", examId).maybeSingle(),
+  ]);
+  if (!exam || !canAccessExam(access, { id: exam.id, orgId: exam.org_id })) {
     return NextResponse.json(
       {
         error: "exam_locked",
@@ -73,8 +78,13 @@ export async function POST(request: Request) {
   }
 
   // ── Trial quota: one atomic statement, so two concurrent requests can
-  // never both consume the final credit.
-  if (user.profile.role === "trial") {
+  // never both consume the final credit. Org members are unmetered — the org
+  // bought blanket access, so a trial-ROLE member neither burns a credit nor
+  // gets blocked at zero (SPEC §3).
+  const consumesTrial =
+    user.profile.role === "trial" &&
+    !(access.kind === "all" && access.reason === "org");
+  if (consumesTrial) {
     const { data: claimed, error: claimError } = await admin
       .from("profiles")
       .update({ trials_used: user.profile.trials_used + 1 })
@@ -117,7 +127,7 @@ export async function POST(request: Request) {
   const { data: candidates, error: qError } = await query.limit(500);
 
   if (qError) {
-    await refundTrial(user.id, user.profile.role, user.profile.trials_used);
+    await refundTrial(consumesTrial, user.id, user.profile.trials_used);
     return NextResponse.json(
       { error: "Could not load questions" },
       { status: 500 }
@@ -125,7 +135,7 @@ export async function POST(request: Request) {
   }
 
   if (!candidates || candidates.length === 0) {
-    await refundTrial(user.id, user.profile.role, user.profile.trials_used);
+    await refundTrial(consumesTrial, user.id, user.profile.trials_used);
     return NextResponse.json(
       {
         error: "no_questions",
@@ -152,7 +162,7 @@ export async function POST(request: Request) {
     );
 
   if (optError || !options) {
-    await refundTrial(user.id, user.profile.role, user.profile.trials_used);
+    await refundTrial(consumesTrial, user.id, user.profile.trials_used);
     return NextResponse.json(
       { error: "Could not load options" },
       { status: 500 }
@@ -189,7 +199,7 @@ export async function POST(request: Request) {
     .single();
 
   if (testError || !test) {
-    await refundTrial(user.id, user.profile.role, user.profile.trials_used);
+    await refundTrial(consumesTrial, user.id, user.profile.trials_used);
     return NextResponse.json(
       { error: "Could not create test" },
       { status: 500 }
@@ -207,7 +217,7 @@ export async function POST(request: Request) {
 
   if (linkError) {
     await admin.from("tests").delete().eq("id", test.id);
-    await refundTrial(user.id, user.profile.role, user.profile.trials_used);
+    await refundTrial(consumesTrial, user.id, user.profile.trials_used);
     return NextResponse.json(
       { error: "Could not create test" },
       { status: 500 }
@@ -219,11 +229,11 @@ export async function POST(request: Request) {
 
 /** Give a trial credit back when test creation fails after consuming it. */
 async function refundTrial(
+  consumed: boolean,
   userId: string,
-  role: string,
   previousUsed: number
 ): Promise<void> {
-  if (role !== "trial") return;
+  if (!consumed) return;
   const admin = createAdminClient();
   await admin
     .from("profiles")

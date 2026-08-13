@@ -29,20 +29,23 @@ function upsellPlan(plans: Plan[]): Plan | null {
 export default async function NewTestPage() {
   const user = await requireUser();
 
-  if (!hasTrialsRemaining(user.profile)) {
-    const plans = paidPlans(await listActivePlans());
-    return (
-      <div className="mx-auto w-full max-w-2xl px-4 py-12">
-        <TrialLimitCard profile={user.profile} plans={plans} />
-      </div>
-    );
-  }
-
   const [tree, access, plans] = await Promise.all([
     listExamCatalogTree(),
     getExamAccess(user),
     listActivePlans(),
   ]);
+
+  // The quota gates trial-ROLE users only; an org-covered member is
+  // unmetered regardless of role (SPEC §3), so access must be computed
+  // before the trial wall can be shown.
+  const orgCovered = access.kind === "all" && access.reason === "org";
+  if (!orgCovered && !hasTrialsRemaining(user.profile)) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-12">
+        <TrialLimitCard profile={user.profile} plans={paidPlans(plans)} />
+      </div>
+    );
+  }
 
   const upsellPlanId = upsellPlan(plans)?.id ?? null;
 
@@ -55,7 +58,7 @@ export default async function NewTestPage() {
     name: exam.name,
     subjectCount: exam.subjectCount,
     questionCount: exam.questionCount,
-    locked: !canAccessExam(access, exam.id),
+    locked: !canAccessExam(access, { id: exam.id, orgId: exam.orgId }),
     specialties: exam.specialties.map((specialty) => ({
       id: specialty.id,
       name: specialty.name,

@@ -298,6 +298,39 @@ export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters");
 
+/* ── Orgs ───────────────────────────────────────────────────────── */
+
+export const ORG_MEMBER_ROLES = ["member", "admin"] as const;
+export const orgMemberRoleSchema = z.enum(ORG_MEMBER_ROLES);
+
+/**
+ * The invite textarea: addresses separated by whitespace, commas or
+ * semicolons (people paste straight from Outlook). Dedupes case-insensitively
+ * — the column is citext, so "Jane@x" and "jane@x" are the same invite.
+ */
+export function parseInviteEmails(raw: string): {
+  emails: string[];
+  invalid: string[];
+} {
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  const invalid: string[] = [];
+
+  for (const token of raw.split(/[\s,;]+/)) {
+    if (token === "") continue;
+    const parsed = emailSchema.safeParse(token);
+    if (!parsed.success) {
+      invalid.push(token);
+      continue;
+    }
+    if (seen.has(parsed.data)) continue;
+    seen.add(parsed.data);
+    emails.push(parsed.data);
+  }
+
+  return { emails, invalid };
+}
+
 export const fullNameSchema = z
   .string()
   .trim()

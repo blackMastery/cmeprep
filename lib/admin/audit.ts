@@ -62,7 +62,16 @@ export type AuditAction =
   // stopped.
   | "payment.reconcile"
   | "payment.reconcile_repair"
-  | "payment.reconcile_failed";
+  | "payment.reconcile_failed"
+  // Org membership lifecycle (SPEC §4/§10). Bulk invites write ONE summary
+  // row like question.bulk_import; org.member_join's actor is the joiner
+  // (accepting an invite is the one org action a non-admin performs).
+  | "org.invite"
+  | "org.invite_revoke"
+  | "org.invite_resend"
+  | "org.member_join"
+  | "org.member_remove"
+  | "org.member_role_change";
 
 /**
  * Append an admin action to `audit_logs`.
@@ -76,12 +85,16 @@ export type AuditAction =
  * `actorId` is nullable because the reconciliation sweep has no actor.
  * audit_logs.actor_id is already nullable with an FK to profiles, so a sentinel
  * uuid would violate the FK — null is the only honest value.
+ *
+ * `orgId` scopes org-admin actions to their org's audit page; platform-admin
+ * and system actions leave it null.
  */
 export async function audit(
   actorId: string | null,
   action: AuditAction,
   target?: string | null,
-  meta?: Record<string, unknown>
+  meta?: Record<string, unknown>,
+  orgId?: string | null
 ): Promise<void> {
   try {
     const { error } = await createAdminClient().from("audit_logs").insert({
@@ -89,6 +102,7 @@ export async function audit(
       action,
       target: target ?? null,
       meta: meta ?? null,
+      org_id: orgId ?? null,
     });
     if (error) throw new Error(error.message);
   } catch (error) {

@@ -6,13 +6,57 @@ import type { SessionUser } from "@/lib/auth";
 import {
   examAccessFor,
   type ExamAccess,
+  type OrgGrantContext,
   type SubscriptionScope,
 } from "@/lib/entitlements-core";
+import type { SubscriptionLike } from "@/lib/subscriptions-core";
 
 /** Either client works: admin (route handlers) or RLS'd (pages, actions). */
 type DbClient =
   | ReturnType<typeof createAdminClient>
   | Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * The caller's org, if any, as examAccessFor wants it. Exported for pages
+ * that compute access from rows they already hold (the dashboard). Whether
+ * the org GRANTS anything (grace, suspension, lapsed subs) is decided in
+ * orgs-core, not here — this only fetches.
+ *
+ * With the RLS client the org_members/orgs/org_subscriptions policies scope
+ * these reads; with the admin client the `.eq` filters are the only scoping,
+ * same caveat as examAccessFrom below.
+ */
+export async function orgGrantContextFrom(
+  client: DbClient,
+  userId: string
+): Promise<OrgGrantContext | null> {
+  const { data: membership } = await client
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!membership) return null;
+
+  const [{ data: org }, { data: subs }] = await Promise.all([
+    client
+      .from("orgs")
+      .select("suspended_at")
+      .eq("id", membership.org_id)
+      .maybeSingle(),
+    client
+      .from("org_subscriptions")
+      .select("status, current_period_end")
+      .eq("org_id", membership.org_id),
+  ]);
+  // A membership row whose org row can't be read grants nothing.
+  if (!org) return null;
+
+  return {
+    org_id: membership.org_id,
+    suspended_at: org.suspended_at,
+    subs: (subs ?? []) as SubscriptionLike[],
+  };
+}
 
 /**
  * Which exams may this user practise?
@@ -22,9 +66,10 @@ type DbClient =
  * below is then the only thing scoping the read.
  *
  * Every row is fetched and filtered in JS rather than narrowed in SQL: the
- * stale-'active' rule already exists in isEffectivelyActive and must not be
- * re-expressed as a WHERE clause in yet another place. Rows per user are few
- * and subscriptions_user_idx covers the read.
+ * stale-'active' rule already exists in isEffectivelyActive (and the org
+ * grace rule in orgs-core) and must not be re-expressed as a WHERE clause in
+ * yet another place. Rows per user are few and subscriptions_user_idx covers
+ * the read.
  */
 export async function examAccessFrom(
   client: DbClient,
@@ -32,12 +77,15 @@ export async function examAccessFrom(
   role: SessionUser["profile"]["role"],
   now: Date = new Date()
 ): Promise<ExamAccess> {
-  const { data } = await client
-    .from("subscriptions")
-    .select("status, current_period_end, exam_id")
-    .eq("user_id", userId);
+  const [{ data }, org] = await Promise.all([
+    client
+      .from("subscriptions")
+      .select("status, current_period_end, exam_id")
+      .eq("user_id", userId),
+    orgGrantContextFrom(client, userId),
+  ]);
 
-  return examAccessFor(role, (data ?? []) as SubscriptionScope[], now);
+  return examAccessFor(role, (data ?? []) as SubscriptionScope[], org, now);
 }
 
 /** Convenience for Server Components, which have no client in hand. */

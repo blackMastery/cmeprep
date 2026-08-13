@@ -5,6 +5,7 @@ import {
   emailSchema,
   fullNameSchema,
   parseFeatureLines,
+  parseInviteEmails,
   passwordSchema,
   planSchema,
   safeRedirectPath,
@@ -342,5 +343,28 @@ describe("safeRedirectPath", () => {
 
   it("honours a custom fallback", () => {
     expect(safeRedirectPath("//evil.com", "/login")).toBe("/login");
+  });
+});
+
+describe("parseInviteEmails", () => {
+  it("splits on newlines, commas, semicolons and spaces", () => {
+    expect(
+      parseInviteEmails("a@x.org, b@x.org;c@x.org\nd@x.org e@x.org").emails
+    ).toEqual(["a@x.org", "b@x.org", "c@x.org", "d@x.org", "e@x.org"]);
+  });
+
+  it("dedupes case-insensitively — the column is citext", () => {
+    const { emails } = parseInviteEmails("Jane@X.org jane@x.org");
+    expect(emails).toEqual(["jane@x.org"]);
+  });
+
+  it("reports invalid tokens instead of dropping them silently", () => {
+    const { emails, invalid } = parseInviteEmails("a@x.org not-an-email");
+    expect(emails).toEqual(["a@x.org"]);
+    expect(invalid).toEqual(["not-an-email"]);
+  });
+
+  it("returns nothing for an empty paste", () => {
+    expect(parseInviteEmails("  \n ")).toEqual({ emails: [], invalid: [] });
   });
 });

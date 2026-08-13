@@ -27,7 +27,7 @@ export async function listExamCatalogTree(): Promise<CatalogExamDetail[]> {
   ] = await Promise.all([
     supabase
       .from("exams")
-      .select("id, name, code, is_active")
+      .select("id, name, code, is_active, org_id")
       .order("position")
       .order("name"),
     supabase

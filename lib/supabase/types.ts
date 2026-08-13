@@ -40,6 +40,8 @@ export type Exam = Timestamps & {
   position: number;
   /** Offered at checkout. False still serves everyone who already bought it. */
   is_active: boolean;
+  /** Private bank owner; null = public catalog. Never sold, never cross-org. */
+  org_id: string | null;
 };
 
 export type Specialty = Timestamps & {
@@ -145,6 +147,8 @@ export type AuditLog = {
   action: string;
   target: string | null;
   meta: Record<string, unknown> | null;
+  /** Set on org-admin actions; the org audit page filters on it. */
+  org_id: string | null;
   created_at: string;
 };
 
@@ -273,6 +277,61 @@ export type Payment = Timestamps & {
   updated_at: string | null;
 };
 
+/** Org-membership role. Lives on the membership row — NOT profiles.role —
+ * so role never becomes a second source of entitlement truth. */
+export type OrgMemberRole = "admin" | "member";
+
+export type Org = Timestamps & {
+  id: string;
+  name: string;
+  /** Storage object in the org-branding bucket. */
+  logo_path: string | null;
+  /** Risk flagging: rolling accuracy below this % flags a member. */
+  pass_mark_pct: number;
+  /** Risk flagging: no activity for this many days flags a member. */
+  risk_inactivity_days: number;
+  /** Accepted members + pending invites must stay within this. */
+  seat_limit: number;
+  /** Platform-admin kill switch; treated like a lapsed subscription. */
+  suspended_at: string | null;
+  created_by: string | null;
+  updated_at: string | null;
+};
+
+export type OrgMember = {
+  org_id: string;
+  user_id: string;
+  role: OrgMemberRole;
+  joined_at: string;
+};
+
+export type OrgInvite = {
+  id: string;
+  org_id: string;
+  /** citext in Postgres — comparisons are case-insensitive. */
+  email: string;
+  role: OrgMemberRole;
+  invited_by: string | null;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+};
+
+/** Org-level access period. Grants are read-time (lib/entitlements-core.ts):
+ * no per-member subscriptions rows exist, this row IS the entitlement. */
+export type OrgSubscription = Timestamps & {
+  id: string;
+  org_id: string;
+  /** Soft link to plans; null for bespoke admin grants and deleted plans. */
+  plan_id: string | null;
+  /** Free text snapshot; presets come from the plans table. */
+  plan: string;
+  status: SubStatus;
+  current_period_end: string;
+  updated_at: string | null;
+};
+
 export type Plan = Timestamps & {
   id: string;
   name: string;
@@ -337,6 +396,10 @@ export type Database = {
       payments: Table<Payment>;
       plans: Table<Plan>;
       contact_messages: Table<ContactMessage>;
+      orgs: Table<Org>;
+      org_members: Table<OrgMember>;
+      org_invites: Table<OrgInvite>;
+      org_subscriptions: Table<OrgSubscription>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;
@@ -348,6 +411,11 @@ export type Database = {
     };
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };
+      is_org_member: { Args: { org: string }; Returns: boolean };
+      is_org_admin: { Args: { org: string }; Returns: boolean };
+      exam_is_visible: { Args: { exam: string }; Returns: boolean };
+      specialty_is_visible: { Args: { specialty: string }; Returns: boolean };
+      subject_is_visible: { Args: { subject: string }; Returns: boolean };
     };
     Enums: {
       user_role: UserRole;

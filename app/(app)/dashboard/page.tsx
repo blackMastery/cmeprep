@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
 import { examAccessFor, type SubscriptionScope } from "@/lib/entitlements-core";
+import { orgGrantContextFrom } from "@/lib/entitlements";
+import { pendingInviteForEmail } from "@/lib/orgs";
+import { OrgInviteBanner } from "@/components/org/org-invite-banner";
 import { listExamCatalog } from "@/lib/catalog";
 import type { Test, SubjectAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,8 @@ export default async function DashboardPage() {
     { data: subjects },
     { data: tests },
     { data: subs },
+    orgCtx,
+    inviteNotice,
   ] = await Promise.all([
     getLifetimeStats(user.id),
     supabase
@@ -47,14 +52,24 @@ export default async function DashboardPage() {
       .from("subscriptions")
       .select("status, current_period_end, exam_id")
       .eq("user_id", user.id),
+    orgGrantContextFrom(supabase, user.id),
+    pendingInviteForEmail(user.email),
   ]);
 
   const subscriptions = (subs ?? []) as SubscriptionScope[];
   const greetingName = firstName(user.profile.full_name);
 
-  // null = all exams (trial, admin, or an all-access row) — the panel says so
-  // rather than listing the whole catalogue.
-  const access = examAccessFor(user.profile.role, subscriptions, new Date());
+  // null = all exams (trial, admin, org, or an all-access row) — the panel
+  // says so rather than listing the whole catalogue.
+  const access = examAccessFor(
+    user.profile.role,
+    subscriptions,
+    orgCtx,
+    new Date()
+  );
+  // Org members are unmetered (SPEC §3): the start button must not vanish
+  // for a trial-role member whose org covers them.
+  const orgCovered = access.kind === "all" && access.reason === "org";
   const entitledExamNames =
     access.kind === "all"
       ? null
@@ -75,7 +90,7 @@ export default async function DashboardPage() {
             Pick up where you left off, or start something new.
           </p>
         </div>
-        {hasTrialsRemaining(user.profile) && (
+        {(orgCovered || hasTrialsRemaining(user.profile)) && (
           <Button size="lg" asChild>
             <Link href="/tests/new">
               <Plus data-icon="inline-start" />
@@ -84,6 +99,14 @@ export default async function DashboardPage() {
           </Button>
         )}
       </header>
+
+      {/* Members can't accept a second org's invite, so don't dangle it. */}
+      {!orgCtx && inviteNotice && (
+        <OrgInviteBanner
+          inviteId={inviteNotice.invite.id}
+          orgName={inviteNotice.orgName}
+        />
+      )}
 
       <ExpiryBanners subscriptions={subscriptions} />
 
