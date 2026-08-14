@@ -4,7 +4,9 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { listExamCatalog } from "@/lib/catalog";
+import { getOrgMembership } from "@/lib/orgs";
 import type { Subscription } from "@/lib/supabase/types";
+import { OrgUpsellCard } from "@/components/org/org-upsell-card";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { IdentityCard } from "@/components/profile/identity-card";
 import { PlanCard } from "@/components/profile/plan-card";
@@ -20,15 +22,17 @@ export default async function ProfilePage() {
 
   // RLS scopes the subscriptions read to this user; one query serves the
   // expiry banner, current status and history.
-  const [{ stats, streak }, { data: subs }, catalog] = await Promise.all([
-    getLifetimeStats(user.id),
-    supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false }),
-    listExamCatalog(),
-  ]);
+  const [{ stats, streak }, { data: subs }, catalog, membership] =
+    await Promise.all([
+      getLifetimeStats(user.id),
+      supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+      listExamCatalog(),
+      getOrgMembership(user.id),
+    ]);
   const subscriptions = (subs ?? []) as Subscription[];
   const examNames = Object.fromEntries(
     catalog.map((exam) => [exam.id, exam.name])
@@ -82,6 +86,8 @@ export default async function ProfilePage() {
             subscriptions={subscriptions}
             examNames={examNames}
           />
+          {/* One org per account — only pitch founding one to the org-less. */}
+          {!membership && <OrgUpsellCard />}
         </div>
       </div>
     </div>

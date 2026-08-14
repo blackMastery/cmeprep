@@ -17,6 +17,7 @@ import {
   pendingInviteForEmail,
 } from "@/lib/orgs";
 import { OrgInviteBanner } from "@/components/org/org-invite-banner";
+import { OrgUpsellCard } from "@/components/org/org-upsell-card";
 import { MemberAccessBanner } from "@/components/org/org-access-banners";
 import { AssignmentsCard } from "@/components/dashboard/assignments-card";
 import { daysUntil } from "@/lib/subscriptions-core";
@@ -197,6 +198,9 @@ export default async function DashboardPage() {
           )}
           <WeakAreas subjects={(subjects ?? []) as SubjectAccuracy[]} />
           <AccountPanel profile={user.profile} examNames={entitledExamNames} />
+          {/* Org-less users only — and not while an invite banner is already
+              offering them an org to join. */}
+          {!orgCtx && !inviteNotice && <OrgUpsellCard />}
         </div>
       </div>
     </div>
