@@ -3,6 +3,7 @@
 import {
   Bookmark,
   Building2,
+  ClipboardList,
   FilePlus2,
   History,
   LayoutDashboard,
@@ -37,10 +38,21 @@ const ORG_ITEM: SideNavItem = {
   icon: Building2,
 };
 
-function itemsFor(role: SessionUser["profile"]["role"], orgAdmin: boolean) {
+const ASSIGNMENTS_ITEM: SideNavItem = {
+  href: "/assignments",
+  label: "Assignments",
+  icon: ClipboardList,
+};
+
+function itemsFor(
+  role: SessionUser["profile"]["role"],
+  orgAdmin: boolean,
+  orgMember: boolean
+) {
   const items = [...NAV_ITEMS];
   // Membership lives on org_members, not the profile — the (app) layout
-  // looks it up and passes the flag down.
+  // looks it up and passes the flags down.
+  if (orgMember) items.splice(2, 0, ASSIGNMENTS_ITEM);
   if (orgAdmin) items.push(ORG_ITEM);
   if (role === "admin") items.push(ADMIN_ITEM);
   return items;
@@ -72,13 +84,15 @@ function TrialMeter({ profile }: { profile: SessionUser["profile"] }) {
 export function AppSidebar({
   user,
   orgAdmin = false,
+  orgMember = false,
 }: {
   user: SessionUser;
   orgAdmin?: boolean;
+  orgMember?: boolean;
 }) {
   return (
     <Sidebar
-      items={itemsFor(user.profile.role, orgAdmin)}
+      items={itemsFor(user.profile.role, orgAdmin, orgMember)}
       footer={<TrialMeter profile={user.profile} />}
     />
   );
@@ -88,13 +102,15 @@ export function AppSidebar({
 export function MobileNav({
   user,
   orgAdmin = false,
+  orgMember = false,
 }: {
   user: SessionUser;
   orgAdmin?: boolean;
+  orgMember?: boolean;
 }) {
   return (
     <MobileNavSheet
-      items={itemsFor(user.profile.role, orgAdmin)}
+      items={itemsFor(user.profile.role, orgAdmin, orgMember)}
       logoHref="/dashboard"
       footer={<TrialMeter profile={user.profile} />}
     />

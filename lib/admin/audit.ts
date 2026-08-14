@@ -80,7 +80,9 @@ export type AuditAction =
   | "org.unsuspend"
   | "org_subscription.create"
   | "org_subscription.update"
-  | "org_subscription.cancel";
+  | "org_subscription.cancel"
+  | "org.assignment_create"
+  | "org.assignment_delete";
 
 /**
  * Append an admin action to `audit_logs`.

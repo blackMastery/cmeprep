@@ -3,9 +3,14 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser, type SessionUser } from "@/lib/auth";
-import { isInvitePending } from "@/lib/orgs-core";
+import {
+  assignmentStatus,
+  isInvitePending,
+  type AssignmentStatus,
+} from "@/lib/orgs-core";
 import type {
   Org,
+  OrgAssignment,
   OrgInvite,
   OrgMember,
   OrgSubscription,
@@ -159,6 +164,170 @@ export async function listOrgSubscriptions(
     .eq("org_id", orgId)
     .order("current_period_end", { ascending: false });
   return (data ?? []) as OrgSubscription[];
+}
+
+/** Live (non-deleted) assignments, soonest deadline first. */
+export async function listOrgAssignments(
+  orgId: string
+): Promise<OrgAssignment[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("org_assignments")
+    .select("*")
+    .eq("org_id", orgId)
+    .is("deleted_at", null)
+    .order("due_at", { ascending: true });
+  return (data ?? []) as OrgAssignment[];
+}
+
+export type MemberAssignment = {
+  assignment: OrgAssignment;
+  status: AssignmentStatus;
+  /** Latest attempt, submitted or not — where Continue/Review point. */
+  latestTestId: string | null;
+  latestScore: number | null;
+  latestTotal: number | null;
+};
+
+/**
+ * What one member owes (or has done): assignments addressed to them plus
+ * their standing on each, derived from their tests via assignment_id.
+ */
+export async function assignmentsForMember(
+  orgId: string,
+  userId: string,
+  now: Date = new Date()
+): Promise<MemberAssignment[]> {
+  const admin = createAdminClient();
+
+  const [assignments, { data: targetRows }] = await Promise.all([
+    listOrgAssignments(orgId),
+    admin
+      .from("org_assignment_targets")
+      .select("assignment_id")
+      .eq("user_id", userId),
+  ]);
+  const targeted = new Set((targetRows ?? []).map((t) => t.assignment_id));
+  const mine = assignments.filter(
+    (a) => a.audience === "all" || targeted.has(a.id)
+  );
+  if (mine.length === 0) return [];
+
+  const { data: tests } = await admin
+    .from("tests")
+    .select("id, assignment_id, status, submitted_at, score, total_questions")
+    .eq("user_id", userId)
+    .in(
+      "assignment_id",
+      mine.map((a) => a.id)
+    )
+    .order("started_at", { ascending: false });
+
+  type TestRow = {
+    id: string;
+    assignment_id: string | null;
+    status: string;
+    submitted_at: string | null;
+    score: number | null;
+    total_questions: number;
+  };
+  const byAssignment = new Map<string, TestRow[]>();
+  for (const t of (tests ?? []) as TestRow[]) {
+    if (!t.assignment_id) continue;
+    const list = byAssignment.get(t.assignment_id) ?? [];
+    list.push(t);
+    byAssignment.set(t.assignment_id, list);
+  }
+
+  return mine.map((assignment) => {
+    const attempts = byAssignment.get(assignment.id) ?? [];
+    const submitted = attempts.filter((t) => t.status === "submitted");
+    // Newest-first order above ⇒ first submitted row is the LATEST attempt,
+    // which is what the org dashboard reports (SPEC §7).
+    const latestSubmitted = submitted[0] ?? null;
+    const latest = latestSubmitted ?? attempts[0] ?? null;
+
+    return {
+      assignment,
+      status: assignmentStatus(
+        {
+          dueAt: assignment.due_at,
+          submittedAt: latestSubmitted?.submitted_at ?? null,
+          hasAttempt: attempts.length > 0,
+        },
+        now
+      ),
+      latestTestId: latest?.id ?? null,
+      latestScore: latestSubmitted?.score ?? null,
+      latestTotal: latestSubmitted?.total_questions ?? null,
+    };
+  });
+}
+
+export type AssignmentProgress = {
+  assignment: OrgAssignment;
+  targeted: number;
+  completed: number;
+  late: number;
+};
+
+/** Per-assignment completion counts for the org-admin list. */
+export async function listAssignmentProgress(
+  orgId: string
+): Promise<AssignmentProgress[]> {
+  const admin = createAdminClient();
+  const assignments = await listOrgAssignments(orgId);
+  if (assignments.length === 0) return [];
+  const ids = assignments.map((a) => a.id);
+
+  const [{ count: memberCount }, { data: targets }, { data: tests }] =
+    await Promise.all([
+      admin
+        .from("org_members")
+        .select("user_id", { count: "exact", head: true })
+        .eq("org_id", orgId),
+      admin
+        .from("org_assignment_targets")
+        .select("assignment_id, user_id")
+        .in("assignment_id", ids),
+      admin
+        .from("tests")
+        .select("assignment_id, user_id, submitted_at")
+        .in("assignment_id", ids)
+        .eq("status", "submitted"),
+    ]);
+
+  const targetCount = new Map<string, number>();
+  for (const t of targets ?? []) {
+    targetCount.set(t.assignment_id, (targetCount.get(t.assignment_id) ?? 0) + 1);
+  }
+
+  // One completion per member per assignment; latest submission decides late.
+  const submittedBy = new Map<string, Map<string, string>>();
+  for (const t of tests ?? []) {
+    if (!t.assignment_id || !t.submitted_at) continue;
+    const perUser = submittedBy.get(t.assignment_id) ?? new Map();
+    const prev = perUser.get(t.user_id);
+    if (!prev || t.submitted_at > prev) perUser.set(t.user_id, t.submitted_at);
+    submittedBy.set(t.assignment_id, perUser);
+  }
+
+  return assignments.map((assignment) => {
+    const perUser = submittedBy.get(assignment.id) ?? new Map<string, string>();
+    let late = 0;
+    for (const submittedAt of perUser.values()) {
+      if (new Date(submittedAt) > new Date(assignment.due_at)) late++;
+    }
+    return {
+      assignment,
+      targeted:
+        assignment.audience === "all"
+          ? (memberCount ?? 0)
+          : (targetCount.get(assignment.id) ?? 0),
+      completed: perUser.size,
+      late,
+    };
+  });
 }
 
 export type PendingInviteNotice = {

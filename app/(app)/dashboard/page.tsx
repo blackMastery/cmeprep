@@ -7,8 +7,13 @@ import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
 import { examAccessFor, type SubscriptionScope } from "@/lib/entitlements-core";
 import { orgGrantContextFrom } from "@/lib/entitlements";
-import { pendingInviteForEmail } from "@/lib/orgs";
+import {
+  assignmentsForMember,
+  getOrgMembership,
+  pendingInviteForEmail,
+} from "@/lib/orgs";
 import { OrgInviteBanner } from "@/components/org/org-invite-banner";
+import { AssignmentsCard } from "@/components/dashboard/assignments-card";
 import { listExamCatalog } from "@/lib/catalog";
 import type { Test, SubjectAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -58,6 +63,13 @@ export default async function DashboardPage() {
 
   const subscriptions = (subs ?? []) as SubscriptionScope[];
   const greetingName = firstName(user.profile.full_name);
+
+  // Sequential on purpose: both reads depend on membership existing at all,
+  // and non-members (the common case) skip them entirely.
+  const membership = orgCtx ? await getOrgMembership(user.id) : null;
+  const memberAssignments = membership
+    ? await assignmentsForMember(membership.org.id, user.id)
+    : null;
 
   // null = all exams (trial, admin, org, or an all-access row) — the panel
   // says so rather than listing the whole catalogue.
@@ -143,6 +155,12 @@ export default async function DashboardPage() {
           <PastTests tests={(tests ?? []) as Test[]} />
         </div>
         <div className="space-y-6">
+          {membership && memberAssignments && (
+            <AssignmentsCard
+              assignments={memberAssignments}
+              orgName={membership.org.name}
+            />
+          )}
           <WeakAreas subjects={(subjects ?? []) as SubjectAccuracy[]} />
           <AccountPanel profile={user.profile} examNames={entitledExamNames} />
         </div>

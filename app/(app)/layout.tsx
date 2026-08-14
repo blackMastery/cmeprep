@@ -25,19 +25,19 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
-  // Nav flag only — pages that ACT on org-admin status run requireOrgAdmin
-  // themselves.
+  // Nav flags only — pages that ACT on org status run their own guards.
   const membership = await getOrgMembership(user.id);
   const orgAdmin = membership?.membership.role === "admin";
+  const orgMember = membership !== null;
 
   return (
     <div className="flex min-h-svh flex-col">
       <AppChrome>
-        <AppHeader user={user} orgAdmin={orgAdmin} />
+        <AppHeader user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
       </AppChrome>
       <div className="flex flex-1">
         <AppChrome>
-          <AppSidebar user={user} orgAdmin={orgAdmin} />
+          <AppSidebar user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
         </AppChrome>
         <main className="min-w-0 flex-1">{children}</main>
       </div>

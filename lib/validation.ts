@@ -316,6 +316,29 @@ export const createOrgPaypalOrderSchema = z.object({
 });
 
 /**
+ * An assignment prescribes a full test config (same bounds as
+ * createTestSchema) plus a title, a due date and an audience.
+ */
+export const orgAssignmentSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(2, "Give the assignment a title")
+    .max(140, "Keep the title under 140 characters"),
+  description: z.string().trim().max(2000, "Too long").default(""),
+  examId: uuid(),
+  subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
+  difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
+  numQuestions: z.coerce.number().int().min(5).max(100),
+  durationMin: z.coerce.number().int().min(5).max(240),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a due date"),
+  audience: z.enum(["all", "selected"]),
+  targetIds: z.array(uuid()).default([]),
+});
+
+/**
  * The invite textarea: addresses separated by whitespace, commas or
  * semicolons (people paste straight from Outlook). Dedupes case-insensitively
  * — the column is citext, so "Jane@x" and "jane@x" are the same invite.

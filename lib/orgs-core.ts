@@ -124,6 +124,41 @@ export type InviteAcceptBlocker =
  * revoked-and-also-expired invite says "revoked", the state an org-admin
  * chose.
  */
+export type AssignmentStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "completed_late"
+  | "overdue";
+
+/**
+ * One member's standing on one assignment (SPEC §7).
+ *
+ * A SUBMITTED attempt completes it forever — even a late one (flagged), and
+ * even past further attempts; the dashboard reports the latest score
+ * separately. "overdue" is strictly "due date passed with nothing submitted";
+ * an in-progress attempt past the due date still shows as in_progress, since
+ * the timer will resolve it within hours either way.
+ */
+export function assignmentStatus(
+  input: {
+    dueAt: string;
+    /** Latest SUBMITTED attempt's submitted_at; null = none submitted. */
+    submittedAt: string | null;
+    /** Any attempt exists (in-progress ones included). */
+    hasAttempt: boolean;
+  },
+  now: Date
+): AssignmentStatus {
+  if (input.submittedAt !== null) {
+    return new Date(input.submittedAt) > new Date(input.dueAt)
+      ? "completed_late"
+      : "completed";
+  }
+  if (input.hasAttempt) return "in_progress";
+  return now > new Date(input.dueAt) ? "overdue" : "not_started";
+}
+
 /**
  * "jane@hospital.org" → "j***@hospital.org", for telling a mismatched
  * session WHICH address the invite is bound to without handing the whole

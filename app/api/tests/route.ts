@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { createTestSchema } from "@/lib/validation";
+import { createTestSchema, uuid } from "@/lib/validation";
 import { examAccessFrom } from "@/lib/entitlements";
 import { canAccessExam } from "@/lib/entitlements-core";
 import { shuffle } from "@/lib/scoring";
-import type { TestConfig } from "@/lib/supabase/types";
+import type { OrgAssignment, TestConfig } from "@/lib/supabase/types";
 
 /**
  * POST /api/tests — create a timed test.
@@ -24,8 +24,54 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => null);
-  const parsed = createTestSchema.safeParse(body);
-  if (!parsed.success) {
+  const admin = createAdminClient();
+
+  // ── Assignment launch: the SERVER supplies the config, verbatim from the
+  // prescription — the client sends only the assignment id (SPEC §7).
+  let assignment: OrgAssignment | null = null;
+  const rawAssignmentId =
+    typeof body === "object" && body !== null && "assignmentId" in body
+      ? String((body as Record<string, unknown>).assignmentId)
+      : null;
+  if (rawAssignmentId !== null) {
+    const assignmentId = uuid().safeParse(rawAssignmentId);
+    if (!assignmentId.success) {
+      return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
+    }
+    const { data } = await admin
+      .from("org_assignments")
+      .select("*")
+      .eq("id", assignmentId.data)
+      .is("deleted_at", null)
+      .maybeSingle();
+    assignment = (data as OrgAssignment | null) ?? null;
+    if (!assignment) {
+      return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
+    }
+
+    // Addressed to this member? Membership + (all | targeted). Late starts
+    // are allowed — a late completion beats none, and it is flagged.
+    const [{ data: membership }, { data: target }] = await Promise.all([
+      admin
+        .from("org_members")
+        .select("org_id")
+        .eq("user_id", user.id)
+        .eq("org_id", assignment.org_id)
+        .maybeSingle(),
+      admin
+        .from("org_assignment_targets")
+        .select("user_id")
+        .eq("assignment_id", assignment.id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+    if (!membership || (assignment.audience === "selected" && !target)) {
+      return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
+    }
+  }
+
+  const parsed = assignment ? null : createTestSchema.safeParse(body);
+  if (parsed && !parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid request" },
       { status: 400 }
@@ -33,8 +79,18 @@ export async function POST(request: Request) {
   }
 
   const { examId, subjectIds, difficulty, numQuestions, durationMin } =
-    parsed.data;
-  const admin = createAdminClient();
+    assignment
+      ? {
+          examId: assignment.config.exam_id ?? "",
+          subjectIds: assignment.config.subject_ids,
+          difficulty: assignment.config.difficulty,
+          numQuestions: assignment.config.num_questions,
+          durationMin: Math.round(assignment.config.duration_sec / 60),
+        }
+      : parsed!.data;
+  if (!examId) {
+    return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
+  }
 
   // ── Entitlement: a paid plan buys ONE exam. This is the hard block — the
   // wizard only renders locks. Trial users pass (they may practise any exam);
@@ -194,6 +250,7 @@ export async function POST(request: Request) {
       config,
       expires_at: expiresAt,
       total_questions: picked.length,
+      assignment_id: assignment?.id ?? null,
     })
     .select("id")
     .single();

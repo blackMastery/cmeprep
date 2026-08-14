@@ -100,6 +100,8 @@ export type Test = Timestamps & {
   submitted_at: string | null;
   score: number | null;
   total_questions: number;
+  /** Launched from an org assignment; completion tracking keys off this. */
+  assignment_id: string | null;
 };
 
 export type TestQuestion = {
@@ -339,6 +341,28 @@ export type OrgSubscription = Timestamps & {
   updated_at: string | null;
 };
 
+export type OrgAssignmentAudience = "all" | "selected";
+
+/** A prescribed test config + due date (SPEC §7). */
+export type OrgAssignment = {
+  id: string;
+  org_id: string;
+  title: string;
+  description: string | null;
+  /** TestConfig shape, stored verbatim — the launched test IS this. */
+  config: TestConfig;
+  due_at: string;
+  audience: OrgAssignmentAudience;
+  created_by: string | null;
+  created_at: string;
+  deleted_at: string | null;
+};
+
+export type OrgAssignmentTarget = {
+  assignment_id: string;
+  user_id: string;
+};
+
 /** Which storefront sells the plan; the two never mix in one checkout. */
 export type PlanKind = "personal" | "org";
 
@@ -413,6 +437,8 @@ export type Database = {
       org_members: Table<OrgMember>;
       org_invites: Table<OrgInvite>;
       org_subscriptions: Table<OrgSubscription>;
+      org_assignments: Table<OrgAssignment>;
+      org_assignment_targets: Table<OrgAssignmentTarget>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;
@@ -426,6 +452,8 @@ export type Database = {
       is_admin: { Args: Record<string, never>; Returns: boolean };
       is_org_member: { Args: { org: string }; Returns: boolean };
       is_org_admin: { Args: { org: string }; Returns: boolean };
+      is_assignment_target: { Args: { assignment: string }; Returns: boolean };
+      assignment_org: { Args: { assignment: string }; Returns: string | null };
       exam_is_visible: { Args: { exam: string }; Returns: boolean };
       specialty_is_visible: { Args: { specialty: string }; Returns: boolean };
       subject_is_visible: { Args: { subject: string }; Returns: boolean };
