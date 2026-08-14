@@ -6,7 +6,10 @@ import { requireUser, type SessionUser } from "@/lib/auth";
 import {
   assignmentStatus,
   isInvitePending,
+  memberRisk,
+  RISK_ROLLING_DAYS,
   type AssignmentStatus,
+  type MemberRisk,
 } from "@/lib/orgs-core";
 import type {
   Org,
@@ -328,6 +331,165 @@ export async function listAssignmentProgress(
       late,
     };
   });
+}
+
+export type OrgMemberStats = {
+  member: OrgMember;
+  name: string | null;
+  email: string | null;
+  attempted: number;
+  /** Accuracy the risk rule used (window or all-time); null = no attempts. */
+  accuracyPct: number | null;
+  lastActiveDay: string | null;
+  assignmentsCompleted: number;
+  risk: MemberRisk;
+};
+
+export type OrgDashboard = {
+  members: OrgMemberStats[];
+  headline: {
+    members: number;
+    activeThisWeek: number;
+    atRisk: number;
+    averageAccuracy: number | null;
+  };
+};
+
+const ATTEMPT_PAGE = 1000;
+/** 90 members × heavy use is bounded; past this we log rather than loop on. */
+const MAX_ATTEMPT_PAGES = 25;
+
+/**
+ * The program-director view (SPEC §8): per-member AGGREGATES only —
+ * accuracy, activity, assignment completion, risk. Deliberately no path
+ * from here to answers, notes, bookmarks or question-level review.
+ */
+export async function getOrgDashboard(
+  org: Org,
+  now: Date = new Date()
+): Promise<OrgDashboard> {
+  const admin = createAdminClient();
+  const members = await listOrgMembers(org.id);
+  if (members.length === 0) {
+    return {
+      members: [],
+      headline: { members: 0, activeThisWeek: 0, atRisk: 0, averageAccuracy: null },
+    };
+  }
+  const ids = members.map((m) => m.member.user_id);
+  const windowStart = new Date(
+    now.getTime() - RISK_ROLLING_DAYS * 86_400_000
+  ).toISOString();
+
+  // Rolling-window attempts, paged: PostgREST caps a response at 1000 rows,
+  // and a cohort's 30-day volume can pass that.
+  const windowAttempts = new Map<string, { attempts: number; correct: number }>();
+  for (let from = 0, page = 0; page < MAX_ATTEMPT_PAGES; from += ATTEMPT_PAGE, page++) {
+    const { data } = await admin
+      .from("attempts")
+      .select("user_id, is_correct")
+      .in("user_id", ids)
+      .gte("answered_at", windowStart)
+      .range(from, from + ATTEMPT_PAGE - 1);
+    for (const a of data ?? []) {
+      const entry = windowAttempts.get(a.user_id) ?? { attempts: 0, correct: 0 };
+      entry.attempts++;
+      if (a.is_correct) entry.correct++;
+      windowAttempts.set(a.user_id, entry);
+    }
+    if ((data?.length ?? 0) < ATTEMPT_PAGE) break;
+    if (page === MAX_ATTEMPT_PAGES - 1) {
+      console.error("org_dashboard_attempt_window_truncated", { orgId: org.id });
+    }
+  }
+
+  const [{ data: stats }, { data: activity }, { data: assignmentTests }] =
+    await Promise.all([
+      admin.from("user_stats").select("*").in("user_id", ids),
+      // Newest day per user decides activity; ~90 × a few hundred rows max.
+      admin
+        .from("user_daily_activity")
+        .select("user_id, day")
+        .in("user_id", ids)
+        .order("day", { ascending: false })
+        .limit(5000),
+      admin
+        .from("tests")
+        .select("user_id, assignment_id, org_assignments!inner(org_id)")
+        .in("user_id", ids)
+        .eq("status", "submitted")
+        .eq("org_assignments.org_id", org.id)
+        .not("assignment_id", "is", null),
+    ]);
+
+  const allTime = new Map(
+    (stats ?? []).map((s) => [
+      s.user_id,
+      { attempts: s.attempted, correct: s.correct },
+    ])
+  );
+  const lastActive = new Map<string, string>();
+  for (const row of activity ?? []) {
+    if (!lastActive.has(row.user_id)) lastActive.set(row.user_id, row.day);
+  }
+  const completed = new Map<string, Set<string>>();
+  for (const t of assignmentTests ?? []) {
+    if (!t.assignment_id) continue;
+    const set = completed.get(t.user_id) ?? new Set();
+    set.add(t.assignment_id);
+    completed.set(t.user_id, set);
+  }
+
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  const rows: OrgMemberStats[] = members.map((row) => {
+    const id = row.member.user_id;
+    const window = windowAttempts.get(id) ?? { attempts: 0, correct: 0 };
+    const total = allTime.get(id) ?? { attempts: 0, correct: 0 };
+    const risk = memberRisk(
+      {
+        passMarkPct: org.pass_mark_pct,
+        inactivityDays: org.risk_inactivity_days,
+        windowAttempts: window.attempts,
+        windowCorrect: window.correct,
+        allTimeAttempts: total.attempts,
+        allTimeCorrect: total.correct,
+        lastActiveDay: lastActive.get(id) ?? null,
+      },
+      now
+    );
+    return {
+      member: row.member,
+      name: row.profile?.full_name ?? null,
+      email: row.email,
+      attempted: total.attempts,
+      accuracyPct: risk.accuracyPct,
+      lastActiveDay: lastActive.get(id) ?? null,
+      assignmentsCompleted: completed.get(id)?.size ?? 0,
+      risk,
+    };
+  });
+
+  const withAccuracy = rows.filter((r) => r.accuracyPct !== null);
+  return {
+    members: rows,
+    headline: {
+      members: rows.length,
+      activeThisWeek: rows.filter(
+        (r) => r.lastActiveDay !== null && r.lastActiveDay >= weekAgo
+      ).length,
+      atRisk: rows.filter((r) => r.risk.atRisk).length,
+      averageAccuracy:
+        withAccuracy.length > 0
+          ? Math.round(
+              withAccuracy.reduce((sum, r) => sum + (r.accuracyPct ?? 0), 0) /
+                withAccuracy.length
+            )
+          : null,
+    },
+  };
 }
 
 export type PendingInviteNotice = {

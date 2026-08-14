@@ -13,7 +13,10 @@ import {
   pendingInviteForEmail,
 } from "@/lib/orgs";
 import { OrgInviteBanner } from "@/components/org/org-invite-banner";
+import { MemberAccessBanner } from "@/components/org/org-access-banners";
 import { AssignmentsCard } from "@/components/dashboard/assignments-card";
+import { daysUntil } from "@/lib/subscriptions-core";
+import { orgGraceEnd, orgSubscriptionState } from "@/lib/orgs-core";
 import { listExamCatalog } from "@/lib/catalog";
 import type { Test, SubjectAccuracy } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -119,6 +122,30 @@ export default async function DashboardPage() {
           orgName={inviteNotice.orgName}
         />
       )}
+
+      {membership &&
+        orgCtx &&
+        orgCtx.suspended_at === null &&
+        (() => {
+          const state = orgSubscriptionState(orgCtx.subs, new Date());
+          const latestActiveEnd = orgCtx.subs
+            .filter((s) => s.status === "active")
+            .map((s) => s.current_period_end)
+            .sort()
+            .at(-1);
+          const graceEnd =
+            state === "grace" && latestActiveEnd
+              ? orgGraceEnd(latestActiveEnd).toISOString()
+              : null;
+          return (
+            <MemberAccessBanner
+              state={state}
+              orgName={membership.org.name}
+              graceEndsAt={graceEnd}
+              daysLeft={graceEnd ? daysUntil(graceEnd, new Date()) : 0}
+            />
+          );
+        })()}
 
       <ExpiryBanners subscriptions={subscriptions} />
 

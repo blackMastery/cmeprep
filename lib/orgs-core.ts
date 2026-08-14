@@ -124,6 +124,64 @@ export type InviteAcceptBlocker =
  * revoked-and-also-expired invite says "revoked", the state an org-admin
  * chose.
  */
+/** Rolling window for risk accuracy (SPEC §8, tune with real cohort data). */
+export const RISK_ROLLING_DAYS = 30;
+/** Below this many window attempts, all-time accuracy decides instead. */
+export const RISK_MIN_WINDOW_ATTEMPTS = 20;
+
+export type RiskReason = "below_pass_mark" | "inactive";
+
+export type MemberRisk = {
+  atRisk: boolean;
+  reasons: RiskReason[];
+  /** The accuracy the pass-mark check actually used; null = no attempts. */
+  accuracyPct: number | null;
+};
+
+/**
+ * Is this member at risk (SPEC §8)? Two independent triggers:
+ *
+ *  - rolling accuracy below the org's pass mark — the 30-day window when it
+ *    has enough attempts to mean something, all-time otherwise. Equalling
+ *    the threshold is NOT at risk; the mark is "what passes".
+ *  - no activity for the org's inactivity window. Someone who never
+ *    practised at all is inactive, not "below the mark" — there is no
+ *    accuracy to be below with zero attempts.
+ */
+export function memberRisk(
+  input: {
+    passMarkPct: number;
+    inactivityDays: number;
+    windowAttempts: number;
+    windowCorrect: number;
+    allTimeAttempts: number;
+    allTimeCorrect: number;
+    /** Most recent activity date (YYYY-MM-DD); null = never. */
+    lastActiveDay: string | null;
+  },
+  now: Date
+): MemberRisk {
+  const reasons: RiskReason[] = [];
+
+  const useWindow = input.windowAttempts >= RISK_MIN_WINDOW_ATTEMPTS;
+  const attempts = useWindow ? input.windowAttempts : input.allTimeAttempts;
+  const correct = useWindow ? input.windowCorrect : input.allTimeCorrect;
+  const accuracyPct =
+    attempts > 0 ? Math.round((correct / attempts) * 100) : null;
+
+  if (accuracyPct !== null && accuracyPct < input.passMarkPct) {
+    reasons.push("below_pass_mark");
+  }
+
+  const inactive =
+    input.lastActiveDay === null ||
+    now.getTime() - new Date(`${input.lastActiveDay}T00:00:00Z`).getTime() >
+      input.inactivityDays * DAY_MS;
+  if (inactive) reasons.push("inactive");
+
+  return { atRisk: reasons.length > 0, reasons, accuracyPct };
+}
+
 export type AssignmentStatus =
   | "not_started"
   | "in_progress"

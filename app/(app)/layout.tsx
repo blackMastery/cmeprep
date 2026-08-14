@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { getOrgMembership } from "@/lib/orgs";
+import { orgLogoUrl } from "@/lib/storage";
 import { AppHeader } from "@/components/app/app-header";
 import { AppChrome } from "@/components/app/app-chrome";
 import { AppSidebar } from "@/components/app/app-nav";
@@ -29,11 +30,22 @@ export default async function AppLayout({
   const membership = await getOrgMembership(user.id);
   const orgAdmin = membership?.membership.role === "admin";
   const orgMember = membership !== null;
+  const orgBrand = membership
+    ? {
+        name: membership.org.name,
+        logoUrl: orgLogoUrl(membership.org.logo_path),
+      }
+    : null;
 
   return (
     <div className="flex min-h-svh flex-col">
       <AppChrome>
-        <AppHeader user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
+        <AppHeader
+          user={user}
+          orgAdmin={orgAdmin}
+          orgMember={orgMember}
+          orgBrand={orgBrand}
+        />
       </AppChrome>
       <div className="flex flex-1">
         <AppChrome>

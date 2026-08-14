@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   Check,
@@ -342,7 +343,8 @@ export default function TeamsPage() {
               One flat price for your whole organisation
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Coming soon. Contact us for early access or custom terms.
+              Create your organisation and pay online, or contact us for
+              invoice and purchase-order billing.
             </p>
           </div>
 
@@ -370,16 +372,6 @@ export default function TeamsPage() {
                 <p className="mt-3 flex items-baseline gap-3">
                   <span className="font-display text-4xl font-semibold">
                     {plan.price}
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-medium tracking-wide uppercase",
-                      plan.featured
-                        ? "bg-white/15 text-primary-foreground"
-                        : "bg-secondary text-primary"
-                    )}
-                  >
-                    Coming soon
                   </span>
                 </p>
                 <p
@@ -428,9 +420,11 @@ export default function TeamsPage() {
                   size="lg"
                   variant={plan.featured ? "secondary" : "default"}
                   className="mt-8 w-full"
-                  disabled
+                  asChild
                 >
-                  Coming Soon
+                  {/* Signed-out visitors bounce through /login and land back
+                      in the app; org creation itself is free. */}
+                  <Link href="/org/new">Create your organisation</Link>
                 </Button>
               </div>
             ))}

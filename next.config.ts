@@ -37,6 +37,12 @@ const nextConfig: NextConfig = {
         port: supabase.port,
         pathname: "/storage/v1/object/public/question-images/**",
       },
+      {
+        protocol: supabase.protocol.replace(":", "") as "http" | "https",
+        hostname: supabase.hostname,
+        port: supabase.port,
+        pathname: "/storage/v1/object/public/org-branding/**",
+      },
     ],
   },
 };

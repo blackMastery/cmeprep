@@ -1,5 +1,7 @@
-import { requireOrgAdmin } from "@/lib/orgs";
+import { listOrgSubscriptions, requireOrgAdmin } from "@/lib/orgs";
+import { orgGraceEnd, orgSubscriptionState } from "@/lib/orgs-core";
 import { OrgNav } from "@/components/org/org-nav";
+import { OrgAdminAccessBanner } from "@/components/org/org-access-banners";
 
 /**
  * Gate for the org-ADMIN area. Sits in the (manage) route group so the
@@ -13,6 +15,15 @@ export default async function OrgManageLayout({
   children: React.ReactNode;
 }) {
   const session = await requireOrgAdmin();
+  const now = new Date();
+
+  const subs = await listOrgSubscriptions(session.org.id);
+  const state = orgSubscriptionState(subs, now);
+  const latestActiveEnd = subs
+    .filter((s) => s.status === "active")
+    .map((s) => s.current_period_end)
+    .sort()
+    .at(-1);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
@@ -22,6 +33,17 @@ export default async function OrgManageLayout({
           {session.org.name}
         </h1>
       </header>
+
+      <OrgAdminAccessBanner
+        state={state}
+        suspended={session.org.suspended_at !== null}
+        graceEndsAt={
+          state === "grace" && latestActiveEnd
+            ? orgGraceEnd(latestActiveEnd).toISOString()
+            : null
+        }
+      />
+
       <OrgNav />
       <div className="mt-6">{children}</div>
     </div>

@@ -21,10 +21,13 @@ export function AppHeader({
   user,
   orgAdmin = false,
   orgMember = false,
+  orgBrand = null,
 }: {
   user: SessionUser;
   orgAdmin?: boolean;
   orgMember?: boolean;
+  /** Member's org branding — shown ALONGSIDE the CMEPrep brand (SPEC §9). */
+  orgBrand?: { name: string; logoUrl: string | null } | null;
 }) {
   const { profile } = user;
 
@@ -33,6 +36,22 @@ export function AppHeader({
       <div className="flex h-16 w-full items-center gap-2 px-4 sm:gap-4">
         <MobileNav user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
         <Logo href="/dashboard" tagline="inline" />
+        {orgBrand && (
+          <span className="hidden min-w-0 items-center gap-2 border-l border-border pl-3 sm:flex">
+            {orgBrand.logoUrl && (
+              // Tiny, arbitrary-aspect asset — the optimizer adds nothing.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={orgBrand.logoUrl}
+                alt=""
+                className="h-6 w-auto max-w-24 object-contain"
+              />
+            )}
+            <span className="truncate text-sm font-medium text-muted-foreground">
+              {orgBrand.name}
+            </span>
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <Badge

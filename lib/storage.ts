@@ -16,6 +16,16 @@ export function questionImageUrl(path: string | null | undefined): string | null
   return `${base}/storage/v1/object/public/${QUESTION_IMAGE_BUCKET}/${path}`;
 }
 
+export const ORG_BRANDING_BUCKET = "org-branding";
+
+/** Public URL for an org logo — same seam as questionImageUrl. */
+export function orgLogoUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}/storage/v1/object/public/${ORG_BRANDING_BUCKET}/${path}`;
+}
+
 export const ALLOWED_IMAGE_TYPES = [
   "image/png",
   "image/jpeg",

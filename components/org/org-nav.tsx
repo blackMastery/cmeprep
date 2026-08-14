@@ -9,19 +9,29 @@ import { cn } from "@/lib/utils";
  * section (dashboard, assignments, content, audit, settings).
  */
 const TABS: readonly { href: string; label: string }[] = [
+  { href: "/org", label: "Dashboard" },
   { href: "/org/members", label: "Members" },
   { href: "/org/assignments", label: "Assignments" },
   { href: "/org/content", label: "Content" },
   { href: "/org/billing", label: "Billing" },
+  { href: "/org/audit", label: "Audit" },
+  { href: "/org/settings", label: "Settings" },
 ];
 
 export function OrgNav() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Organisation" className="flex gap-1 border-b border-border">
+    <nav
+      aria-label="Organisation"
+      className="flex gap-1 overflow-x-auto border-b border-border"
+    >
       {TABS.map((tab) => {
-        const active = pathname.startsWith(tab.href);
+        // "/org" would prefix-match every tab; it alone is exact.
+        const active =
+          tab.href === "/org"
+            ? pathname === "/org"
+            : pathname.startsWith(tab.href);
         return (
           <Link
             key={tab.href}

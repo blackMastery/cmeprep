@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assignmentStatus,
   inviteAcceptBlocker,
+  memberRisk,
   inviteExpiresAt,
   isInvitePending,
   maskEmail,
@@ -202,6 +203,59 @@ describe("assignmentStatus", () => {
     expect(assignmentStatus({ ...base, hasAttempt: true }, after)).toBe(
       "in_progress"
     );
+  });
+});
+
+describe("memberRisk", () => {
+  const base = {
+    passMarkPct: 60,
+    inactivityDays: 7,
+    windowAttempts: 0,
+    windowCorrect: 0,
+    allTimeAttempts: 0,
+    allTimeCorrect: 0,
+    lastActiveDay: "2026-08-12", // yesterday relative to NOW
+  };
+
+  it("uses the rolling window once it has enough attempts", () => {
+    const risk = memberRisk(
+      { ...base, windowAttempts: 20, windowCorrect: 10, allTimeAttempts: 100, allTimeCorrect: 90 },
+      NOW
+    );
+    expect(risk.accuracyPct).toBe(50);
+    expect(risk.reasons).toEqual(["below_pass_mark"]);
+  });
+
+  it("falls back to all-time below the window minimum", () => {
+    const risk = memberRisk(
+      { ...base, windowAttempts: 19, windowCorrect: 0, allTimeAttempts: 100, allTimeCorrect: 90 },
+      NOW
+    );
+    expect(risk.accuracyPct).toBe(90);
+    expect(risk.atRisk).toBe(false);
+  });
+
+  it("does not flag someone exactly ON the pass mark", () => {
+    const risk = memberRisk(
+      { ...base, windowAttempts: 20, windowCorrect: 12 },
+      NOW
+    );
+    expect(risk.accuracyPct).toBe(60);
+    expect(risk.atRisk).toBe(false);
+  });
+
+  it("flags inactivity strictly past N days, never at exactly N", () => {
+    const active = { ...base, windowAttempts: 20, windowCorrect: 20 };
+    // NOW is 2026-08-13T12:00Z; 7 days before is 08-06T12:00Z. A day stamp
+    // of 08-06 (midnight) is PAST the window; 08-07 is within it.
+    expect(memberRisk({ ...active, lastActiveDay: "2026-08-07" }, NOW).atRisk).toBe(false);
+    expect(memberRisk({ ...active, lastActiveDay: "2026-08-06" }, NOW).reasons).toEqual(["inactive"]);
+  });
+
+  it("treats never-practised as inactive, not below-mark", () => {
+    const risk = memberRisk({ ...base, lastActiveDay: null }, NOW);
+    expect(risk.accuracyPct).toBeNull();
+    expect(risk.reasons).toEqual(["inactive"]);
   });
 });
 
