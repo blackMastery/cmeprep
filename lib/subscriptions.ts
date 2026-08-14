@@ -249,33 +249,47 @@ export async function grantPlanPurchase(
   };
 }
 
-/** Latest active period end for an org — the stacking base for renewals. */
-export async function activePeriodEndForOrg(
+/**
+ * Latest active period end for ONE exam of an org — the stacking base for
+ * renewals. Matching is STRICT on exam_id, null included, exactly like
+ * activePeriodEndForExam above: an all-access comp row does not extend an
+ * exam-scoped purchase and vice versa. Same PostgREST caveat: .eq(col, null)
+ * never matches, so the null branch must use .is().
+ */
+export async function activePeriodEndForOrgExam(
   admin: AdminClient,
-  orgId: string
+  orgId: string,
+  examId: string | null
 ): Promise<string | null> {
-  const { data } = await admin
+  let query = admin
     .from("org_subscriptions")
     .select("current_period_end")
     .eq("org_id", orgId)
     .eq("status", "active")
     .gt("current_period_end", new Date().toISOString())
     .order("current_period_end", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  query = examId === null ? query.is("exam_id", null) : query.eq("exam_id", examId);
+
+  const { data } = await query.maybeSingle();
   return data?.current_period_end ?? null;
 }
 
 export type OrgGrantResult =
-  | { outcome: "granted"; orgSubscriptionId: string; currentPeriodEnd: string }
-  | { outcome: "duplicate"; orgSubscriptionId: string }
+  | {
+      outcome: "granted";
+      orgSubscriptionId: string;
+      currentPeriodEnd: string;
+      examId: string | null;
+    }
+  | { outcome: "duplicate"; orgSubscriptionId: string; examId: string | null }
   | { outcome: "error"; reason: GrantFailure };
 
 /**
  * The org twin of grantPlanPurchase: insert the org_subscriptions row,
- * stacking on the org's current period, idempotent on the PayPal order id.
- * No role sync — org access is computed at read time from the org row, so
- * profiles.role has nothing to say about it.
+ * stacking PER (org, exam) like the personal model, idempotent on the PayPal
+ * order id. No role sync — org access is computed at read time from the org
+ * row, so profiles.role has nothing to say about it.
  */
 export async function grantOrgPlanPurchase(
   admin: AdminClient,
@@ -284,22 +298,36 @@ export async function grantOrgPlanPurchase(
     /** Who paid — the audit actor; the grant itself belongs to the org. */
     buyerId: string;
     plan: Pick<Plan, "id" | "name" | "duration_months" | "seat_limit">;
+    /**
+     * The PUBLIC exam bought. Every PayPal path supplies one (the orgv2
+     * custom_id requires it); null is reserved for admin-shaped callers
+     * minting comp all-access.
+     */
+    examId: string | null;
     paypalOrderId: string;
     captureId: string | null;
     meta?: Record<string, unknown>;
   }
 ): Promise<OrgGrantResult> {
-  const { orgId, buyerId, plan, paypalOrderId, captureId } = input;
+  const { orgId, buyerId, plan, examId, paypalOrderId, captureId } = input;
   if (plan.duration_months === null) {
     return { outcome: "error", reason: "no_duration" };
   }
 
   const { data: existing } = await admin
     .from("org_subscriptions")
-    .select("id")
+    .select("id, exam_id")
     .eq("paypal_order_id", paypalOrderId)
     .maybeSingle();
-  if (existing) return { outcome: "duplicate", orgSubscriptionId: existing.id };
+  if (existing) {
+    // exam_id read back from the row, not the caller — the payment link is
+    // written from it (same rule as the personal duplicate branch).
+    return {
+      outcome: "duplicate",
+      orgSubscriptionId: existing.id,
+      examId: existing.exam_id,
+    };
+  }
 
   // Money already captured — a vanished org fails loudly for support, same
   // posture as the vanished-exam branch in grantPlanPurchase.
@@ -313,7 +341,27 @@ export async function grantOrgPlanPurchase(
     return { outcome: "error", reason: "unknown_org" };
   }
 
-  const activeEnd = await activePeriodEndForOrg(admin, orgId);
+  // The exam must exist AND be public: an org never BUYS a private bank —
+  // banks ride on any live subscription. Fail loudly, never downgrade to
+  // all-access; the money is already captured and support reconciles.
+  if (examId !== null) {
+    const { data: exam } = await admin
+      .from("exams")
+      .select("id")
+      .eq("id", examId)
+      .is("org_id", null)
+      .maybeSingle();
+    if (!exam) {
+      console.error("paypal_org_grant_unknown_exam", {
+        orgId,
+        paypalOrderId,
+        examId,
+      });
+      return { outcome: "error", reason: "unknown_exam" };
+    }
+  }
+
+  const activeEnd = await activePeriodEndForOrgExam(admin, orgId, examId);
   const periodEnd = computePeriodEnd(
     plan.duration_months,
     stackBase(activeEnd, new Date())
@@ -325,6 +373,7 @@ export async function grantOrgPlanPurchase(
       org_id: orgId,
       plan: plan.name,
       plan_id: plan.id,
+      exam_id: examId,
       status: "active",
       current_period_end: periodEnd,
       paypal_order_id: paypalOrderId,
@@ -336,10 +385,16 @@ export async function grantOrgPlanPurchase(
     if (error?.code === UNIQUE_VIOLATION) {
       const { data: winner } = await admin
         .from("org_subscriptions")
-        .select("id")
+        .select("id, exam_id")
         .eq("paypal_order_id", paypalOrderId)
         .maybeSingle();
-      if (winner) return { outcome: "duplicate", orgSubscriptionId: winner.id };
+      if (winner) {
+        return {
+          outcome: "duplicate",
+          orgSubscriptionId: winner.id,
+          examId: winner.exam_id,
+        };
+      }
     }
     console.error("paypal_org_grant_failed", { orgId, paypalOrderId, error });
     return { outcome: "error", reason: "insert_failed" };
@@ -365,6 +420,7 @@ export async function grantOrgPlanPurchase(
       orgSubscriptionId: data.id,
       plan: plan.name,
       planId: plan.id,
+      examId,
       currentPeriodEnd: periodEnd,
       paypalOrderId,
       captureId,
@@ -378,6 +434,7 @@ export async function grantOrgPlanPurchase(
     outcome: "granted",
     orgSubscriptionId: data.id,
     currentPeriodEnd: periodEnd,
+    examId,
   };
 }
 
@@ -555,8 +612,8 @@ export async function recordCapturedPurchase(
       };
 }
 
-export type CapturedOrgOrder = Omit<CapturedOrder, "examId"> & {
-  /** From custom_id ("orgv1:…"), so unvalidated until the org is read back. */
+export type CapturedOrgOrder = CapturedOrder & {
+  /** From custom_id ("orgv2:…"), so unvalidated until the org is read back. */
   orgId: string;
 };
 
@@ -664,6 +721,7 @@ export async function recordCapturedOrgPurchase(
     orgId: order.orgId,
     buyerId: order.userId,
     plan,
+    examId: order.examId,
     paypalOrderId: order.paypalOrderId,
     captureId: order.captureId,
     meta: {
@@ -680,6 +738,9 @@ export async function recordCapturedOrgPurchase(
       kind: "granted_org",
       orgSubscriptionId: grant.orgSubscriptionId,
       orgId: order.orgId,
+      // From the grant, not the order — the duplicate branch reads it off
+      // the winner's row.
+      examId: grant.examId,
       planId: plan.id,
       planName: plan.name,
       planPriceCents: plan.price_cents,

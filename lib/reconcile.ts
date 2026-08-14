@@ -317,19 +317,24 @@ async function repairOrgPayment(
   payment: Payment,
   parsedCustomId: ReturnType<typeof parseAnyPurchaseCustomId>
 ): Promise<boolean> {
-  const orgId =
-    payment.org_id ??
-    (parsedCustomId?.kind === "org" ? parsedCustomId.orgId : null);
+  // Row columns first, custom_id as the fallback: a crash between
+  // recordCapture and the grant leaves plan_id/exam_id null on the row, and
+  // the custom_id is then the only place the intent survives — which is the
+  // exact case this sweep exists for.
+  const parsedOrg = parsedCustomId?.kind === "org" ? parsedCustomId : null;
+  const orgId = payment.org_id ?? parsedOrg?.orgId ?? null;
+  const planId = payment.plan_id ?? parsedOrg?.planId ?? null;
+  const examId = payment.exam_id ?? parsedOrg?.examId ?? null;
 
   // The common case: the grant succeeded and only the link write was lost.
   const { data: orgSub } = await admin
     .from("org_subscriptions")
-    .select("id, org_id")
+    .select("id, org_id, exam_id")
     .eq("paypal_order_id", payment.paypal_order_id)
     .maybeSingle();
 
   if (orgSub) {
-    await linkOrgPayment(admin, payment, orgSub.id, orgSub.org_id);
+    await linkOrgPayment(admin, payment, orgSub.id, orgSub.org_id, orgSub.exam_id);
     await audit(
       payment.user_id,
       "payment.reconcile_repair",
@@ -347,7 +352,7 @@ async function repairOrgPayment(
 
   const failReason = !orgId
     ? "unknown_org"
-    : !payment.plan_id
+    : !planId
       ? "unknown_plan"
       : !payment.user_id
         ? "unknown_user"
@@ -359,31 +364,42 @@ async function repairOrgPayment(
       customId: payment.custom_id,
       reason: failReason,
     });
-    await audit(payment.user_id, "payment.reconcile_failed", payment.user_id, {
-      paymentId: payment.id,
-      paypalOrderId: payment.paypal_order_id,
-      reason: failReason,
-    });
+    await audit(
+      payment.user_id,
+      "payment.reconcile_failed",
+      payment.user_id,
+      {
+        paymentId: payment.id,
+        paypalOrderId: payment.paypal_order_id,
+        reason: failReason,
+      },
+      orgId
+    );
     return false;
   }
 
   const { data: plan } = await admin
     .from("plans")
     .select("*")
-    .eq("id", payment.plan_id!)
+    .eq("id", planId!)
     .maybeSingle();
 
   if (!plan || plan.kind !== "org" || plan.duration_months === null) {
     console.error("reconcile_unclaimed_org_payment_bad_plan", {
       paymentId: payment.id,
-      planId: payment.plan_id,
+      planId,
     });
-    await audit(payment.user_id, "payment.reconcile_failed", payment.user_id, {
-      paymentId: payment.id,
-      paypalOrderId: payment.paypal_order_id,
-      reason:
-        !plan || plan.kind !== "org" ? "unknown_plan" : "no_duration",
-    });
+    await audit(
+      payment.user_id,
+      "payment.reconcile_failed",
+      payment.user_id,
+      {
+        paymentId: payment.id,
+        paypalOrderId: payment.paypal_order_id,
+        reason: !plan || plan.kind !== "org" ? "unknown_plan" : "no_duration",
+      },
+      orgId
+    );
     return false;
   }
 
@@ -391,21 +407,28 @@ async function repairOrgPayment(
     orgId: orgId!,
     buyerId: payment.user_id!,
     plan,
+    examId,
     paypalOrderId: payment.paypal_order_id,
     captureId: payment.paypal_capture_id,
     meta: { via: "reconcile_sweep", paymentId: payment.id },
   });
 
   if (grant.outcome === "error") {
-    await audit(payment.user_id, "payment.reconcile_failed", payment.user_id, {
-      paymentId: payment.id,
-      paypalOrderId: payment.paypal_order_id,
-      reason: grant.reason,
-    });
+    await audit(
+      payment.user_id,
+      "payment.reconcile_failed",
+      payment.user_id,
+      {
+        paymentId: payment.id,
+        paypalOrderId: payment.paypal_order_id,
+        reason: grant.reason,
+      },
+      orgId
+    );
     return false;
   }
 
-  await linkOrgPayment(admin, payment, grant.orgSubscriptionId, orgId!);
+  await linkOrgPayment(admin, payment, grant.orgSubscriptionId, orgId!, grant.examId);
   await audit(
     payment.user_id,
     "payment.reconcile_repair",
@@ -425,13 +448,15 @@ async function linkOrgPayment(
   admin: AdminClient,
   payment: Payment,
   orgSubscriptionId: string,
-  orgId: string
+  orgId: string,
+  examId: string | null
 ): Promise<void> {
   const { error } = await admin
     .from("payments")
     .update({
       org_subscription_id: orgSubscriptionId,
       org_id: orgId,
+      exam_id: examId,
       grant_failure: null,
       updated_at: new Date().toISOString(),
     })

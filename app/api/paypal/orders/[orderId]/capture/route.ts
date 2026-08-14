@@ -91,6 +91,7 @@ export async function POST(
     const result = await recordCapturedOrgPurchase(admin, {
       ...shared,
       orgId: parsed.orgId,
+      examId: parsed.examId,
     });
 
     if (result.outcome === "error") {

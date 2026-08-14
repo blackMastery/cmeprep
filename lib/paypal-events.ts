@@ -111,6 +111,7 @@ async function recordParsedCapture(
       userId: parsed.userId,
       planId: parsed.planId,
       orgId: parsed.orgId,
+      examId: parsed.examId,
       ...order,
     });
     return;
@@ -323,7 +324,7 @@ async function revokeSubscriptionForOrder(
   // because a chargeback is not an accounts-payable delay.
   const { data: orgSub } = await admin
     .from("org_subscriptions")
-    .select("id, org_id, plan, status")
+    .select("id, org_id, plan, status, exam_id")
     .eq("paypal_order_id", orderId)
     .maybeSingle();
   if (orgSub) {
@@ -341,6 +342,9 @@ async function revokeSubscriptionForOrder(
       {
         orgSubscriptionId: orgSub.id,
         plan: orgSub.plan,
+        // Which exam's period the chargeback took — the org's other exams
+        // are untouched.
+        examId: orgSub.exam_id,
         paypalOrderId: orderId,
         trigger: reason.trigger,
         via: "paypal_webhook",

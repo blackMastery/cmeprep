@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
   // ── Org purchase: only that org's admins may put money on it ──
   if (parsedOrg?.success) {
-    const { orgId } = parsedOrg.data;
+    const { orgId, examId } = parsedOrg.data;
     const { data: membership } = await admin
       .from("org_members")
       .select("role")
@@ -93,9 +93,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "org_unavailable" }, { status: 404 });
     }
 
+    // Same wall as the personal branch below: the exam must be a live PUBLIC
+    // one — an org never buys a private bank (its own included; banks ride on
+    // any live subscription).
+    const { data: orgExam } = await admin
+      .from("exams")
+      .select("id")
+      .eq("id", examId)
+      .eq("is_active", true)
+      .is("org_id", null)
+      .maybeSingle();
+    if (!orgExam) {
+      return NextResponse.json({ error: "exam_unavailable" }, { status: 404 });
+    }
+
     const order = await createPaypalOrder({
       value: centsToValue(plan.price_cents),
-      customId: formatOrgPurchaseCustomId(user.id, plan.id, orgId),
+      customId: formatOrgPurchaseCustomId(user.id, plan.id, orgId, examId),
       referenceId: plan.id,
     });
     if (!order) {

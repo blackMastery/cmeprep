@@ -309,10 +309,14 @@ export const orgNameSchema = z
   .min(2, "Enter your organisation's name")
   .max(120, "Keep the name under 120 characters");
 
-/** Org checkout: the org replaces the exam in the purchase tuple. */
+/**
+ * Org checkout: like the personal schema, the exam is MANDATORY — an org
+ * buys one public exam per checkout; all-access grants are admin-only.
+ */
 export const createOrgPaypalOrderSchema = z.object({
   planId: uuid(),
   orgId: uuid(),
+  examId: uuid(),
 });
 
 /**

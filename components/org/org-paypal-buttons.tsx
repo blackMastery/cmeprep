@@ -14,9 +14,12 @@ import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 export function OrgPayPalButtons({
   planId,
   orgId,
+  examId,
 }: {
   planId: string;
   orgId: string;
+  /** The public exam this purchase buys — chosen by the picker above. */
+  examId: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -36,14 +39,16 @@ export function OrgPayPalButtons({
         options={{ clientId, currency: "USD", intent: "capture" }}
       >
         <PayPalButtons
-          forceReRender={[planId, orgId]}
+          // examId included: the SDK captures createOrder at first mount,
+          // and a buyer who switches exams then pays must not buy the first.
+          forceReRender={[planId, orgId, examId]}
           style={{ layout: "vertical", label: "pay" }}
           createOrder={async () => {
             setError(null);
             const res = await fetch("/api/paypal/orders", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ planId, orgId }),
+              body: JSON.stringify({ planId, orgId, examId }),
             });
             const data = await res.json().catch(() => null);
             if (!res.ok || !data?.id) {

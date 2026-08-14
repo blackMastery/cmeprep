@@ -4,7 +4,9 @@ import {
   centsToValue,
   computePeriodEnd,
   daysUntil,
+  decodeUuidB64u,
   displayStatus,
+  encodeUuidB64u,
   formatOrgPurchaseCustomId,
   formatPurchaseCustomId,
   isEffectivelyActive,
@@ -89,23 +91,62 @@ describe("purchase custom_id", () => {
   });
 });
 
-describe("org purchase custom_id", () => {
+describe("uuid base64url codec", () => {
+  it("round-trips RFC and non-RFC (seed-style) uuids", () => {
+    for (const id of [
+      USER,
+      "11111111-1111-1111-1111-111111111111",
+      "e0000000-0000-0000-0000-000000000001",
+      "00000000-0000-0000-0000-000000000000",
+      "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    ]) {
+      const encoded = encodeUuidB64u(id);
+      expect(encoded).toHaveLength(22);
+      expect(decodeUuidB64u(encoded)).toBe(id);
+    }
+  });
+
+  it("normalizes uppercase input hex", () => {
+    expect(decodeUuidB64u(encodeUuidB64u(USER.toUpperCase()))).toBe(USER);
+  });
+
+  it("rejects wrong lengths, foreign characters and non-canonical spellings", () => {
+    const good = encodeUuidB64u(USER);
+    expect(decodeUuidB64u(good.slice(0, 21))).toBeNull();
+    expect(decodeUuidB64u(`${good}A`)).toBeNull();
+    expect(decodeUuidB64u(`${good.slice(0, 21)}+`)).toBeNull();
+    // Same 128 bits, different spare bits in the last char — must be refused
+    // or "strict parse" means nothing.
+    const lastIndex = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".indexOf(
+      good[21]
+    );
+    const nonCanonical =
+      good.slice(0, 21) +
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"[
+        lastIndex + 1
+      ];
+    expect(decodeUuidB64u(nonCanonical)).toBeNull();
+  });
+});
+
+describe("org purchase custom_id (orgv2)", () => {
   const ORG = "a0000000-0000-0000-0000-000000000001";
 
-  it("round-trips through the orgv1 format", () => {
-    const customId = formatOrgPurchaseCustomId(USER, PLAN, ORG);
+  it("round-trips user, plan, org and exam — seed-style ids included", () => {
+    const customId = formatOrgPurchaseCustomId(USER, PLAN, ORG, EXAM);
     expect(parseAnyPurchaseCustomId(customId)).toEqual({
       kind: "org",
       userId: USER,
       planId: PLAN,
       orgId: ORG,
+      examId: EXAM,
     });
   });
 
-  it("stays within PayPal's 127-char limit", () => {
-    expect(
-      formatOrgPurchaseCustomId(USER, PLAN, ORG).length
-    ).toBeLessThanOrEqual(127);
+  it("packs four ids well under PayPal's 127-char limit", () => {
+    // 6 + 4×22 + 3 = 97. Four PLAIN uuids would be 154 — the whole reason
+    // the codec exists.
+    expect(formatOrgPurchaseCustomId(USER, PLAN, ORG, EXAM)).toHaveLength(97);
   });
 
   it("still reads personal and legacy shapes", () => {
@@ -120,23 +161,24 @@ describe("org purchase custom_id", () => {
     });
   });
 
-  it("never half-parses a malformed orgv1 payload as personal", () => {
-    // "orgv1:" declared an intent; falling through to the personal parser
+  it("never half-parses a malformed org payload as personal", () => {
+    // The prefix declared an intent; falling through to the personal parser
     // would grant the wrong product.
-    expect(parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}`)).toBeNull();
-    expect(
-      parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}:not-a-uuid`)
-    ).toBeNull();
-    expect(
-      parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}:${ORG}:extra`)
-    ).toBeNull();
-    expect(parseAnyPurchaseCustomId("orgv1:")).toBeNull();
+    const [u, p, o, e] = [USER, PLAN, ORG, EXAM].map(encodeUuidB64u);
+    expect(parseAnyPurchaseCustomId(`orgv2:${u}:${p}:${o}`)).toBeNull();
+    expect(parseAnyPurchaseCustomId(`orgv2:${u}:${p}:${o}:${e}:${e}`)).toBeNull();
+    expect(parseAnyPurchaseCustomId(`orgv2:${u}:${p}:${o}:not-b64`)).toBeNull();
+    expect(parseAnyPurchaseCustomId("orgv2:")).toBeNull();
+    expect(parseAnyPurchaseCustomId("orgv2:whatever")).toBeNull();
+  });
+
+  it("refuses the never-shipped orgv1 shape outright", () => {
+    expect(parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}:${ORG}`)).toBeNull();
   });
 
   it("rejects junk outright", () => {
     expect(parseAnyPurchaseCustomId(null)).toBeNull();
     expect(parseAnyPurchaseCustomId("")).toBeNull();
-    expect(parseAnyPurchaseCustomId("orgv2:whatever")).toBeNull();
   });
 });
 

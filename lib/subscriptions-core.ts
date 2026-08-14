@@ -76,30 +76,95 @@ export function parsePurchaseCustomId(
   return { userId, planId, examId: parts.length === 3 ? examId : null };
 }
 
-/**
- * Org purchases get a VERSIONED format rather than overloading the personal
- * one's positional third slot: "orgv1:" can never collide with a uuid, so the
- * two shapes stay unambiguous on every parse path forever. 6 + 3 uuids +
- * 3 ":" = 117 chars, still under PayPal's 127.
+/* ── Compact uuid codec for the org custom_id ─────────────────
+ *
+ * An org purchase names FOUR ids (buyer, plan, org, exam). Four plain uuids
+ * would be 154 chars — over PayPal's 127-char custom_id cap — so uuids are
+ * carried as unpadded base64url (22 chars each). Hand-rolled rather than
+ * Buffer/atob so the module stays pure, runtime-agnostic and vitest-trivial.
+ * The codec never inspects version/variant bits, so the non-RFC seed ids
+ * (e0000000-…) round-trip like any other 128-bit value.
  */
-const ORG_CUSTOM_ID_PREFIX = "orgv1:";
+
+const B64U_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+export function encodeUuidB64u(uuid: string): string {
+  const hex = uuid.replace(/-/g, "").toLowerCase();
+  const bytes: number[] = [];
+  for (let i = 0; i < 32; i += 2) {
+    bytes.push(parseInt(hex.slice(i, i + 2), 16));
+  }
+  let out = "";
+  for (let i = 0; i < 15; i += 3) {
+    const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    out +=
+      B64U_ALPHABET[(n >> 18) & 63] +
+      B64U_ALPHABET[(n >> 12) & 63] +
+      B64U_ALPHABET[(n >> 6) & 63] +
+      B64U_ALPHABET[n & 63];
+  }
+  // 16th byte: 8 bits → two chars, low 4 bits of the second char zero.
+  out += B64U_ALPHABET[(bytes[15] >> 2) & 63] + B64U_ALPHABET[(bytes[15] & 3) << 4];
+  return out;
+}
+
+export function decodeUuidB64u(s: string): string | null {
+  if (s.length !== 22) return null;
+  const values: number[] = [];
+  for (const ch of s) {
+    const v = B64U_ALPHABET.indexOf(ch);
+    if (v === -1) return null;
+    values.push(v);
+  }
+  const bytes: number[] = [];
+  for (let i = 0; i < 20; i += 4) {
+    const n =
+      (values[i] << 18) | (values[i + 1] << 12) | (values[i + 2] << 6) | values[i + 3];
+    bytes.push((n >> 16) & 255, (n >> 8) & 255, n & 255);
+  }
+  bytes.push((values[20] << 2) | (values[21] >> 4));
+  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  // Canonicality check: the 132-bit string has 4 spare bits that must be
+  // zero. Re-encoding is the cheapest way to reject non-canonical spellings
+  // of the same uuid, which would otherwise defeat the strict parse.
+  return encodeUuidB64u(uuid) === s ? uuid : null;
+}
+
+/**
+ * Org purchases get a VERSIONED, base64url-packed format: "orgv2:" can never
+ * collide with a uuid, so the two shapes stay unambiguous on every parse path
+ * forever, and 6 + 4×22 + 3 ":" = 97 chars sits well under PayPal's 127.
+ * ("orgv1:" carried three plain uuids and no exam; it never shipped, so the
+ * parser refuses it outright rather than dragging a legacy branch forever.)
+ *
+ * `examId` is required, not optional — an optional parameter would let a
+ * future caller silently mint an all-access order, same posture as the
+ * personal format above.
+ */
+const ORG_CUSTOM_ID_PREFIX = "orgv2:";
 
 export function formatOrgPurchaseCustomId(
   userId: string,
   planId: string,
-  orgId: string
+  orgId: string,
+  examId: string
 ): string {
-  return `${ORG_CUSTOM_ID_PREFIX}${userId}:${planId}:${orgId}`;
+  return (
+    ORG_CUSTOM_ID_PREFIX +
+    [userId, planId, orgId, examId].map(encodeUuidB64u).join(":")
+  );
 }
 
 export type ParsedCustomId =
   | ({ kind: "personal" } & PurchaseCustomId)
-  | { kind: "org"; userId: string; planId: string; orgId: string };
+  | { kind: "org"; userId: string; planId: string; orgId: string; examId: string };
 
 /**
  * The one entry point for reading a custom_id back off PayPal. A malformed
- * orgv1 payload returns null rather than falling through to the personal
- * parser — "orgv1:" declared an intent, and half-parsing it as a personal
+ * org payload returns null rather than falling through to the personal
+ * parser — the prefix declared an intent, and half-parsing it as a personal
  * purchase would grant the wrong product.
  */
 export function parseAnyPurchaseCustomId(
@@ -109,12 +174,11 @@ export function parseAnyPurchaseCustomId(
 
   if (customId.startsWith(ORG_CUSTOM_ID_PREFIX)) {
     const parts = customId.slice(ORG_CUSTOM_ID_PREFIX.length).split(":");
-    if (parts.length !== 3) return null;
-    const [userId, planId, orgId] = parts;
-    if (!UUID_RE.test(userId) || !UUID_RE.test(planId) || !UUID_RE.test(orgId)) {
-      return null;
-    }
-    return { kind: "org", userId, planId, orgId };
+    if (parts.length !== 4) return null;
+    const decoded = parts.map(decodeUuidB64u);
+    if (decoded.some((d) => d === null)) return null;
+    const [userId, planId, orgId, examId] = decoded as string[];
+    return { kind: "org", userId, planId, orgId, examId };
   }
 
   const personal = parsePurchaseCustomId(customId);

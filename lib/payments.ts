@@ -134,6 +134,8 @@ export type PaymentGrantOutcome =
       kind: "granted_org";
       orgSubscriptionId: string;
       orgId: string;
+      /** Exam the org bought; null = comp all-access. */
+      examId: string | null;
       planId: string;
       planName: string;
       planPriceCents: number;
@@ -174,6 +176,7 @@ export async function recordPaymentGrant(
         ? {
             org_subscription_id: outcome.orgSubscriptionId,
             org_id: outcome.orgId,
+            exam_id: outcome.examId,
             plan_id: outcome.planId,
             plan_name: outcome.planName,
             plan_price_cents: outcome.planPriceCents,
