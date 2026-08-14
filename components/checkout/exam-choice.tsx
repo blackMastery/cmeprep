@@ -21,14 +21,18 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
  * keeps the highlight instant and the last transition wins.
  */
 export function ExamChoice({
-  planId,
+  basePath,
   exams,
   selectedId,
   ownedUntil,
   labelledBy,
   children,
 }: {
-  planId: string;
+  /**
+   * The page this picker lives on — /checkout/{planId} or /org/billing.
+   * A path, not a callback: server → client props must be serializable.
+   */
+  basePath: string;
   exams: CatalogExam[];
   selectedId: string | null;
   /** examId → the date access already runs to, for the "owned" badge. */
@@ -45,7 +49,7 @@ export function ExamChoice({
     if (id === selectedId) return;
     startTransition(() => {
       setOptimisticId(id);
-      router.replace(`/checkout/${planId}?exam=${id}`, { scroll: false });
+      router.replace(`${basePath}?exam=${id}`, { scroll: false });
     });
   }
 

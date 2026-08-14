@@ -169,7 +169,7 @@ export default async function CheckoutPage(
               </p>
             ) : (
               <ExamChoice
-                planId={plan.id}
+                basePath={`/checkout/${plan.id}`}
                 exams={catalog.map(toExamSummary)}
                 selectedId={selected?.id ?? null}
                 ownedUntil={ownedUntil}
