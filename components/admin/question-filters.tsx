@@ -16,8 +16,11 @@ const SELECT_CLASS =
  */
 export function QuestionFilters({
   hierarchy,
+  basePath = "/admin/questions",
 }: {
   hierarchy: ExamHierarchy[];
+  /** The list URL this form filters — /admin and /org/content share it. */
+  basePath?: string;
 }) {
   const sp = useSearchParams();
   const get = (k: string) => sp.get(k) ?? "";
@@ -29,7 +32,7 @@ export function QuestionFilters({
   return (
     <form
       method="get"
-      action="/admin/questions"
+      action={basePath}
       className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3"
     >
       <div className="relative min-w-48 flex-1">
@@ -158,7 +161,7 @@ export function QuestionFilters({
         Filter
       </Button>
       <Button variant="ghost" size="sm" type="button" asChild>
-        <Link href="/admin/questions">Reset</Link>
+        <Link href={basePath}>Reset</Link>
       </Button>
     </form>
   );

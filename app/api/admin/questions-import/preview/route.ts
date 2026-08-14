@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAdminJson } from "@/lib/admin/api-auth";
+import {
+  examInScope,
+  requireContentAuthorJson,
+} from "@/lib/admin/content-scope";
 import { analyzeUpload, dbDuplicateWarnings } from "@/lib/admin/import";
 import type { ImportPreviewResponse, ImportReport } from "@/lib/admin/import-api";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -26,8 +29,9 @@ function fail(status: number, error: string): NextResponse {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireAdminJson();
+  const gate = await requireContentAuthorJson();
   if ("response" in gate) return gate.response;
+  const { scope } = gate.author;
 
   const body = (await request.json().catch(() => null)) as Record<
     string,
@@ -41,6 +45,10 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  // Scope pin, same posture as commit: "not yours" reads as "gone".
+  if (!(await examInScope(admin, examIdParsed.data, scope))) {
+    return fail(404, "That exam no longer exists.");
+  }
   const { data: exam } = await admin
     .from("exams")
     .select("id, name")

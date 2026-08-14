@@ -35,7 +35,14 @@ const TYPE_LABEL: Record<string, string> = {
   image_based: "Image",
 };
 
-export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
+export function QuestionsTable({
+  rows,
+  basePath = "/admin/questions",
+}: {
+  rows: QuestionListRow[];
+  /** Question-detail URL prefix — /admin and /org/content share this table. */
+  basePath?: string;
+}) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   // The selection is always re-derived from the rows actually on screen. A
@@ -97,7 +104,7 @@ export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
 
   return (
     <>
-      <BulkResult state={bulkState} />
+      <BulkResult state={bulkState} basePath={basePath} />
 
       {selectedIds.length > 0 && (
         <QuestionsBulkBar
@@ -115,6 +122,7 @@ export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
         {rows.map((row) => (
           <li key={row.id}>
             <QuestionCard
+              basePath={basePath}
               row={row}
               selected={selected.has(row.id)}
               onSelect={toggle}
@@ -151,6 +159,7 @@ export function QuestionsTable({ rows }: { rows: QuestionListRow[] }) {
             <TableBody>
               {rows.map((row) => (
                 <QuestionRow
+                  basePath={basePath}
                   key={row.id}
                   row={row}
                   selected={selected.has(row.id)}
@@ -170,10 +179,12 @@ function QuestionCard({
   row,
   selected,
   onSelect,
+  basePath,
 }: {
   row: QuestionListRow;
   selected: boolean;
   onSelect: (id: string, checked: boolean) => void;
+  basePath: string;
 }) {
   return (
     <Card className={cn("[--card-spacing:--spacing(4)]", row.deleted_at && "opacity-60")}>
@@ -181,7 +192,7 @@ function QuestionCard({
         <div className="flex items-start gap-3">
           <SelectCheckbox row={row} selected={selected} onSelect={onSelect} />
           <Link
-            href={`/admin/questions/${row.id}`}
+            href={`${basePath}/${row.id}`}
             className="block font-medium hover:text-primary"
           >
             {row.stem}
@@ -203,7 +214,7 @@ function QuestionCard({
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
           <StatusBadge row={row} />
           <span className="ml-auto flex items-center gap-1">
-            <QuestionActions row={row} />
+            <QuestionActions row={row} basePath={basePath} />
           </span>
         </div>
       </CardContent>
@@ -265,10 +276,12 @@ function QuestionRow({
   row,
   selected,
   onSelect,
+  basePath,
 }: {
   row: QuestionListRow;
   selected: boolean;
   onSelect: (id: string, checked: boolean) => void;
+  basePath: string;
 }) {
   return (
     <TableRow
@@ -281,7 +294,7 @@ function QuestionRow({
 
       <TableCell className="max-w-sm">
         <Link
-          href={`/admin/questions/${row.id}`}
+          href={`${basePath}/${row.id}`}
           className="line-clamp-2 font-medium hover:text-primary"
         >
           {row.stem}
@@ -321,7 +334,7 @@ function QuestionRow({
 
       <TableCell>
         <div className="flex items-center justify-end gap-1">
-          <QuestionActions row={row} />
+          <QuestionActions row={row} basePath={basePath} />
         </div>
       </TableCell>
     </TableRow>
@@ -335,7 +348,13 @@ function QuestionRow({
  * has to name the questions it left behind — "3 skipped" with no way to reach
  * them is a dead end.
  */
-function BulkResult({ state }: { state: BulkState }) {
+function BulkResult({
+  state,
+  basePath,
+}: {
+  state: BulkState;
+  basePath: string;
+}) {
   if (!state?.error && !state?.success) return null;
 
   return (
@@ -347,7 +366,7 @@ function BulkResult({ state }: { state: BulkState }) {
           {state.skipped.map((s) => (
             <li key={s.id} className="flex flex-wrap items-baseline gap-x-2">
               <Link
-                href={`/admin/questions/${s.id}`}
+                href={`${basePath}/${s.id}`}
                 className="font-medium hover:text-primary"
               >
                 {s.stem.length > 80 ? `${s.stem.slice(0, 80)}…` : s.stem}
@@ -472,7 +491,13 @@ function QuestionsBulkBar({
  * Edit / publish / delete controls, shared by the table row and the mobile
  * card so the two presentations can never drift apart.
  */
-function QuestionActions({ row }: { row: QuestionListRow }) {
+function QuestionActions({
+  row,
+  basePath,
+}: {
+  row: QuestionListRow;
+  basePath: string;
+}) {
   const [publishState, publishAction] = useActionState<QuestionState, FormData>(
     togglePublish,
     null
@@ -491,7 +516,7 @@ function QuestionActions({ row }: { row: QuestionListRow }) {
       )}
 
           <Button variant="ghost" size="icon-sm" asChild>
-            <Link href={`/admin/questions/${row.id}`} aria-label="Edit question">
+            <Link href={`${basePath}/${row.id}`} aria-label="Edit question">
               <Pencil />
             </Link>
           </Button>

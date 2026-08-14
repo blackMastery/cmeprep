@@ -49,9 +49,14 @@ type Phase =
 export function ImportWizard({
   examId,
   examName,
+  questionsHref = "/admin/questions?published=false",
+  importAgainHref,
 }: {
   examId: string;
   examName: string;
+  /** Where "Review drafts" lands — the org surface passes its own list. */
+  questionsHref?: string;
+  importAgainHref?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -195,6 +200,8 @@ export function ImportWizard({
         result={phase.result}
         examId={examId}
         examName={examName}
+        questionsHref={questionsHref}
+        importAgainHref={importAgainHref}
       />
     );
   }
@@ -506,10 +513,14 @@ function SuccessPanel({
   result,
   examId,
   examName,
+  questionsHref,
+  importAgainHref,
 }: {
   result: Extract<ImportCommitResponse, { ok: true }>;
   examId: string;
   examName: string;
+  questionsHref: string;
+  importAgainHref?: string;
 }) {
   return (
     <Card className="[--card-spacing:--spacing(7)]">
@@ -546,10 +557,12 @@ function SuccessPanel({
 
         <div className="flex flex-col justify-center gap-2 sm:flex-row">
           <Button size="lg" asChild>
-            <Link href="/admin/questions?published=false">Review drafts</Link>
+            <Link href={questionsHref}>Review drafts</Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href={`/admin/exams/${examId}/import`}>Import another file</Link>
+            <Link href={importAgainHref ?? `/admin/exams/${examId}/import`}>
+              Import another file
+            </Link>
           </Button>
         </div>
       </CardContent>

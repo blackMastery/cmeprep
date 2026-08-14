@@ -1,6 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { requireAdminJson } from "@/lib/admin/api-auth";
+import {
+  examInScope,
+  requireContentAuthorJson,
+  scopeOrgId,
+} from "@/lib/admin/content-scope";
 import { audit } from "@/lib/admin/audit";
 import {
   analyzeUpload,
@@ -72,9 +76,10 @@ function fail(
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const gate = await requireAdminJson();
+  const gate = await requireContentAuthorJson();
   if ("response" in gate) return gate.response;
-  const { user } = gate;
+  const { user, scope } = gate.author;
+  const orgId = scopeOrgId(scope);
 
   const body = (await request.json().catch(() => null)) as Record<
     string,
@@ -93,6 +98,11 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  // Scope pin: an org author imports into their own bank only — "not yours"
+  // and "gone" are deliberately the same answer.
+  if (!(await examInScope(admin, examIdParsed.data, scope))) {
+    return fail(404, "That exam no longer exists.");
+  }
   const { data: exam } = await admin
     .from("exams")
     .select("id, name")
@@ -219,11 +229,13 @@ export async function POST(request: Request) {
     specialtyIdByKey.set(key, data.id);
     specialtyPositions.set(examId, [...siblings, { position: siblings.length }]);
     createdSpecialties.push(`${planned.examName} › ${planned.name}`);
-    await audit(user.id, "specialty.create", data.id, {
-      name: planned.name,
-      examId,
-      via: "bulk_import",
-    });
+    await audit(
+      user.id,
+      "specialty.create",
+      data.id,
+      { name: planned.name, examId, via: "bulk_import" },
+      orgId
+    );
   }
 
   for (const planned of analysis.creationPlan.subjects) {
@@ -269,11 +281,13 @@ export async function POST(request: Request) {
       { position: siblings.length },
     ]);
     createdSubjects.push(`${planned.specialtyName} › ${planned.name}`);
-    await audit(user.id, "subject.create", data.id, {
-      name: planned.name,
-      specialtyId,
-      via: "bulk_import",
-    });
+    await audit(
+      user.id,
+      "subject.create",
+      data.id,
+      { name: planned.name, specialtyId, via: "bulk_import" },
+      orgId
+    );
   }
 
   // ── Patch placeholder subject ids with the real ones ────────
@@ -385,18 +399,24 @@ export async function POST(request: Request) {
     }
   }
 
-  await audit(user.id, "question.bulk_import", null, {
-    imported: insertedQuestionIds.length,
-    fileName,
-    fileSha256: result.fileSha256,
-    examId: exam.id,
-    createdSpecialties,
-    createdSubjects,
-    errorRows: analysis.counts.errorRows,
-    skipped: analysis.counts.skipped,
-    images: uploaded.pathByRow.size,
-    imagesUploaded: uploaded.created.length,
-  });
+  await audit(
+    user.id,
+    "question.bulk_import",
+    null,
+    {
+      imported: insertedQuestionIds.length,
+      fileName,
+      fileSha256: result.fileSha256,
+      examId: exam.id,
+      createdSpecialties,
+      createdSubjects,
+      errorRows: analysis.counts.errorRows,
+      skipped: analysis.counts.skipped,
+      images: uploaded.pathByRow.size,
+      imagesUploaded: uploaded.created.length,
+    },
+    orgId
+  );
 
   // The workbook has served its purpose; nothing reads it again.
   await deleteImportObject(objectPath);

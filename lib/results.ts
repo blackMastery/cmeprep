@@ -16,6 +16,12 @@ export type ReviewQuestion = {
   selectedOptionIds: string[];
   isCorrect: boolean;
   answered: boolean;
+  /**
+   * Private-bank content the viewer may no longer read (SPEC §4): they left
+   * the org (or it lapsed), so stem/options/explanation are withheld while
+   * the immutable score survives. The review UI renders a placeholder.
+   */
+  withheld: boolean;
 };
 
 export type SubjectBreakdown = {
@@ -44,6 +50,47 @@ type QuestionRow = {
   explanation: string;
   subjects: { name: string } | null;
 };
+
+/**
+ * Which of these questions belong to a private bank the viewer can no longer
+ * read? Empty for the overwhelmingly common all-public paper — the org query
+ * only runs when an org question is actually present.
+ */
+async function withheldQuestionIds(
+  admin: ReturnType<typeof createAdminClient>,
+  questionIds: string[],
+  userId: string
+): Promise<Set<string>> {
+  if (questionIds.length === 0) return new Set();
+
+  const { data: orgRows } = await admin
+    .from("questions")
+    .select("id, subjects!inner(specialties!inner(exams!inner(org_id)))")
+    .in("id", questionIds)
+    .not("subjects.specialties.exams.org_id", "is", null);
+
+  const rows = (orgRows ?? []) as unknown as {
+    id: string;
+    subjects: { specialties: { exams: { org_id: string | null } } };
+  }[];
+  if (rows.length === 0) return new Set();
+
+  const [{ data: profile }, { data: membership }] = await Promise.all([
+    admin.from("profiles").select("role").eq("id", userId).maybeSingle(),
+    admin
+      .from("org_members")
+      .select("org_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+  if (profile?.role === "admin") return new Set();
+
+  return new Set(
+    rows
+      .filter((r) => r.subjects.specialties.exams.org_id !== membership?.org_id)
+      .map((r) => r.id)
+  );
+}
 
 /**
  * Full results including correct answers and explanations.
@@ -85,6 +132,11 @@ export async function getTestResults(
         .eq("user_id", userId),
     ]);
 
+  // The admin client bypasses RLS, so the org wall must be applied HERE:
+  // questions from a private bank are readable in review only while the
+  // viewer is still a member of that org (platform admins excepted).
+  const withheldIds = await withheldQuestionIds(admin, questionIds, userId);
+
   const questionById = new Map(
     ((questions ?? []) as unknown as QuestionRow[]).map((q) => [q.id, q])
   );
@@ -99,26 +151,31 @@ export async function getTestResults(
 
     const attempt = attemptByQuestion.get(link.question_id);
     const selected = attempt?.selected_option_ids ?? [];
+    const withheld = withheldIds.has(q.id);
 
     return [
       {
         questionId: q.id,
         position: link.position,
-        stem: q.stem,
+        // Scores stay; the org's content does not leave with the member.
+        stem: withheld ? "" : q.stem,
         type: q.type,
         difficulty: q.difficulty,
-        imagePath: q.image_path,
-        explanation: q.explanation,
+        imagePath: withheld ? null : q.image_path,
+        explanation: withheld ? "" : q.explanation,
         subjectName: q.subjects?.name ?? "",
-        options: link.option_order.flatMap((id: string) => {
-          const opt = optionById.get(id);
-          return opt
-            ? [{ id: opt.id, label: opt.label, isCorrect: opt.is_correct }]
-            : [];
-        }),
+        options: withheld
+          ? []
+          : link.option_order.flatMap((id: string) => {
+              const opt = optionById.get(id);
+              return opt
+                ? [{ id: opt.id, label: opt.label, isCorrect: opt.is_correct }]
+                : [];
+            }),
         selectedOptionIds: selected,
         isCorrect: attempt?.is_correct ?? false,
         answered: selected.length > 0,
+        withheld,
       },
     ];
   });

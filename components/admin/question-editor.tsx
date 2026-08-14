@@ -28,11 +28,14 @@ export function QuestionEditor({
   question,
   options,
   usageCount = 0,
+  basePath = "/admin/questions",
 }: {
   subjects: SubjectOption[];
   question?: Question;
   options?: ExistingOption[];
   usageCount?: number;
+  /** The list URL Cancel returns to — /admin and /org/content share it. */
+  basePath?: string;
 }) {
   const [state, formAction] = useActionState<QuestionState, FormData>(
     saveQuestion,
@@ -435,7 +438,7 @@ export function QuestionEditor({
                 {question ? "Save changes" : "Create question"}
               </AdminSubmit>
               <Button variant="outline-muted" asChild>
-                <Link href="/admin/questions">Cancel</Link>
+                <Link href={basePath}>Cancel</Link>
               </Button>
             </div>
           </CardContent>

@@ -2,9 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import {
+  questionInScope,
+  questionsBasePath,
+  questionsInScope,
+  requireContentAuthor,
+  scopeOrgId,
+  subjectInScope,
+} from "@/lib/admin/content-scope";
 import {
   correctnessChanged,
   diffOptions,
@@ -48,10 +55,12 @@ export type BulkState = {
 } | null;
 
 /**
- * requireAdmin() is the FIRST statement of every action, outside any
- * try/catch. The admin layout does not gate actions — the mutation runs
- * before any layout renders — and requireAdmin() signals by throwing
- * NEXT_REDIRECT, which a catch block would swallow.
+ * requireContentAuthor() is the FIRST statement of every action, outside any
+ * try/catch. Layouts do not gate actions — the mutation runs before any
+ * layout renders — and the guard signals by throwing NEXT_REDIRECT, which a
+ * catch block would swallow. These actions serve BOTH /admin (platform
+ * scope) and /org/content (org scope); every target id is pinned to the
+ * caller's scope before anything is written.
  */
 
 function fieldErrorsFrom(issues: { path: PropertyKey[]; message: string }[]) {
@@ -69,7 +78,7 @@ export async function saveQuestion(
   _prev: QuestionState,
   formData: FormData
 ): Promise<QuestionState> {
-  const user = await requireAdmin();
+  const { user, scope } = await requireContentAuthor();
 
   const existingId = String(formData.get("questionId") ?? "").trim();
   const isEdit = existingId.length > 0;
@@ -84,6 +93,12 @@ export async function saveQuestion(
   const input = parsed.data;
   const admin = createAdminClient();
   const now = new Date().toISOString();
+
+  // Scope pin: an org-admin can only file questions under their own bank —
+  // this also blocks MOVING a question out of (or into) foreign taxonomy.
+  if (!(await subjectInScope(admin, input.subjectId, scope))) {
+    return { error: "Unknown subject." };
+  }
 
   // ── Create ────────────────────────────────────────────────
   if (!isEdit) {
@@ -123,23 +138,31 @@ export async function saveQuestion(
         .eq("id", created.id);
     }
 
-    await audit(user.id, "question.create", created.id, {
-      subjectId: input.subjectId,
-      type: input.type,
-      published: input.isPublished,
-    });
+    await audit(
+      user.id,
+      "question.create",
+      created.id,
+      {
+        subjectId: input.subjectId,
+        type: input.type,
+        published: input.isPublished,
+      },
+      scopeOrgId(scope)
+    );
 
     // Must come BEFORE redirect(), which throws NEXT_REDIRECT — anything
     // after it never runs, and the subject counts would go stale.
-    revalidatePath("/admin/questions");
-    revalidatePath("/admin/subjects");
+    revalidateQuestions();
 
-    redirect(`/admin/questions/${created.id}?created=1`);
+    redirect(`${questionsBasePath(scope)}/${created.id}?created=1`);
   }
 
   // ── Update ────────────────────────────────────────────────
   const id = uuid().safeParse(existingId);
   if (!id.success) return { error: "Unknown question." };
+  if (!(await questionInScope(admin, id.data, scope))) {
+    return { error: "Unknown question." };
+  }
 
   const current = await getQuestionForEdit(id.data);
   if (!current) return { error: "Unknown question." };
@@ -217,28 +240,39 @@ export async function saveQuestion(
 
   if (updateError) return { error: "Could not save the question." };
 
-  await audit(user.id, "question.update", id.data, {
-    retired: diff.retireIds.length,
-    optionCount: diff.rows.length,
-    published: input.isPublished,
-  });
+  await audit(
+    user.id,
+    "question.update",
+    id.data,
+    {
+      retired: diff.retireIds.length,
+      optionCount: diff.rows.length,
+      published: input.isPublished,
+    },
+    scopeOrgId(scope)
+  );
 
   if (keyChanged) {
-    await audit(user.id, "option.correctness_change", id.data, {
-      before: current.options
-        .filter((o) => !o.deleted_at && o.is_correct)
-        .map((o) => ({ id: o.id, label: o.label })),
-      after: diff.rows
-        .filter((r) => r.is_correct)
-        .map((r) => ({ id: r.id, label: r.label })),
-      usedInTests: current.usageCount,
-    });
+    await audit(
+      user.id,
+      "option.correctness_change",
+      id.data,
+      {
+        before: current.options
+          .filter((o) => !o.deleted_at && o.is_correct)
+          .map((o) => ({ id: o.id, label: o.label })),
+        after: diff.rows
+          .filter((r) => r.is_correct)
+          .map((r) => ({ id: r.id, label: r.label })),
+        usedInTests: current.usageCount,
+      },
+      scopeOrgId(scope)
+    );
   }
 
-  revalidatePath("/admin/questions");
+  revalidateQuestions();
   revalidatePath(`/admin/questions/${id.data}`);
-  // The subject may have changed, which moves counts between subjects.
-  revalidatePath("/admin/subjects");
+  revalidatePath(`/org/content/questions/${id.data}`);
   return { success: "Saved." };
 }
 
@@ -246,13 +280,16 @@ export async function togglePublish(
   _prev: QuestionState,
   formData: FormData
 ): Promise<QuestionState> {
-  const user = await requireAdmin();
+  const { user, scope } = await requireContentAuthor();
 
   const id = uuid().safeParse(formData.get("id"));
   if (!id.success) return { error: "Unknown question." };
   const publish = formData.get("publish") === "true";
 
   const admin = createAdminClient();
+  if (!(await questionInScope(admin, id.data, scope))) {
+    return { error: "Unknown question." };
+  }
 
   if (publish) {
     // Refuse to publish something that would fail validation — otherwise a
@@ -277,9 +314,16 @@ export async function togglePublish(
 
   if (error) return { error: "Could not change the publish state." };
 
-  await audit(user.id, publish ? "question.publish" : "question.unpublish", id.data);
-  revalidatePath("/admin/questions");
+  await audit(
+    user.id,
+    publish ? "question.publish" : "question.unpublish",
+    id.data,
+    undefined,
+    scopeOrgId(scope)
+  );
+  revalidateQuestions();
   revalidatePath(`/admin/questions/${id.data}`);
+  revalidatePath(`/org/content/questions/${id.data}`);
   return { success: publish ? "Published." : "Moved to drafts." };
 }
 
@@ -287,13 +331,16 @@ export async function setQuestionDeleted(
   _prev: QuestionState,
   formData: FormData
 ): Promise<QuestionState> {
-  const user = await requireAdmin();
+  const { user, scope } = await requireContentAuthor();
 
   const id = uuid().safeParse(formData.get("id"));
   if (!id.success) return { error: "Unknown question." };
   const restore = formData.get("restore") === "true";
 
   const admin = createAdminClient();
+  if (!(await questionInScope(admin, id.data, scope))) {
+    return { error: "Unknown question." };
+  }
   const { error } = await admin
     .from("questions")
     .update({
@@ -306,10 +353,14 @@ export async function setQuestionDeleted(
 
   if (error) return { error: "Could not update the question." };
 
-  await audit(user.id, restore ? "question.restore" : "question.delete", id.data);
-  revalidatePath("/admin/questions");
-  // Subject counts are derived from questions, so they go stale too.
-  revalidatePath("/admin/subjects");
+  await audit(
+    user.id,
+    restore ? "question.restore" : "question.delete",
+    id.data,
+    undefined,
+    scopeOrgId(scope)
+  );
+  revalidateQuestions();
   return { success: restore ? "Restored as a draft." : "Question deleted." };
 }
 
@@ -329,15 +380,18 @@ export async function bulkSetPublished(
   _prev: BulkState,
   formData: FormData
 ): Promise<BulkState> {
-  const user = await requireAdmin();
+  const { user, scope } = await requireContentAuthor();
 
   const parsed = bulkIds(formData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const ids = parsed.data;
   const publish = formData.get("publish") === "true";
   const now = new Date().toISOString();
 
   const admin = createAdminClient();
+  // Filtered, not refused: a selection that strays outside the caller's
+  // scope (stale tab, crafted ids) just loses the foreign rows.
+  const ids = await questionsInScope(admin, parsed.data, scope);
+  if (ids.length === 0) return { error: "Nothing selected." };
 
   if (!publish) {
     const { data, error } = await admin
@@ -353,10 +407,13 @@ export async function bulkSetPublished(
     const affected = data?.length ?? 0;
     if (affected === 0) return { error: "Nothing to unpublish." };
 
-    await audit(user.id, "question.bulk_unpublish", null, {
-      ids: data?.map((r) => r.id) ?? [],
-      count: affected,
-    });
+    await audit(
+      user.id,
+      "question.bulk_unpublish",
+      null,
+      { ids: data?.map((r) => r.id) ?? [], count: affected },
+      scopeOrgId(scope)
+    );
     revalidateQuestions();
     return { success: `${affected} moved to drafts.` };
   }
@@ -417,11 +474,13 @@ export async function bulkSetPublished(
 
   if (error) return { error: "Could not change the publish state." };
 
-  await audit(user.id, "question.bulk_publish", null, {
-    ids: publishable,
-    count: publishable.length,
-    skipped: skipped.length,
-  });
+  await audit(
+    user.id,
+    "question.bulk_publish",
+    null,
+    { ids: publishable, count: publishable.length, skipped: skipped.length },
+    scopeOrgId(scope)
+  );
   revalidateQuestions();
 
   // "published", not "changed": some of these were already live, and claiming
@@ -439,15 +498,18 @@ export async function bulkSetDeleted(
   _prev: BulkState,
   formData: FormData
 ): Promise<BulkState> {
-  const user = await requireAdmin();
+  const { user, scope } = await requireContentAuthor();
 
   const parsed = bulkIds(formData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const ids = parsed.data;
   const restore = formData.get("restore") === "true";
   const now = new Date().toISOString();
 
-  const update = createAdminClient()
+  const admin = createAdminClient();
+  const ids = await questionsInScope(admin, parsed.data, scope);
+  if (ids.length === 0) return { error: "Nothing selected." };
+
+  const update = admin
     .from("questions")
     .update({
       // Soft delete only — historical papers still resolve these questions.
@@ -472,10 +534,13 @@ export async function bulkSetDeleted(
     return { error: restore ? "Nothing to restore." : "Nothing to delete." };
   }
 
-  await audit(user.id, restore ? "question.bulk_restore" : "question.bulk_delete", null, {
-    ids: data?.map((r) => r.id) ?? [],
-    count: affected,
-  });
+  await audit(
+    user.id,
+    restore ? "question.bulk_restore" : "question.bulk_delete",
+    null,
+    { ids: data?.map((r) => r.id) ?? [], count: affected },
+    scopeOrgId(scope)
+  );
   revalidateQuestions();
 
   return {
@@ -492,6 +557,10 @@ function revalidateQuestions() {
   revalidatePath("/admin/questions/[id]", "page");
   // Subject counts are derived from questions, so they go stale too.
   revalidatePath("/admin/subjects");
+  // The org storefront renders the same rows; refresh both unconditionally.
+  revalidatePath("/org/content");
+  revalidatePath("/org/content/questions");
+  revalidatePath("/org/content/questions/[id]", "page");
 }
 
 /**
@@ -504,7 +573,7 @@ export async function createImageUploadUrl(
 ): Promise<
   { ok: true; path: string; token: string } | { ok: false; error: string }
 > {
-  await requireAdmin();
+  await requireContentAuthor();
 
   // Server-side allowlist is the real check; the client one is only UX.
   if (!ALLOWED_IMAGE_TYPES.includes(contentType as (typeof ALLOWED_IMAGE_TYPES)[number])) {
@@ -539,7 +608,7 @@ export async function createImageUploadUrl(
 export async function createImportUploadUrl(): Promise<
   { ok: true; path: string; token: string } | { ok: false; error: string }
 > {
-  await requireAdmin();
+  await requireContentAuthor();
 
   const path = `imports/${crypto.randomUUID()}.xlsx`;
 

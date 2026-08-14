@@ -21,6 +21,8 @@ export type QuestionListFilters = {
   published?: boolean;
   includeDeleted?: boolean;
   page?: number;
+  /** Narrow to one org's private bank; omitted = everything (platform). */
+  orgId?: string;
 };
 
 export type QuestionListRow = {
@@ -85,6 +87,9 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
     .range(from, from + PAGE_SIZE - 1);
 
   if (!filters.includeDeleted) query = query.is("deleted_at", null);
+  // The org wall rides the same !inner joins the level filters use.
+  if (filters.orgId)
+    query = query.eq("subjects.specialties.exams.org_id", filters.orgId);
   // Most-specific level wins; the !inner joins above make parent filters work.
   if (filters.subjectId) query = query.eq("subject_id", filters.subjectId);
   else if (filters.specialtyId)

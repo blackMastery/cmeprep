@@ -136,13 +136,21 @@ export type ExamHierarchy = Exam & {
   specialties: (Specialty & { subjects: SubjectWithCount[] })[];
 };
 
-/** The full three-level tree — filters, pickers and import all read this. */
-export async function listHierarchy(): Promise<ExamHierarchy[]> {
+/**
+ * The full three-level tree — filters, pickers and import all read this.
+ *
+ * `orgId` narrows to one org's private bank (the /org/content surfaces);
+ * omitted = every exam, org banks included, for platform admins.
+ */
+export async function listHierarchy(orgId?: string): Promise<ExamHierarchy[]> {
   const admin = createAdminClient();
+
+  let examsQuery = admin.from("exams").select("*").order("position").order("name");
+  if (orgId) examsQuery = examsQuery.eq("org_id", orgId);
 
   const [subjects, { data: exams }, { data: specialties }] = await Promise.all([
     listTaxonomy(),
-    admin.from("exams").select("*").order("position").order("name"),
+    examsQuery,
     admin.from("specialties").select("*").order("position").order("name"),
   ]);
 
@@ -171,8 +179,10 @@ export type SubjectOption = {
 };
 
 /** Flat subject list for the question editor's picker. */
-export async function listSubjectOptions(): Promise<SubjectOption[]> {
-  const hierarchy = await listHierarchy();
+export async function listSubjectOptions(
+  orgId?: string
+): Promise<SubjectOption[]> {
+  const hierarchy = await listHierarchy(orgId);
   return hierarchy.flatMap((exam) =>
     exam.specialties.flatMap((sp) =>
       sp.subjects.map((s) => ({

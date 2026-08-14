@@ -84,6 +84,46 @@ function ReviewCard({
   initialBookmarked: boolean;
   note: string | null;
 }) {
+  // Private-bank content after leaving the org: the score survives, the
+  // organisation's material does not (SPEC §4). Render the gap, never a 404.
+  if (question.withheld) {
+    return (
+      <Card className="[--card-spacing:--spacing(6)]">
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium tabular-nums text-muted-foreground">
+              Q{question.position + 1}
+            </span>
+            <Badge variant="secondary">{question.subjectName}</Badge>
+            <span
+              className={cn(
+                "ml-auto flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                question.isCorrect
+                  ? "bg-success/10 text-success"
+                  : "bg-destructive/10 text-destructive"
+              )}
+            >
+              {question.isCorrect ? (
+                <Check className="size-3.5" strokeWidth={3} />
+              ) : (
+                <X className="size-3.5" strokeWidth={3} />
+              )}
+              {question.isCorrect
+                ? "Correct"
+                : question.answered
+                  ? "Incorrect"
+                  : "Not answered"}
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This question belongs to an organisation&apos;s private bank and
+            is no longer available to review. Your result above still counts.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="[--card-spacing:--spacing(6)]">
       <CardContent className="space-y-5">

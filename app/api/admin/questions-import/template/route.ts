@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAdminJson } from "@/lib/admin/api-auth";
+import { requireContentAuthorJson } from "@/lib/admin/content-scope";
 import { buildTemplateBuffer } from "@/lib/admin/import";
 
 /** GET /api/admin/questions-import/template — the fill-in workbook. */
 export async function GET() {
-  const gate = await requireAdminJson();
+  const gate = await requireContentAuthorJson();
   if ("response" in gate) return gate.response;
 
   const buffer = await buildTemplateBuffer();
