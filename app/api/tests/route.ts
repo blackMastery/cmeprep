@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { createTestSchema, uuid } from "@/lib/validation";
 import { examAccessFrom } from "@/lib/entitlements";
-import { canAccessExam } from "@/lib/entitlements-core";
+import { canAccessExam, consumesTrialCredit } from "@/lib/entitlements-core";
 import { shuffle } from "@/lib/scoring";
 import type { OrgAssignment, TestConfig } from "@/lib/supabase/types";
 
@@ -134,12 +134,14 @@ export async function POST(request: Request) {
   }
 
   // ── Trial quota: one atomic statement, so two concurrent requests can
-  // never both consume the final credit. Org members are unmetered — the org
-  // bought blanket access, so a trial-ROLE member neither burns a credit nor
-  // gets blocked at zero (SPEC §3).
-  const consumesTrial =
-    user.profile.role === "trial" &&
-    !(access.kind === "all" && access.reason === "org");
+  // never both consume the final credit. Org-COVERED exams are unmetered —
+  // the org bought this exam (or comps everything, or owns the bank), so a
+  // trial-ROLE member neither burns a credit nor gets blocked at zero on it;
+  // anything outside the org's coverage rides the quota as usual (SPEC §3).
+  const consumesTrial = consumesTrialCredit(user.profile.role, access, {
+    id: exam.id,
+    orgId: exam.org_id,
+  });
   if (consumesTrial) {
     const { data: claimed, error: claimError } = await admin
       .from("profiles")

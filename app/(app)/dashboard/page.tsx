@@ -5,7 +5,11 @@ import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { firstName } from "@/lib/names";
-import { examAccessFor, type SubscriptionScope } from "@/lib/entitlements-core";
+import {
+  canAccessExam,
+  examAccessFor,
+  type SubscriptionScope,
+} from "@/lib/entitlements-core";
 import { orgGrantContextFrom } from "@/lib/entitlements";
 import {
   assignmentsForMember,
@@ -74,25 +78,28 @@ export default async function DashboardPage() {
     ? await assignmentsForMember(membership.org.id, user.id)
     : null;
 
-  // null = all exams (trial, admin, org, or an all-access row) — the panel
-  // says so rather than listing the whole catalogue.
+  // null = all exams (trial, admin, an all-access row, or an org comp) — the
+  // panel says so rather than listing the whole catalogue. Otherwise list
+  // the UNION the member can practise: personal rows + org-bought exams +
+  // the org's own bank — canAccessExam already states that rule, including
+  // for kind "none" (a paying org member with no personal rows).
   const access = examAccessFor(
     user.profile.role,
     subscriptions,
     orgCtx,
     new Date()
   );
-  // Org members are unmetered (SPEC §3): the start button must not vanish
-  // for a trial-role member whose org covers them.
-  const orgCovered = access.kind === "all" && access.reason === "org";
+  // A member whose org covers anything has unmetered ground to start on
+  // (SPEC §3): the start button must not vanish with their trial quota.
+  const orgCovered = access.org !== null;
   const entitledExamNames =
-    access.kind === "all"
+    access.kind === "all" || access.org?.allAccess
       ? null
-      : access.kind === "none"
-        ? []
-        : (await listExamCatalog())
-            .filter((exam) => access.examIds.includes(exam.id))
-            .map((exam) => exam.name);
+      : (await listExamCatalog())
+          .filter((exam) =>
+            canAccessExam(access, { id: exam.id, orgId: exam.orgId })
+          )
+          .map((exam) => exam.name);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">

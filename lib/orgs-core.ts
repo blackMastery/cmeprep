@@ -8,6 +8,8 @@
  */
 
 import {
+  daysUntil,
+  EXPIRY_WARNING_DAYS,
   isEffectivelyActive,
   type SubscriptionLike,
 } from "@/lib/subscriptions-core";
@@ -35,9 +37,23 @@ export function orgGraceEnd(periodEnd: string): Date {
 }
 
 /**
+ * Does ONE subscription row grant right now? Effectively active, or an
+ * 'active'-status row still inside its 14-day grace. This is the per-row
+ * predicate the entitlement rider (lib/entitlements-core.ts) uses to decide
+ * WHICH exams an org's rows entitle — stated once, here, next to the state
+ * machine built from it.
+ */
+export function orgSubGrants(sub: SubscriptionLike, now: Date): boolean {
+  return (
+    isEffectivelyActive(sub, now) ||
+    (sub.status === "active" && now < orgGraceEnd(sub.current_period_end))
+  );
+}
+
+/**
  * State across ALL of an org's subscription rows: any effectively-active row
  * keeps the org "active" (renewals stack, so old lapsed rows linger); failing
- * that, an 'active'-status row inside its grace window yields "grace".
+ * that, a row still granting through its grace window yields "grace".
  */
 export function orgSubscriptionState(
   subs: readonly SubscriptionLike[],
@@ -46,11 +62,55 @@ export function orgSubscriptionState(
   let state: OrgSubscriptionState = "locked";
   for (const sub of subs) {
     if (isEffectivelyActive(sub, now)) return "active";
-    if (sub.status === "active" && now < orgGraceEnd(sub.current_period_end)) {
-      state = "grace";
-    }
+    if (orgSubGrants(sub, now)) state = "grace";
   }
   return state;
+}
+
+export type OrgExamAlert = {
+  examId: string;
+  /** When access to this exam actually ends (grace end for lapsed rows). */
+  endsAt: string;
+  state: "expiring" | "grace";
+};
+
+/**
+ * Per-EXAM trouble the org-wide state machine cannot see: with purchases
+ * scoped per exam, exam A can lapse into grace while exam B keeps the org
+ * "active" — and nobody would be warned. One alert per exam whose latest
+ * paid period ends within EXPIRY_WARNING_DAYS ("expiring") or has ended but
+ * is still inside its 14-day grace ("grace"), soonest first. Comp all-access
+ * rows (exam_id null) are excluded — the org-wide banner owns those.
+ */
+export function orgExamAlerts(
+  subs: readonly (SubscriptionLike & { exam_id: string | null })[],
+  now: Date
+): OrgExamAlert[] {
+  const latestByExam = new Map<string, string>();
+  for (const sub of subs) {
+    if (sub.status !== "active" || sub.exam_id === null) continue;
+    const prev = latestByExam.get(sub.exam_id);
+    if (!prev || new Date(sub.current_period_end) > new Date(prev)) {
+      latestByExam.set(sub.exam_id, sub.current_period_end);
+    }
+  }
+
+  const alerts: OrgExamAlert[] = [];
+  for (const [examId, end] of latestByExam) {
+    if (new Date(end) > now) {
+      const days = daysUntil(end, now);
+      if (days >= 1 && days <= EXPIRY_WARNING_DAYS) {
+        alerts.push({ examId, endsAt: end, state: "expiring" });
+      }
+    } else if (now < orgGraceEnd(end)) {
+      alerts.push({
+        examId,
+        endsAt: orgGraceEnd(end).toISOString(),
+        state: "grace",
+      });
+    }
+  }
+  return alerts.sort((a, b) => a.endsAt.localeCompare(b.endsAt));
 }
 
 /**

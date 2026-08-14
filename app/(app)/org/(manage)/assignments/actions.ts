@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireOrgAdmin } from "@/lib/orgs";
+import { listOrgSubscriptions, requireOrgAdmin } from "@/lib/orgs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import { orgAccessOf } from "@/lib/entitlements-core";
 import { orgAssignmentSchema, uuid } from "@/lib/validation";
 import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
 import type { TestConfig } from "@/lib/supabase/types";
@@ -48,8 +49,9 @@ export async function createAssignment(
 
   const admin = createAdminClient();
 
-  // The exam must be one the org's members can practise: the public catalog
-  // or the org's own bank — never another org's.
+  // The exam must be one the org's members can practise: their own bank, or
+  // a public exam the org's plan actually covers — org purchases are per
+  // exam now, so ownership alone is not entitlement.
   const { data: exam } = await admin
     .from("exams")
     .select("id, org_id")
@@ -57,6 +59,24 @@ export async function createAssignment(
     .maybeSingle();
   if (!exam || (exam.org_id !== null && exam.org_id !== session.org.id)) {
     return { error: "Unknown exam." };
+  }
+  if (exam.org_id === null) {
+    const orgAccess = orgAccessOf(
+      {
+        org_id: session.org.id,
+        suspended_at: session.org.suspended_at,
+        subs: await listOrgSubscriptions(session.org.id),
+      },
+      new Date()
+    );
+    if (
+      !orgAccess ||
+      (!orgAccess.allAccess && !orgAccess.examIds.includes(exam.id))
+    ) {
+      return {
+        error: "Your organisation's plan doesn't include that examination.",
+      };
+    }
   }
 
   // Same subject-integrity rule as test creation: every subject must hang

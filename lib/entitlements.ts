@@ -9,7 +9,6 @@ import {
   type OrgGrantContext,
   type SubscriptionScope,
 } from "@/lib/entitlements-core";
-import type { SubscriptionLike } from "@/lib/subscriptions-core";
 
 /** Either client works: admin (route handlers) or RLS'd (pages, actions). */
 type DbClient =
@@ -45,7 +44,8 @@ export async function orgGrantContextFrom(
       .maybeSingle(),
     client
       .from("org_subscriptions")
-      .select("status, current_period_end")
+      // exam_id: org purchases are per exam; the rider is built from it.
+      .select("status, current_period_end, exam_id")
       .eq("org_id", membership.org_id),
   ]);
   // A membership row whose org row can't be read grants nothing.
@@ -54,7 +54,7 @@ export async function orgGrantContextFrom(
   return {
     org_id: membership.org_id,
     suspended_at: org.suspended_at,
-    subs: (subs ?? []) as SubscriptionLike[],
+    subs: (subs ?? []) as SubscriptionScope[],
   };
 }
 

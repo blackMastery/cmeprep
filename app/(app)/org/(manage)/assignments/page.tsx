@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import {
   listAssignmentProgress,
   listOrgMembers,
+  listOrgSubscriptions,
   requireOrgAdmin,
 } from "@/lib/orgs";
 import { listExamCatalogTree } from "@/lib/catalog";
+import { orgAccessOf } from "@/lib/entitlements-core";
 import {
   AssignmentsManager,
   type AssignmentExamOption,
@@ -17,16 +19,31 @@ export const metadata: Metadata = { title: "Organisation assignments" };
 export default async function OrgAssignmentsPage() {
   const session = await requireOrgAdmin();
 
-  // The catalogue read is RLS'd under the org-admin's session, so it already
-  // holds exactly what their members can practise: the public catalogue plus
-  // this org's own bank.
-  const [tree, members, progress] = await Promise.all([
+  // RLS narrows the catalogue to public + own bank; the entitlement filter
+  // below narrows further to what the org's per-exam plan actually covers —
+  // offering an unentitled exam would only fail at the action.
+  const [tree, members, progress, orgSubs] = await Promise.all([
     listExamCatalogTree(),
     listOrgMembers(session.org.id),
     listAssignmentProgress(session.org.id),
+    listOrgSubscriptions(session.org.id),
   ]);
+  const orgAccess = orgAccessOf(
+    {
+      org_id: session.org.id,
+      suspended_at: session.org.suspended_at,
+      subs: orgSubs,
+    },
+    new Date()
+  );
 
   const exams: AssignmentExamOption[] = tree
+    .filter(
+      (exam) =>
+        exam.orgId !== null ||
+        (orgAccess !== null &&
+          (orgAccess.allAccess || orgAccess.examIds.includes(exam.id)))
+    )
     .map((exam) => ({
       id: exam.id,
       name: exam.name,

@@ -6,7 +6,7 @@
  * here; it lives once in isEffectivelyActive.
  */
 
-import { orgGrantHolds } from "@/lib/orgs-core";
+import { orgGrantHolds, orgSubGrants } from "@/lib/orgs-core";
 import {
   daysUntil,
   EXPIRY_WARNING_DAYS,
@@ -21,39 +21,82 @@ export type SubscriptionScope = SubscriptionLike & { exam_id: string | null };
 /**
  * The caller's org, as the grant rules see it: membership + the org's
  * subscription rows + the suspension flag. null = not a member of any org.
- * Whether the grant HOLDS (grace, suspension) is decided here via
- * orgGrantHolds — callers just fetch and pass.
+ * Whether (and what) the org grants is decided here via orgAccessOf —
+ * callers just fetch and pass.
  */
 export type OrgGrantContext = {
   org_id: string;
   suspended_at: string | null;
-  subs: readonly SubscriptionLike[];
+  subs: readonly SubscriptionScope[];
+};
+
+/**
+ * What an org membership currently entitles. Rides ALONGSIDE the personal
+ * access rather than replacing it: org purchases are per exam now, so the
+ * org is a second, unionable source of exam entitlement — not a blanket that
+ * preempts trial breadth or personal rows.
+ */
+export type OrgAccess = {
+  orgId: string;
+  /** Public exams named by the org's granting rows (grace included). */
+  examIds: string[];
+  /** A granting null-exam row — an admin comp; every public exam. */
+  allAccess: boolean;
 };
 
 export type ExamAccess =
-  | { kind: "all"; reason: "admin" | "trial" | "legacy" }
-  /** Org grant: every public exam plus this org's own private bank. */
-  | { kind: "all"; reason: "org"; orgId: string }
-  | { kind: "scoped"; examIds: string[] }
-  | { kind: "none" };
+  | { kind: "all"; reason: "admin" | "trial" | "legacy"; org: OrgAccess | null }
+  | { kind: "scoped"; examIds: string[]; org: OrgAccess | null }
+  | { kind: "none"; org: OrgAccess | null };
+
+/**
+ * The org rider, stated once. Non-null while the org grants at all
+ * (suspension kills it outright; a row grants while effectively active OR
+ * inside its 14-day grace — orgSubGrants). Any non-null rider also means the
+ * org's own private bank is open to this member, however short its examIds.
+ */
+export function orgAccessOf(
+  org: OrgGrantContext | null,
+  now: Date
+): OrgAccess | null {
+  if (!org || !orgGrantHolds(org, org.subs, now)) return null;
+
+  const granting = org.subs.filter((s) => orgSubGrants(s, now));
+  return {
+    orgId: org.org_id,
+    examIds: [
+      ...new Set(
+        granting
+          .map((s) => s.exam_id)
+          .filter((id): id is string => id !== null)
+      ),
+    ],
+    allAccess: granting.some((s) => s.exam_id === null),
+  };
+}
 
 /**
  * Branch order is load-bearing:
  *
  *  1. admin  — staff must be able to QA every exam.
- *  2. org    — an entitled org covers its members outright. Checked BEFORE
- *              trial so a trial-ROLE member is unmetered: quota consumers key
- *              off reason "org" to skip the credit claim (SPEC §3).
- *  3. trial  — trial users may practise ANY exam; the trial QUOTA is their
+ *  2. trial  — trial users may practise ANY exam; the trial QUOTA is their
  *              limiter, not the taxonomy. Checked BEFORE the scoped branch so
  *              a trial user who has just bought one exam is never narrowed by
  *              their own purchase in the window before the role sync runs.
- *  4. a live row with exam_id null — grandfathered all-access, and the shape
+ *  3. a live row with exam_id null — grandfathered all-access, and the shape
  *              admin comp grants use.
- *  5. otherwise exactly the exams named by live rows.
+ *  4. otherwise exactly the exams named by live rows.
  *
- * A `student` with no live row lands on "none" and is blocked everywhere.
- * That is deliberate: role must never become a second, weaker source of truth.
+ * The ORG grant is deliberately NOT a branch: since orgs buy per exam, it is
+ * an orthogonal `org` rider carried on every variant — canAccessExam unions
+ * it in, and consumesTrialCredit exempts org-covered exams from the quota.
+ * (The old design had an org branch before trial; that ordering constraint
+ * dissolved when org access stopped being all-or-nothing.)
+ *
+ * A `student` with no live row and no rider lands on "none" and is blocked
+ * everywhere. That is deliberate: role must never become a second, weaker
+ * source of truth. NOTE consumers: "none" no longer means "no access" — a
+ * paying org member with no personal rows is `{kind:"none", org:{…}}`.
  */
 export function examAccessFor(
   role: UserRole,
@@ -61,40 +104,53 @@ export function examAccessFor(
   org: OrgGrantContext | null,
   now: Date
 ): ExamAccess {
-  if (role === "admin") return { kind: "all", reason: "admin" };
-  if (org && orgGrantHolds(org, org.subs, now)) {
-    return { kind: "all", reason: "org", orgId: org.org_id };
-  }
-  if (role === "trial") return { kind: "all", reason: "trial" };
+  const rider = orgAccessOf(org, now);
+
+  if (role === "admin") return { kind: "all", reason: "admin", org: rider };
+  if (role === "trial") return { kind: "all", reason: "trial", org: rider };
 
   const live = subs.filter((s) => isEffectivelyActive(s, now));
-  if (live.length === 0) return { kind: "none" };
   if (live.some((s) => s.exam_id === null)) {
-    return { kind: "all", reason: "legacy" };
+    return { kind: "all", reason: "legacy", org: rider };
   }
+  if (live.length === 0) return { kind: "none", org: rider };
 
   return {
     kind: "scoped",
     examIds: [...new Set(live.map((s) => s.exam_id as string))],
+    org: rider,
   };
 }
 
 /**
  * May this access touch an exam owned by `examOrgId`? Stated ONCE: private
  * banks are for their own org's members (and platform admins, for QA) —
- * `kind: "all"` never crosses an org wall. RLS enforces the same rule in the
- * database; this is the app-layer twin for pages that render locks.
+ * no breadth of PUBLIC access ever crosses an org wall. RLS enforces the
+ * same rule in the database; this is the app-layer twin for pages that
+ * render locks. The bank rides on ANY granting row (grace included), not on
+ * which exams were bought.
  */
 export function orgExamAllowed(
   access: ExamAccess,
   examOrgId: string | null
 ): boolean {
   if (examOrgId === null) return true;
-  return (
-    access.kind === "all" &&
-    (access.reason === "admin" ||
-      (access.reason === "org" && access.orgId === examOrgId))
-  );
+  if (access.kind === "all" && access.reason === "admin") return true;
+  return access.org?.orgId === examOrgId;
+}
+
+/**
+ * Does the ORG side of this access cover the exam? Own private bank, or a
+ * public exam the org bought (or a comp all-access row). The one rule both
+ * canAccessExam and consumesTrialCredit defer to.
+ */
+function orgCoversExam(
+  access: ExamAccess,
+  exam: { id: string; orgId: string | null }
+): boolean {
+  if (!access.org) return false;
+  if (exam.orgId !== null) return exam.orgId === access.org.orgId;
+  return access.org.allAccess || access.org.examIds.includes(exam.id);
 }
 
 export function canAccessExam(
@@ -104,8 +160,23 @@ export function canAccessExam(
   if (!orgExamAllowed(access, exam.orgId)) return false;
   return (
     access.kind === "all" ||
-    (access.kind === "scoped" && access.examIds.includes(exam.id))
+    (access.kind === "scoped" && access.examIds.includes(exam.id)) ||
+    orgCoversExam(access, exam)
   );
+}
+
+/**
+ * Does starting a test on this exam burn a trial credit? The unmetered rule
+ * stated once (SPEC §3): org-covered exams — bought ones, comp all-access,
+ * and the org's own bank — are free for trial-ROLE members; everything else
+ * a trial user practises rides the quota.
+ */
+export function consumesTrialCredit(
+  role: UserRole,
+  access: ExamAccess,
+  exam: { id: string; orgId: string | null }
+): boolean {
+  return role === "trial" && !orgCoversExam(access, exam);
 }
 
 /**
@@ -132,9 +203,10 @@ export function visibleExamsFor<
       exam.isActive ||
       (access.kind === "scoped" && access.examIds.includes(exam.id)) ||
       // A grandfathered all-access row bought the whole catalogue, retired
-      // entries included; an org subscription buys the same blanket.
-      (access.kind === "all" &&
-        (access.reason === "legacy" || access.reason === "org"))
+      // entries included; ditto an org comp row, and a retired exam the org
+      // BOUGHT stays visible to its members — they paid for it.
+      (access.kind === "all" && access.reason === "legacy") ||
+      orgCoversExam(access, exam)
     );
   });
 }

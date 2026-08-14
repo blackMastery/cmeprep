@@ -6,8 +6,10 @@ import {
   inviteExpiresAt,
   isInvitePending,
   maskEmail,
+  orgExamAlerts,
   orgGraceEnd,
   orgGrantHolds,
+  orgSubGrants,
   orgSubscriptionState,
   seatsAvailable,
   seatsUsed,
@@ -59,6 +61,60 @@ describe("orgSubscriptionState", () => {
   it("locks an org with no rows at all", () => {
     // The self-serve path creates the org BEFORE any purchase (SPEC §5).
     expect(orgSubscriptionState([], NOW)).toBe("locked");
+  });
+});
+
+describe("orgSubGrants", () => {
+  it("grants while effectively active and through grace, not past it", () => {
+    expect(orgSubGrants(sub(FUTURE), NOW)).toBe(true);
+    expect(orgSubGrants(sub(IN_GRACE), NOW)).toBe(true);
+    expect(orgSubGrants(sub(PAST), NOW)).toBe(false);
+  });
+
+  it("gives cancelled and expired-status rows nothing", () => {
+    expect(orgSubGrants(sub(FUTURE, "cancelled"), NOW)).toBe(false);
+    expect(orgSubGrants(sub(IN_GRACE, "cancelled"), NOW)).toBe(false);
+    expect(orgSubGrants(sub(FUTURE, "expired"), NOW)).toBe(false);
+  });
+});
+
+describe("orgExamAlerts", () => {
+  const EXAM_A = "e0000000-0000-0000-0000-000000000001";
+  const EXAM_B = "e0000000-0000-0000-0000-000000000002";
+  const scoped = (
+    examId: string | null,
+    end: string,
+    status: SubscriptionLike["status"] = "active"
+  ) => ({ ...sub(end, status), exam_id: examId });
+
+  it("warns per exam while the org-wide state stays active", () => {
+    // A in grace, B live — exactly the case orgSubscriptionState cannot see.
+    const alerts = orgExamAlerts(
+      [scoped(EXAM_A, IN_GRACE), scoped(EXAM_B, FUTURE)],
+      NOW
+    );
+    expect(alerts).toEqual([
+      { examId: EXAM_A, endsAt: orgGraceEnd(IN_GRACE).toISOString(), state: "grace" },
+    ]);
+  });
+
+  it("flags an exam ending within the warning window", () => {
+    const soon = "2026-08-16T12:00:00Z"; // 3 days out
+    expect(orgExamAlerts([scoped(EXAM_A, soon)], NOW)).toEqual([
+      { examId: EXAM_A, endsAt: soon, state: "expiring" },
+    ]);
+  });
+
+  it("lets a stacked repurchase of the same exam suppress the alert", () => {
+    expect(
+      orgExamAlerts([scoped(EXAM_A, IN_GRACE), scoped(EXAM_A, FUTURE)], NOW)
+    ).toEqual([]);
+  });
+
+  it("ignores comp rows, cancelled rows and exams already past grace", () => {
+    expect(orgExamAlerts([scoped(null, IN_GRACE)], NOW)).toEqual([]);
+    expect(orgExamAlerts([scoped(EXAM_A, IN_GRACE, "cancelled")], NOW)).toEqual([]);
+    expect(orgExamAlerts([scoped(EXAM_A, PAST)], NOW)).toEqual([]);
   });
 });
 

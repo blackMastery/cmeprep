@@ -3,7 +3,11 @@ import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { listActivePlans, paidPlans } from "@/lib/plans";
 import { listExamCatalogTree } from "@/lib/catalog";
 import { getExamAccess } from "@/lib/entitlements";
-import { canAccessExam, visibleExamsFor } from "@/lib/entitlements-core";
+import {
+  canAccessExam,
+  consumesTrialCredit,
+  visibleExamsFor,
+} from "@/lib/entitlements-core";
 import type { Plan } from "@/lib/supabase/types";
 import { NewTestWizard } from "@/components/test/new-test-wizard";
 import { TrialLimitCard } from "@/components/app/trial-limit-card";
@@ -35,11 +39,13 @@ export default async function NewTestPage() {
     listActivePlans(),
   ]);
 
-  // The quota gates trial-ROLE users only; an org-covered member is
-  // unmetered regardless of role (SPEC §3), so access must be computed
-  // before the trial wall can be shown.
-  const orgCovered = access.kind === "all" && access.reason === "org";
-  if (!orgCovered && !hasTrialsRemaining(user.profile)) {
+  // The full-page trial wall only makes sense when EVERYTHING would be
+  // metered: a member whose org covers any exam (or just the bank) still has
+  // unmetered ground to practise on, so they get the wizard with per-exam
+  // locks instead (SPEC §3).
+  const quotaExhausted =
+    user.profile.role === "trial" && !hasTrialsRemaining(user.profile);
+  if (!access.org && quotaExhausted) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-12">
         <TrialLimitCard profile={user.profile} plans={paidPlans(plans)} />
@@ -52,13 +58,20 @@ export default async function NewTestPage() {
   // Locked exams are still shipped: they're the upsell. /api/tests is what
   // actually enforces — this is presentation. Retired exams are dropped
   // unless this user's access names one, so nobody is offered an exam they
-  // can no longer buy.
+  // can no longer buy. An exhausted-quota member sees metered exams locked
+  // rather than dead-ending at the API.
   const exams = visibleExamsFor(tree, access).map((exam) => ({
     id: exam.id,
     name: exam.name,
     subjectCount: exam.subjectCount,
     questionCount: exam.questionCount,
-    locked: !canAccessExam(access, { id: exam.id, orgId: exam.orgId }),
+    locked:
+      !canAccessExam(access, { id: exam.id, orgId: exam.orgId }) ||
+      (quotaExhausted &&
+        consumesTrialCredit(user.profile.role, access, {
+          id: exam.id,
+          orgId: exam.orgId,
+        })),
     specialties: exam.specialties.map((specialty) => ({
       id: specialty.id,
       name: specialty.name,

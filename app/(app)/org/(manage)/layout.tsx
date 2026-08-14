@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { listOrgSubscriptions, requireOrgAdmin } from "@/lib/orgs";
-import { orgGraceEnd, orgSubscriptionState } from "@/lib/orgs-core";
+import { orgExamAlerts, orgGraceEnd, orgSubscriptionState } from "@/lib/orgs-core";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { OrgNav } from "@/components/org/org-nav";
 import { OrgAdminAccessBanner } from "@/components/org/org-access-banners";
 
@@ -25,6 +27,21 @@ export default async function OrgManageLayout({
     .sort()
     .at(-1);
 
+  // Per-exam trouble the org-wide state can't see: exam A lapsing while
+  // exam B keeps the org "active" (purchases are per exam).
+  const alerts = orgExamAlerts(subs, now);
+  const alertExamNames = new Map<string, string>();
+  if (alerts.length > 0) {
+    const { data: exams } = await createAdminClient()
+      .from("exams")
+      .select("id, name")
+      .in(
+        "id",
+        alerts.map((a) => a.examId)
+      );
+    for (const exam of exams ?? []) alertExamNames.set(exam.id, exam.name);
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
       <header className="mb-6">
@@ -43,6 +60,53 @@ export default async function OrgManageLayout({
             : null
         }
       />
+
+      {/* Only while the org-wide banner is quiet — in grace/locked states it
+          already owns the message. */}
+      {state === "active" &&
+        session.org.suspended_at === null &&
+        alerts.map((alert) => (
+          <div
+            key={alert.examId}
+            className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-sun/60 bg-sun/15 px-4 py-2.5 text-sm"
+          >
+            <p className="min-w-0 flex-1">
+              {alert.state === "grace" ? (
+                <>
+                  Your team&apos;s access to{" "}
+                  <span className="font-semibold">
+                    {alertExamNames.get(alert.examId) ?? "an examination"}
+                  </span>{" "}
+                  has lapsed — it ends for good on{" "}
+                  {new Date(alert.endsAt).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "long",
+                  })}
+                  .
+                </>
+              ) : (
+                <>
+                  Your team&apos;s access to{" "}
+                  <span className="font-semibold">
+                    {alertExamNames.get(alert.examId) ?? "an examination"}
+                  </span>{" "}
+                  ends on{" "}
+                  {new Date(alert.endsAt).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "long",
+                  })}
+                  .
+                </>
+              )}
+            </p>
+            <Link
+              href="/org/billing"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Renew
+            </Link>
+          </div>
+        ))}
 
       <OrgNav />
       <div className="mt-6">{children}</div>
