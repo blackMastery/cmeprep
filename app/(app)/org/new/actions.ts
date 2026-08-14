@@ -37,7 +37,10 @@ export async function createOrg(
     .insert({ name: name.data, created_by: user.id })
     .select("id")
     .single();
-  if (error || !org) return { error: "Could not create the organisation." };
+  if (error || !org) {
+    console.error("org_create_failed", { userId: user.id, error });
+    return { error: "Could not create the organisation." };
+  }
 
   const { error: memberError } = await admin.from("org_members").insert({
     org_id: org.id,
@@ -46,6 +49,11 @@ export async function createOrg(
   });
   if (memberError) {
     // Founding an org you can't administer is worse than no org — roll back.
+    console.error("org_create_member_failed", {
+      userId: user.id,
+      orgId: org.id,
+      error: memberError,
+    });
     await admin.from("orgs").delete().eq("id", org.id);
     return { error: "Could not create the organisation." };
   }

@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ListChecks, Plus } from "lucide-react";
 import { requireOrgAdmin } from "@/lib/orgs";
 import { listHierarchy } from "@/lib/admin/taxonomy";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Plus } from "lucide-react";
-import {
-  OrgContentManager,
-  type ContentTree,
-} from "@/components/org/content-manager";
+import { OrgExamCards, type OrgExamCard } from "@/components/org/exam-cards";
 
 export const metadata: Metadata = { title: "Organisation content" };
 
@@ -15,23 +13,47 @@ export default async function OrgContentPage() {
   const session = await requireOrgAdmin();
   const hierarchy = await listHierarchy(session.org.id);
 
-  const tree: ContentTree = hierarchy.map((exam) => ({
-    id: exam.id,
-    name: exam.name,
-    specialties: exam.specialties.map((sp) => ({
-      id: sp.id,
-      name: sp.name,
-      subjects: sp.subjects.map((s) => ({
-        id: s.id,
-        name: s.name,
-        questionCount: s.questionCount,
-      })),
-    })),
-  }));
+  // Hierarchy counts include drafts; members only ever see published — the
+  // cards show both so "why can't my team see this?" answers itself.
+  const subjectIds = hierarchy.flatMap((exam) =>
+    exam.specialties.flatMap((sp) => sp.subjects.map((s) => s.id))
+  );
+  const publishedBySubject = new Map<string, number>();
+  if (subjectIds.length > 0) {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("subject_question_counts")
+      .select("subject_id, question_count")
+      .in("subject_id", subjectIds);
+    for (const row of data ?? []) {
+      publishedBySubject.set(row.subject_id, row.question_count);
+    }
+  }
+
+  const cards: OrgExamCard[] = hierarchy.map((exam) => {
+    const subjects = exam.specialties.flatMap((sp) => sp.subjects);
+    return {
+      id: exam.id,
+      name: exam.name,
+      specialtyCount: exam.specialties.length,
+      subjectCount: subjects.length,
+      questionCount: subjects.reduce((sum, s) => sum + s.questionCount, 0),
+      publishedCount: subjects.reduce(
+        (sum, s) => sum + (publishedBySubject.get(s.id) ?? 0),
+        0
+      ),
+    };
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" asChild>
+          <Link href="/org/content/questions">
+            <ListChecks data-icon="inline-start" />
+            All questions
+          </Link>
+        </Button>
         <Button asChild>
           <Link href="/org/content/questions/new">
             <Plus data-icon="inline-start" />
@@ -39,7 +61,8 @@ export default async function OrgContentPage() {
           </Link>
         </Button>
       </div>
-      <OrgContentManager tree={tree} />
+
+      <OrgExamCards exams={cards} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireOrgAdmin } from "@/lib/orgs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
@@ -137,7 +138,9 @@ export async function deleteOrgExam(
 
   await audit(session.user.id, "exam.delete", id.data, undefined, session.org.id);
   revalidateContent();
-  return { success: "Exam deleted." };
+  // The delete lives on the exam's own detail page — don't leave the user
+  // standing on a page that now 404s.
+  redirect("/org/content");
 }
 
 export async function createOrgSpecialty(
