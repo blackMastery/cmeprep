@@ -94,6 +94,8 @@ export type AdminOrgDetail = {
   subscriptions: OrgSubscription[];
   payments: Payment[];
   orgPlans: Plan[];
+  /** Public catalog only — org grants never scope to a private bank. */
+  publicExams: { id: string; name: string }[];
   state: OrgSubscriptionState;
 };
 
@@ -116,6 +118,7 @@ export async function getOrgDetailForAdmin(
     { data: subs },
     { data: payments },
     { data: orgPlans },
+    { data: publicExams },
   ] = await Promise.all([
     admin
       .from("org_members")
@@ -145,6 +148,12 @@ export async function getOrgDetailForAdmin(
       .select("*")
       .eq("kind", "org")
       .order("position"),
+    admin
+      .from("exams")
+      .select("id, name")
+      .is("org_id", null)
+      .order("position")
+      .order("name"),
   ]);
 
   const memberRows = (members ?? []) as OrgMember[];
@@ -173,6 +182,7 @@ export async function getOrgDetailForAdmin(
     subscriptions,
     payments: (payments ?? []) as Payment[],
     orgPlans: (orgPlans ?? []) as Plan[],
+    publicExams: publicExams ?? [],
     state: orgSubscriptionState(subscriptions, new Date()),
   };
 }

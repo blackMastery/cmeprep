@@ -78,6 +78,11 @@ export default async function AdminOrgDetailPage(
           id: sub.id,
           plan: sub.plan,
           planId: sub.plan_id,
+          examId: sub.exam_id,
+          examName: sub.exam_id
+            ? (detail.publicExams.find((e) => e.id === sub.exam_id)?.name ??
+              "Unknown exam")
+            : null,
           status: sub.status,
           currentPeriodEnd: sub.current_period_end,
           paypalOrderId: sub.paypal_order_id,
@@ -87,6 +92,7 @@ export default async function AdminOrgDetailPage(
           name: plan.name,
           seatLimit: plan.seat_limit,
         }))}
+        publicExams={detail.publicExams}
       />
 
       <OrgMembersCard

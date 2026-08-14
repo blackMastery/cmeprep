@@ -187,9 +187,28 @@ export async function adminSaveOrgSubscription(
     return { error: "Unknown plan." };
   }
 
+  // "" is the deliberate all-access comp choice, mirroring the personal
+  // saveSubscription; a named exam must be a PUBLIC one — org grants never
+  // scope to a private bank (banks ride on any live subscription).
+  const rawExam = String(formData.get("examId") ?? "").trim();
+  const examId = rawExam === "" ? null : rawExam;
+  if (examId && !uuid().safeParse(examId).success) {
+    return { error: "Unknown examination." };
+  }
+
   const admin = createAdminClient();
   const org = await getOrg(admin, orgId.data);
   if (!org) return { error: "Unknown organisation." };
+
+  if (examId) {
+    const { data: exam } = await admin
+      .from("exams")
+      .select("id")
+      .eq("id", examId)
+      .is("org_id", null)
+      .maybeSingle();
+    if (!exam) return { error: "Unknown examination." };
+  }
 
   // Preset name comes from the plan row, never from the form — the select's
   // value is the id. Custom grants name themselves.
@@ -226,6 +245,7 @@ export async function adminSaveOrgSubscription(
       .update({
         plan: planName,
         plan_id: planId,
+        exam_id: examId,
         status,
         current_period_end: periodEnd,
         updated_at: new Date().toISOString(),
@@ -233,6 +253,8 @@ export async function adminSaveOrgSubscription(
       .eq("id", subId.data);
     if (error) return { error: "Could not update the subscription." };
 
+    // examId in before/after: widening a scoped grant to all-access is a
+    // privilege change, and this is the only trace of it.
     await audit(
       actor.id,
       "org_subscription.update",
@@ -241,10 +263,11 @@ export async function adminSaveOrgSubscription(
         orgSubscriptionId: subId.data,
         before: {
           plan: existing.plan,
+          examId: existing.exam_id,
           status: existing.status,
           currentPeriodEnd: existing.current_period_end,
         },
-        after: { plan: planName, status, currentPeriodEnd: periodEnd },
+        after: { plan: planName, examId, status, currentPeriodEnd: periodEnd },
       },
       orgId.data
     );
@@ -255,6 +278,7 @@ export async function adminSaveOrgSubscription(
         org_id: orgId.data,
         plan: planName,
         plan_id: planId,
+        exam_id: examId,
         status,
         current_period_end: periodEnd,
       })
@@ -270,6 +294,7 @@ export async function adminSaveOrgSubscription(
         orgSubscriptionId: data.id,
         plan: planName,
         planId,
+        examId,
         status,
         currentPeriodEnd: periodEnd,
         via: "admin",

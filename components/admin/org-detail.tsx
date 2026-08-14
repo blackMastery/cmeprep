@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import {
   adminCancelOrgSubscription,
@@ -50,6 +50,9 @@ export type OrgSubItem = {
   id: string;
   plan: string;
   planId: string | null;
+  /** null = all-access comp grant. */
+  examId: string | null;
+  examName: string | null;
   status: string;
   currentPeriodEnd: string;
   paypalOrderId: string | null;
@@ -169,10 +172,13 @@ export function OrgSubscriptionsCard({
   org,
   subscriptions,
   orgPlans,
+  publicExams,
 }: {
   org: OrgSummary;
   subscriptions: OrgSubItem[];
   orgPlans: OrgPlanOption[];
+  /** Public catalog only — org grants never scope to a private bank. */
+  publicExams: { id: string; name: string }[];
 }) {
   const [state, action] = useActionState<AdminState, FormData>(
     adminSaveOrgSubscription,
@@ -182,6 +188,10 @@ export function OrgSubscriptionsCard({
     adminCancelOrgSubscription,
     null
   );
+  // Editing an existing row prefills the grant form and arms its hidden
+  // orgSubscriptionId — without it every save would INSERT a new row and a
+  // mis-granted period could never be corrected.
+  const [editing, setEditing] = useState<OrgSubItem | null>(null);
 
   return (
     <Card>
@@ -189,8 +199,9 @@ export function OrgSubscriptionsCard({
         <CardTitle>Subscriptions</CardTitle>
         <CardDescription>
           The invoice/PO path: once money arrives out-of-band, grant the
-          period here. The picked date is the last day WITH access; the
-          14-day grace applies after it.
+          period here — one examination per grant, or &quot;All exams&quot;
+          for a bespoke comp. The picked date is the last day WITH access;
+          the 14-day grace applies after it.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -200,6 +211,7 @@ export function OrgSubscriptionsCard({
               <TableHeader>
                 <TableRow>
                   <TableHead>Plan</TableHead>
+                  <TableHead>Exam</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Period end</TableHead>
                   <TableHead>Source</TableHead>
@@ -210,6 +222,13 @@ export function OrgSubscriptionsCard({
                 {subscriptions.map((sub) => (
                   <TableRow key={sub.id}>
                     <TableCell className="font-medium">{sub.plan}</TableCell>
+                    <TableCell>
+                      {sub.examId ? (
+                        sub.examName
+                      ) : (
+                        <Badge variant="outline">All exams</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={sub.status === "active" ? "default" : "secondary"}
@@ -222,24 +241,34 @@ export function OrgSubscriptionsCard({
                       {sub.paypalOrderId ? "PayPal" : "Manual"}
                     </TableCell>
                     <TableCell className="text-right">
-                      {sub.status === "active" && (
-                        <form action={cancelAction} className="inline">
-                          <input type="hidden" name="orgId" value={org.id} />
-                          <input
-                            type="hidden"
-                            name="orgSubscriptionId"
-                            value={sub.id}
-                          />
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            Cancel
-                          </Button>
-                        </form>
-                      )}
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditing(sub)}
+                        >
+                          Edit
+                        </Button>
+                        {sub.status === "active" && (
+                          <form action={cancelAction} className="inline">
+                            <input type="hidden" name="orgId" value={org.id} />
+                            <input
+                              type="hidden"
+                              name="orgSubscriptionId"
+                              value={sub.id}
+                            />
+                            <Button
+                              type="submit"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              Cancel
+                            </Button>
+                          </form>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -249,9 +278,27 @@ export function OrgSubscriptionsCard({
         )}
         <FormMessage error={cancelState?.error} success={cancelState?.success} />
 
-        <form action={action} className="flex flex-wrap items-end gap-3">
+        {/* key remounts the form when the target changes, so defaultValues
+            re-prime — cheaper and less stateful than controlled inputs. */}
+        <form
+          key={editing?.id ?? "new"}
+          action={action}
+          className="flex flex-wrap items-end gap-3"
+        >
           <input type="hidden" name="orgId" value={org.id} />
-          <AdminSelect label="Plan" name="planPreset" className="w-44">
+          <input
+            type="hidden"
+            name="orgSubscriptionId"
+            value={editing?.id ?? ""}
+          />
+          <AdminSelect
+            label="Plan"
+            name="planPreset"
+            className="w-44"
+            defaultValue={
+              editing ? (editing.planId ?? "custom") : orgPlans[0]?.id
+            }
+          >
             {orgPlans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.name}
@@ -264,8 +311,27 @@ export function OrgSubscriptionsCard({
             name="planCustom"
             placeholder="Bespoke terms"
             className="w-44"
+            defaultValue={editing && !editing.planId ? editing.plan : undefined}
           />
-          <AdminSelect label="Status" name="status" className="w-32">
+          <AdminSelect
+            label="Examination"
+            name="examId"
+            className="w-52"
+            defaultValue={editing?.examId ?? ""}
+          >
+            <option value="">All exams (comp)</option>
+            {publicExams.map((exam) => (
+              <option key={exam.id} value={exam.id}>
+                {exam.name}
+              </option>
+            ))}
+          </AdminSelect>
+          <AdminSelect
+            label="Status"
+            name="status"
+            className="w-32"
+            defaultValue={editing?.status ?? "active"}
+          >
             <option value="active">active</option>
             <option value="expired">expired</option>
             <option value="cancelled">cancelled</option>
@@ -275,8 +341,18 @@ export function OrgSubscriptionsCard({
             name="currentPeriodEnd"
             type="date"
             className="w-44"
+            defaultValue={editing?.currentPeriodEnd.slice(0, 10)}
           />
-          <AdminSubmit>Grant / save</AdminSubmit>
+          <AdminSubmit>{editing ? "Save changes" : "Grant"}</AdminSubmit>
+          {editing && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEditing(null)}
+            >
+              New grant
+            </Button>
+          )}
         </form>
         <FormMessage error={state?.error} success={state?.success} />
       </CardContent>
