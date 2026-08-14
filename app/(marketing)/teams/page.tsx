@@ -64,17 +64,17 @@ type OrgPlan = {
 const ORG_PLANS: OrgPlan[] = [
   {
     name: "Team",
-    price: "$1,200/year",
+    price: "$1,200/year per exam",
     seats: "Up to 90 users",
     description:
-      "One flat price for schools and companies getting a cohort exam-ready together.",
+      "One flat price per examination for schools and companies getting a cohort exam-ready together.",
     features: [
       "Up to 90 users",
-      "Full access to every question bank and mock exams",
+      "Full access to one examination's question bank and mock exams",
+      "Add more examinations any time — each is its own purchase",
       "Shared analytics for program directors",
-      "SSO / SAML login",
+      "Private question banks",
       "Audit logs",
-      "Custom branding",
     ],
     featured: true,
   },
@@ -168,8 +168,8 @@ const SUPPORT_TERMS: Feature[] = [
   },
   {
     icon: Percent,
-    title: "One flat annual price",
-    body: "A single flat price covers your whole organisation — up to 90 users, no per-seat surprises.",
+    title: "One flat price per exam",
+    body: "A single annual price per examination covers your whole organisation — up to 90 users, no per-seat surprises.",
   },
 ];
 
@@ -340,11 +340,12 @@ export default function TeamsPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:py-20">
           <div className="text-center">
             <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              One flat price for your whole organisation
+              One flat price per examination
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Create your organisation and pay online, or contact us for
-              invoice and purchase-order billing.
+              Pick the examination your cohort is sitting, create your
+              organisation and pay online — add more examinations any time.
+              Or contact us for invoice and purchase-order billing.
             </p>
           </div>
 
@@ -382,7 +383,7 @@ export default function TeamsPage() {
                       : "text-muted-foreground"
                   )}
                 >
-                  {plan.seats}, one flat price
+                  {plan.seats}, one flat price per exam
                 </p>
 
                 <p

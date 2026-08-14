@@ -43,7 +43,6 @@ export default async function OrgImportPage(
         examId={exam.id}
         examName={exam.name}
         questionsHref="/org/content/questions?published=false"
-        importAgainHref={`/org/content/import/${exam.id}`}
       />
     </div>
   );

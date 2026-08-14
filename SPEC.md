@@ -18,7 +18,7 @@ All decisions below were made in an interview on 2026-08-13.
 | --- | --- |
 | Org accounts | Seat-capped (90 on the Team plan), invite-only membership, one org per user |
 | Org-admin role | On the membership row, not `profiles.role` |
-| Entitlements | Org grant computed at read time; org sub = all-access (public catalog + the org's own private banks) |
+| Entitlements | Org grant computed at read time; org subs are **per exam** (`org_subscriptions.exam_id`, null = admin comp all-access) + the org's own private banks ride on any live sub |
 | Private question banks | Org-scoped **exam trees** (`exams.org_id`), authored by org-admins with a scoped editor + xlsx importer |
 | Content assignment | Task-style: assignment = prescribed test config + due date; members keep full access regardless |
 | Org dashboard | Roster, per-member aggregates, risk flagging (below pass mark OR inactive) |
@@ -194,34 +194,36 @@ config; config stays as-is.
 `subscriptions` rows are ever materialized for org members** — nothing to fan
 out, revoke, or reconcile when membership churns.
 
-### Core rules (in `lib/entitlements-core.ts` / `lib/subscriptions-core.ts`, pure + vitest)
+### Core rules (in `lib/entitlements-core.ts` / `lib/orgs-core.ts`, pure + vitest)
 
-- `ORG_GRACE_DAYS = 14` in `subscriptions-core`. An org subscription is
-  *effectively active* under the same `isEffectivelyActive` rule as personal
-  subs, **plus** the grace: live until `current_period_end + 14 days`. Between
-  period end and grace end it is in state `"grace"` (drives banners, see §9).
-  State machine: `active → grace → locked`. Cancelled rows get no grace.
-- A user's **org context** is: their membership row (if any) + the org's
-  subscriptions + `orgs.suspended_at`. Org grant holds iff: member of a
-  non-suspended org AND some org subscription is effectively active
-  (grace included).
-- `ExamAccess` gains a reason: `{ kind: "all", reason: "org" }`.
-- **Branch order in `examAccessFor` becomes: admin → org → trial → legacy →
-  scoped.** Org before trial so a trial-role user who joins an org is not
-  limited by the trial quota (the quota check should treat
-  `reason: "org"` as unmetered, like a purchase).
-- Org exams are a *visibility* rule, not only an access rule:
-  `visibleExamsFor` / `canAccessExam` take the exam's `org_id` into account —
-  an org exam is visible/accessible **only** to members of that org (platform
-  admins excepted for QA). `kind: "all"` never includes *other* orgs' exams.
-  Rule stated once in core: `examBelongsToUser(exam, orgId)` =
-  `exam.org_id === null || exam.org_id === orgId`.
-- Personal subscriptions still work independently: a member with a personal
-  exam sub who leaves the org (or whose org lapses past grace) falls back to
-  exactly what `examAccessFor` computes from their own rows. No stacking
-  interaction between org and personal periods — they are independent grants,
-  consistent with the existing strict-match rule in
-  `activePeriodEndForExamPure`.
+**REVISED (per-exam change):** org subscriptions are scoped to ONE public
+exam each (`org_subscriptions.exam_id`; null = admin comp all-access,
+mirroring `subscriptions.exam_id`). Self-serve checkout always names an exam.
+
+- `ORG_GRACE_DAYS = 14` in `orgs-core`. A row *grants* while effectively
+  active OR 'active'-status inside its grace (`orgSubGrants`, per row).
+  Org-wide state machine `active → grace → locked` still drives banners;
+  cancelled rows get no grace. Per-exam trouble the org-wide state can't see
+  (exam A lapsing while B keeps the org "active") surfaces via
+  `orgExamAlerts` in the org layout.
+- The org grant is an **orthogonal rider**, not an access kind:
+  `ExamAccess = { kind, …, org: OrgAccess | null }` where
+  `OrgAccess = { orgId, examIds, allAccess }`, built once by
+  `orgAccessOf(orgCtx, now)` — non-null while a non-suspended org has any
+  granting row. `canAccessExam` unions the rider with personal access;
+  `kind: "none"` with a rider is a common ENTITLED state.
+- Branch order in `examAccessFor`: admin → trial → legacy → scoped (the old
+  "org before trial" constraint dissolved with all-or-nothing org access).
+- **`consumesTrialCredit(role, access, exam)`** states the metering rule
+  once: trial-role members are unmetered on org-covered exams (bought, comp,
+  or the org's own bank) and quota-metered elsewhere.
+- Private banks ride on ANY granting row, grace included — which exams were
+  bought is irrelevant to bank access. `orgExamAllowed` still walls org
+  exams to their own org's members (platform admins excepted for QA).
+- Personal subscriptions union with the rider; no stacking interaction
+  between org and personal periods. Org stacking is per (org, exam) with
+  the same strict-null match as `activePeriodEndForExamPure`
+  (`activePeriodEndForOrgExam`).
 
 ### DB wrapper (`lib/entitlements.ts`)
 
@@ -297,12 +299,17 @@ Two grant paths from day one, both idempotent, both landing in
   (name only, free, becomes its org-admin, seat_limit defaults from nothing
   yet — org is *unentitled* until a subscription exists). Then from
   `/org/settings/billing` the org-admin checks out an org plan.
-- `plans` gains `kind = 'org'` rows (seed: **Team, $1,200/year, seat_limit
-  90, duration 12 months**). Org plans never appear in the personal checkout
-  list and vice versa (filter by `kind`).
-- `custom_id` gets a **versioned org format** rather than overloading the
-  positional `userId:planId:examId`: `orgv1:{userId}:{planId}:{orgId}`.
-  `payments-core` parses both formats; the `orgv1:` prefix disambiguates.
+- `plans` gains `kind = 'org'` rows (seed: **Team, $1,200/year PER EXAM,
+  seat_limit 90, duration 12 months**). Org plans never appear in the
+  personal checkout list and vice versa (filter by `kind`). **REVISED:** the
+  org billing page reuses the personal checkout's exam picker (`ExamChoice`
+  with a `basePath` prop); one public exam per purchase, repurchase stacks
+  that exam.
+- `custom_id` gets a **versioned org format**: `orgv2:` + four
+  base64url-packed uuids (user, plan, org, exam — 97 chars under PayPal's
+  127 cap; four plain uuids would be 154). `subscriptions-core` parses both
+  formats; the prefix disambiguates. (`orgv1:` carried no exam and never
+  shipped; the parser refuses it.)
 - `recordCapturedPurchase()` in [lib/subscriptions.ts](lib/subscriptions.ts)
   branches on the parsed shape / `plan.kind`:
   1. write the `payments` row (with `org_id`) **before** attempting the grant
