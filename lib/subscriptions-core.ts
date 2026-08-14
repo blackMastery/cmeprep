@@ -76,6 +76,51 @@ export function parsePurchaseCustomId(
   return { userId, planId, examId: parts.length === 3 ? examId : null };
 }
 
+/**
+ * Org purchases get a VERSIONED format rather than overloading the personal
+ * one's positional third slot: "orgv1:" can never collide with a uuid, so the
+ * two shapes stay unambiguous on every parse path forever. 6 + 3 uuids +
+ * 3 ":" = 117 chars, still under PayPal's 127.
+ */
+const ORG_CUSTOM_ID_PREFIX = "orgv1:";
+
+export function formatOrgPurchaseCustomId(
+  userId: string,
+  planId: string,
+  orgId: string
+): string {
+  return `${ORG_CUSTOM_ID_PREFIX}${userId}:${planId}:${orgId}`;
+}
+
+export type ParsedCustomId =
+  | ({ kind: "personal" } & PurchaseCustomId)
+  | { kind: "org"; userId: string; planId: string; orgId: string };
+
+/**
+ * The one entry point for reading a custom_id back off PayPal. A malformed
+ * orgv1 payload returns null rather than falling through to the personal
+ * parser — "orgv1:" declared an intent, and half-parsing it as a personal
+ * purchase would grant the wrong product.
+ */
+export function parseAnyPurchaseCustomId(
+  customId: string | null | undefined
+): ParsedCustomId | null {
+  if (!customId) return null;
+
+  if (customId.startsWith(ORG_CUSTOM_ID_PREFIX)) {
+    const parts = customId.slice(ORG_CUSTOM_ID_PREFIX.length).split(":");
+    if (parts.length !== 3) return null;
+    const [userId, planId, orgId] = parts;
+    if (!UUID_RE.test(userId) || !UUID_RE.test(planId) || !UUID_RE.test(orgId)) {
+      return null;
+    }
+    return { kind: "org", userId, planId, orgId };
+  }
+
+  const personal = parsePurchaseCustomId(customId);
+  return personal ? { kind: "personal", ...personal } : null;
+}
+
 /** PayPal amounts are decimal strings: 14400 cents → "144.00". */
 export function centsToValue(cents: number): string {
   return (cents / 100).toFixed(2);

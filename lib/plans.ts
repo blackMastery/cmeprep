@@ -14,6 +14,22 @@ export async function listActivePlans(): Promise<Plan[]> {
     .from("plans")
     .select("*")
     .eq("is_active", true)
+    // Org plans have their own storefront (/org/billing); every existing
+    // surface this feeds is personal.
+    .eq("kind", "personal")
+    .order("position")
+    .order("name");
+  return (data ?? []) as Plan[];
+}
+
+/** Active org plans — the /org/billing storefront. */
+export async function listActiveOrgPlans(): Promise<Plan[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("plans")
+    .select("*")
+    .eq("is_active", true)
+    .eq("kind", "org")
     .order("position")
     .order("name");
   return (data ?? []) as Plan[];

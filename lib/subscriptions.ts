@@ -110,6 +110,7 @@ export type GrantFailure =
   | "unknown_plan"
   | "no_duration"
   | "unknown_exam"
+  | "unknown_org"
   | "insert_failed";
 
 export type GrantResult =
@@ -245,6 +246,138 @@ export async function grantPlanPurchase(
     subscriptionId: data.id,
     currentPeriodEnd: periodEnd,
     examId,
+  };
+}
+
+/** Latest active period end for an org — the stacking base for renewals. */
+export async function activePeriodEndForOrg(
+  admin: AdminClient,
+  orgId: string
+): Promise<string | null> {
+  const { data } = await admin
+    .from("org_subscriptions")
+    .select("current_period_end")
+    .eq("org_id", orgId)
+    .eq("status", "active")
+    .gt("current_period_end", new Date().toISOString())
+    .order("current_period_end", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.current_period_end ?? null;
+}
+
+export type OrgGrantResult =
+  | { outcome: "granted"; orgSubscriptionId: string; currentPeriodEnd: string }
+  | { outcome: "duplicate"; orgSubscriptionId: string }
+  | { outcome: "error"; reason: GrantFailure };
+
+/**
+ * The org twin of grantPlanPurchase: insert the org_subscriptions row,
+ * stacking on the org's current period, idempotent on the PayPal order id.
+ * No role sync — org access is computed at read time from the org row, so
+ * profiles.role has nothing to say about it.
+ */
+export async function grantOrgPlanPurchase(
+  admin: AdminClient,
+  input: {
+    orgId: string;
+    /** Who paid — the audit actor; the grant itself belongs to the org. */
+    buyerId: string;
+    plan: Pick<Plan, "id" | "name" | "duration_months" | "seat_limit">;
+    paypalOrderId: string;
+    captureId: string | null;
+    meta?: Record<string, unknown>;
+  }
+): Promise<OrgGrantResult> {
+  const { orgId, buyerId, plan, paypalOrderId, captureId } = input;
+  if (plan.duration_months === null) {
+    return { outcome: "error", reason: "no_duration" };
+  }
+
+  const { data: existing } = await admin
+    .from("org_subscriptions")
+    .select("id")
+    .eq("paypal_order_id", paypalOrderId)
+    .maybeSingle();
+  if (existing) return { outcome: "duplicate", orgSubscriptionId: existing.id };
+
+  // Money already captured — a vanished org fails loudly for support, same
+  // posture as the vanished-exam branch in grantPlanPurchase.
+  const { data: org } = await admin
+    .from("orgs")
+    .select("id, seat_limit")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!org) {
+    console.error("paypal_org_grant_unknown_org", { orgId, paypalOrderId });
+    return { outcome: "error", reason: "unknown_org" };
+  }
+
+  const activeEnd = await activePeriodEndForOrg(admin, orgId);
+  const periodEnd = computePeriodEnd(
+    plan.duration_months,
+    stackBase(activeEnd, new Date())
+  ).toISOString();
+
+  const { data, error } = await admin
+    .from("org_subscriptions")
+    .insert({
+      org_id: orgId,
+      plan: plan.name,
+      plan_id: plan.id,
+      status: "active",
+      current_period_end: periodEnd,
+      paypal_order_id: paypalOrderId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.code === UNIQUE_VIOLATION) {
+      const { data: winner } = await admin
+        .from("org_subscriptions")
+        .select("id")
+        .eq("paypal_order_id", paypalOrderId)
+        .maybeSingle();
+      if (winner) return { outcome: "duplicate", orgSubscriptionId: winner.id };
+    }
+    console.error("paypal_org_grant_failed", { orgId, paypalOrderId, error });
+    return { outcome: "error", reason: "insert_failed" };
+  }
+
+  // The plan's seats only ever RAISE the cap automatically — lowering a cap
+  // an admin set by hand is a human decision (SPEC §5).
+  if (plan.seat_limit !== null && plan.seat_limit > org.seat_limit) {
+    await admin
+      .from("orgs")
+      .update({
+        seat_limit: plan.seat_limit,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orgId);
+  }
+
+  await audit(
+    buyerId,
+    "org_subscription.create",
+    orgId,
+    {
+      orgSubscriptionId: data.id,
+      plan: plan.name,
+      planId: plan.id,
+      currentPeriodEnd: periodEnd,
+      paypalOrderId,
+      captureId,
+      via: "paypal",
+      ...input.meta,
+    },
+    orgId
+  );
+
+  return {
+    outcome: "granted",
+    orgSubscriptionId: data.id,
+    currentPeriodEnd: periodEnd,
   };
 }
 
@@ -419,5 +552,152 @@ export async function recordCapturedPurchase(
         paymentId,
         plan,
         subscriptionId: grant.subscriptionId,
+      };
+}
+
+export type CapturedOrgOrder = Omit<CapturedOrder, "examId"> & {
+  /** From custom_id ("orgv1:…"), so unvalidated until the org is read back. */
+  orgId: string;
+};
+
+export type OrgPurchaseOutcome =
+  | {
+      outcome: "granted";
+      paymentId: string | null;
+      plan: Plan;
+      orgSubscriptionId: string;
+      currentPeriodEnd: string;
+    }
+  | {
+      outcome: "duplicate";
+      paymentId: string | null;
+      plan: Plan;
+      orgSubscriptionId: string;
+    }
+  | {
+      outcome: "error";
+      paymentId: string | null;
+      plan: Plan | null;
+      reason: GrantFailure;
+    };
+
+/**
+ * The org twin of recordCapturedPurchase, same money-first discipline: the
+ * payments row (org_id set) is written before anything can fail, and the
+ * grant outcome lands on payments.org_subscription_id afterwards — so the
+ * reconcile sweep's "unclaimed" definition works per kind.
+ */
+export async function recordCapturedOrgPurchase(
+  admin: AdminClient,
+  order: CapturedOrgOrder
+): Promise<OrgPurchaseOutcome> {
+  // First statement, before any validation.
+  const payment = await recordCapture(admin, order);
+  const paymentId = payment?.id ?? null;
+
+  const failGrant = async (
+    reason: GrantFailure,
+    plan: Plan | null
+  ): Promise<OrgPurchaseOutcome> => {
+    if (paymentId) {
+      await recordPaymentGrant(admin, paymentId, {
+        kind: "failed",
+        reason,
+        planId: plan?.id ?? null,
+        planName: plan?.name ?? null,
+        planPriceCents: plan?.price_cents ?? null,
+      });
+    }
+    await audit(
+      order.userId,
+      "payment.grant_failed",
+      order.userId,
+      {
+        paymentId,
+        paypalOrderId: order.paypalOrderId,
+        planId: order.planId,
+        orgId: order.orgId,
+        reason,
+        via: order.source,
+      },
+      order.orgId
+    );
+    return { outcome: "error", paymentId, plan, reason };
+  };
+
+  const { data: plan } = await admin
+    .from("plans")
+    .select("*")
+    .eq("id", order.planId)
+    .maybeSingle();
+
+  // A personal plan id inside an orgv1 custom_id is a forged or corrupted
+  // order — no code path of ours creates one. Refuse rather than granting a
+  // 90-seat org a $12 product.
+  if (!plan || plan.kind !== "org" || plan.duration_months === null) {
+    const reason: GrantFailure =
+      !plan || plan.kind !== "org" ? "unknown_plan" : "no_duration";
+    console.error("paypal_captured_bad_org_plan", {
+      paypalOrderId: order.paypalOrderId,
+      planId: order.planId,
+      reason,
+    });
+    return failGrant(reason, (plan as Plan | null) ?? null);
+  }
+
+  const amountCheck = checkCaptureAmount({
+    cents: order.amountCents,
+    currency: order.currency,
+    planPriceCents: plan.price_cents,
+    expectedCurrency: CURRENCY,
+  });
+  if (amountCheck !== "ok") {
+    console.error("paypal_amount_mismatch", {
+      paypalOrderId: order.paypalOrderId,
+      check: amountCheck,
+      expectedCents: plan.price_cents,
+      got: { cents: order.amountCents, currency: order.currency },
+    });
+  }
+
+  const grant = await grantOrgPlanPurchase(admin, {
+    orgId: order.orgId,
+    buyerId: order.userId,
+    plan,
+    paypalOrderId: order.paypalOrderId,
+    captureId: order.captureId,
+    meta: {
+      via: order.source,
+      paymentId,
+      ...(amountCheck !== "ok" ? { amountCheck } : {}),
+    },
+  });
+
+  if (grant.outcome === "error") return failGrant(grant.reason, plan);
+
+  if (paymentId) {
+    await recordPaymentGrant(admin, paymentId, {
+      kind: "granted_org",
+      orgSubscriptionId: grant.orgSubscriptionId,
+      orgId: order.orgId,
+      planId: plan.id,
+      planName: plan.name,
+      planPriceCents: plan.price_cents,
+    });
+  }
+
+  return grant.outcome === "granted"
+    ? {
+        outcome: "granted",
+        paymentId,
+        plan,
+        orgSubscriptionId: grant.orgSubscriptionId,
+        currentPeriodEnd: grant.currentPeriodEnd,
+      }
+    : {
+        outcome: "duplicate",
+        paymentId,
+        plan,
+        orgSubscriptionId: grant.orgSubscriptionId,
       };
 }

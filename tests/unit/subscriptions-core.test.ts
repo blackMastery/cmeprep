@@ -5,8 +5,10 @@ import {
   computePeriodEnd,
   daysUntil,
   displayStatus,
+  formatOrgPurchaseCustomId,
   formatPurchaseCustomId,
   isEffectivelyActive,
+  parseAnyPurchaseCustomId,
   parsePurchaseCustomId,
   stackBase,
   type SubscriptionLike,
@@ -84,6 +86,57 @@ describe("purchase custom_id", () => {
     expect(parsePurchaseCustomId(`${USER}:${PLAN}:not-a-uuid`)).toBeNull();
     expect(parsePurchaseCustomId(`${USER}:${PLAN}:`)).toBeNull();
     expect(parsePurchaseCustomId(`${USER}:${PLAN}:${EXAM}:extra`)).toBeNull();
+  });
+});
+
+describe("org purchase custom_id", () => {
+  const ORG = "a0000000-0000-0000-0000-000000000001";
+
+  it("round-trips through the orgv1 format", () => {
+    const customId = formatOrgPurchaseCustomId(USER, PLAN, ORG);
+    expect(parseAnyPurchaseCustomId(customId)).toEqual({
+      kind: "org",
+      userId: USER,
+      planId: PLAN,
+      orgId: ORG,
+    });
+  });
+
+  it("stays within PayPal's 127-char limit", () => {
+    expect(
+      formatOrgPurchaseCustomId(USER, PLAN, ORG).length
+    ).toBeLessThanOrEqual(127);
+  });
+
+  it("still reads personal and legacy shapes", () => {
+    expect(
+      parseAnyPurchaseCustomId(formatPurchaseCustomId(USER, PLAN, EXAM))
+    ).toEqual({ kind: "personal", userId: USER, planId: PLAN, examId: EXAM });
+    expect(parseAnyPurchaseCustomId(`${USER}:${PLAN}`)).toEqual({
+      kind: "personal",
+      userId: USER,
+      planId: PLAN,
+      examId: null,
+    });
+  });
+
+  it("never half-parses a malformed orgv1 payload as personal", () => {
+    // "orgv1:" declared an intent; falling through to the personal parser
+    // would grant the wrong product.
+    expect(parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}`)).toBeNull();
+    expect(
+      parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}:not-a-uuid`)
+    ).toBeNull();
+    expect(
+      parseAnyPurchaseCustomId(`orgv1:${USER}:${PLAN}:${ORG}:extra`)
+    ).toBeNull();
+    expect(parseAnyPurchaseCustomId("orgv1:")).toBeNull();
+  });
+
+  it("rejects junk outright", () => {
+    expect(parseAnyPurchaseCustomId(null)).toBeNull();
+    expect(parseAnyPurchaseCustomId("")).toBeNull();
+    expect(parseAnyPurchaseCustomId("orgv2:whatever")).toBeNull();
   });
 });
 

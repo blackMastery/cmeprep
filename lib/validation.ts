@@ -303,6 +303,18 @@ export const passwordSchema = z
 export const ORG_MEMBER_ROLES = ["member", "admin"] as const;
 export const orgMemberRoleSchema = z.enum(ORG_MEMBER_ROLES);
 
+export const orgNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Enter your organisation's name")
+  .max(120, "Keep the name under 120 characters");
+
+/** Org checkout: the org replaces the exam in the purchase tuple. */
+export const createOrgPaypalOrderSchema = z.object({
+  planId: uuid(),
+  orgId: uuid(),
+});
+
 /**
  * The invite textarea: addresses separated by whitespace, commas or
  * semicolons (people paste straight from Outlook). Dedupes case-insensitively

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Building2,
   CreditCard,
   Gauge,
   GraduationCap,
@@ -19,6 +20,7 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin/questions", label: "Questions", icon: ListChecks },
   { href: "/admin/exams", label: "Exams", icon: GraduationCap },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/orgs", label: "Orgs", icon: Building2 },
   { href: "/admin/plans", label: "Plans", icon: CreditCard },
   { href: "/admin/messages", label: "Messages", icon: Mail },
 ];

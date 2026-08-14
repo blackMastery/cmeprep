@@ -237,6 +237,7 @@ export type PaymentGrantFailure =
   | "unknown_plan"
   | "no_duration"
   | "unknown_exam"
+  | "unknown_org"
   | "insert_failed";
 
 /**
@@ -252,6 +253,10 @@ export type Payment = Timestamps & {
   user_id: string | null;
   /** Null = captured with no grant. See grant_failure. */
   subscription_id: string | null;
+  /** Org bought for; null = personal purchase (or unresolved org). */
+  org_id: string | null;
+  /** The org-purchase side of "granted" — subscription_id stays null. */
+  org_subscription_id: string | null;
   plan_id: string | null;
   plan_name: string | null;
   /** plans.price_cents AT capture time — the expected side of the amount check. */
@@ -329,8 +334,13 @@ export type OrgSubscription = Timestamps & {
   plan: string;
   status: SubStatus;
   current_period_end: string;
+  /** Idempotency key for the PayPal race; null for admin grants. */
+  paypal_order_id: string | null;
   updated_at: string | null;
 };
+
+/** Which storefront sells the plan; the two never mix in one checkout. */
+export type PlanKind = "personal" | "org";
 
 export type Plan = Timestamps & {
   id: string;
@@ -344,6 +354,9 @@ export type Plan = Timestamps & {
   featured: boolean;
   is_active: boolean;
   position: number;
+  kind: PlanKind;
+  /** Seats an org plan sells; null on personal plans. */
+  seat_limit: number | null;
   updated_at: string | null;
 };
 

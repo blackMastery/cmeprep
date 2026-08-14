@@ -38,6 +38,8 @@ export async function recordCapture(
   input: {
     /** From custom_id on the webhook path, so unvalidated — checked here. */
     userId: string;
+    /** Org purchases only; unvalidated for the same reason. */
+    orgId?: string | null;
     paypalOrderId: string;
     captureId: string | null;
     customId: string | null;
@@ -63,8 +65,27 @@ export async function recordCapture(
     });
   }
 
+  // Same FK caution for the org: a vanished org must not lose the money row.
+  // custom_id keeps the raw id; the grant path records unknown_org.
+  let orgId: string | null = null;
+  if (input.orgId) {
+    const { data: org } = await admin
+      .from("orgs")
+      .select("id")
+      .eq("id", input.orgId)
+      .maybeSingle();
+    if (org) orgId = input.orgId;
+    else {
+      console.error("payment_unknown_org", {
+        paypalOrderId: input.paypalOrderId,
+        orgId: input.orgId,
+      });
+    }
+  }
+
   const row = {
     user_id: profile ? input.userId : null,
+    org_id: orgId,
     paypal_order_id: input.paypalOrderId,
     paypal_capture_id: input.captureId,
     custom_id: input.customId,
@@ -110,6 +131,14 @@ export type PaymentGrantOutcome =
       examId: string | null;
     }
   | {
+      kind: "granted_org";
+      orgSubscriptionId: string;
+      orgId: string;
+      planId: string;
+      planName: string;
+      planPriceCents: number;
+    }
+  | {
       kind: "failed";
       reason: PaymentGrantFailure;
       planId?: string | null;
@@ -120,15 +149,16 @@ export type PaymentGrantOutcome =
 /**
  * Second half of the payment write: attach whatever the grant resolved.
  *
- * The failure branch is guarded on `subscription_id is null` so a late webhook
- * whose plan lookup fails cannot stamp grant_failure onto a row the capture
- * route already linked successfully.
+ * The failure branch is guarded on BOTH grant links being null so a late
+ * webhook whose plan lookup fails cannot stamp grant_failure onto a row the
+ * capture route already linked successfully — whichever kind of grant it was.
  */
 export async function recordPaymentGrant(
   admin: AdminClient,
   paymentId: string,
   outcome: PaymentGrantOutcome
 ): Promise<void> {
+  const stamped = { updated_at: new Date().toISOString() };
   const patch =
     outcome.kind === "granted"
       ? {
@@ -138,18 +168,30 @@ export async function recordPaymentGrant(
           plan_price_cents: outcome.planPriceCents,
           exam_id: outcome.examId,
           grant_failure: null,
-          updated_at: new Date().toISOString(),
+          ...stamped,
         }
-      : {
-          grant_failure: outcome.reason,
-          plan_id: outcome.planId ?? null,
-          plan_name: outcome.planName ?? null,
-          plan_price_cents: outcome.planPriceCents ?? null,
-          updated_at: new Date().toISOString(),
-        };
+      : outcome.kind === "granted_org"
+        ? {
+            org_subscription_id: outcome.orgSubscriptionId,
+            org_id: outcome.orgId,
+            plan_id: outcome.planId,
+            plan_name: outcome.planName,
+            plan_price_cents: outcome.planPriceCents,
+            grant_failure: null,
+            ...stamped,
+          }
+        : {
+            grant_failure: outcome.reason,
+            plan_id: outcome.planId ?? null,
+            plan_name: outcome.planName ?? null,
+            plan_price_cents: outcome.planPriceCents ?? null,
+            ...stamped,
+          };
 
   let query = admin.from("payments").update(patch).eq("id", paymentId);
-  if (outcome.kind === "failed") query = query.is("subscription_id", null);
+  if (outcome.kind === "failed") {
+    query = query.is("subscription_id", null).is("org_subscription_id", null);
+  }
 
   const { error } = await query;
   if (error) {

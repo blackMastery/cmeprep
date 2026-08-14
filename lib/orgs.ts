@@ -4,7 +4,13 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser, type SessionUser } from "@/lib/auth";
 import { isInvitePending } from "@/lib/orgs-core";
-import type { Org, OrgInvite, OrgMember, Profile } from "@/lib/supabase/types";
+import type {
+  Org,
+  OrgInvite,
+  OrgMember,
+  OrgSubscription,
+  Profile,
+} from "@/lib/supabase/types";
 
 /**
  * DB layer for org accounts. Everything here runs on the service-role client,
@@ -140,6 +146,19 @@ export async function getOrgSeatUsage(
     pendingInvites: invites.filter((i) => isInvitePending(i, now)).length,
     seatLimit: org.seat_limit,
   };
+}
+
+/** All of an org's subscription rows, newest period first. */
+export async function listOrgSubscriptions(
+  orgId: string
+): Promise<OrgSubscription[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("org_subscriptions")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("current_period_end", { ascending: false });
+  return (data ?? []) as OrgSubscription[];
 }
 
 export type PendingInviteNotice = {

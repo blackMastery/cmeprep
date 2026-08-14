@@ -8,8 +8,11 @@ import {
   type PaypalOrder,
 } from "@/lib/paypal";
 import { parseCaptureAmount } from "@/lib/payments-core";
-import { recordCapturedPurchase } from "@/lib/subscriptions";
-import { parsePurchaseCustomId } from "@/lib/subscriptions-core";
+import {
+  recordCapturedOrgPurchase,
+  recordCapturedPurchase,
+} from "@/lib/subscriptions";
+import { parseAnyPurchaseCustomId } from "@/lib/subscriptions-core";
 
 /** PayPal order ids are short alphanumeric tokens, not uuids. */
 const ORDER_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
@@ -55,7 +58,9 @@ export async function POST(
 
   const unit = order.purchase_units?.[0];
   const capture = unit?.payments?.captures?.[0];
-  const parsed = parsePurchaseCustomId(capture?.custom_id ?? unit?.custom_id);
+  const parsed = parseAnyPurchaseCustomId(
+    capture?.custom_id ?? unit?.custom_id
+  );
   if (!capture || !parsed) {
     console.error("paypal_capture_missing_custom_id", { orderId });
     return NextResponse.json({ error: "capture_failed" }, { status: 502 });
@@ -67,6 +72,46 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const admin = createAdminClient();
+  const { cents, currency } = parseCaptureAmount(capture.amount);
+  const shared = {
+    userId: user.id,
+    planId: parsed.planId,
+    paypalOrderId: order.id,
+    captureId: capture.id,
+    customId: capture.custom_id ?? unit?.custom_id ?? null,
+    amountCents: cents,
+    currency,
+    capturedAt: capture.create_time ?? null,
+    source: "capture_route" as const,
+  };
+
+  // ── Org purchase: same money-first discipline, org-side tables ──
+  if (parsed.kind === "org") {
+    const result = await recordCapturedOrgPurchase(admin, {
+      ...shared,
+      orgId: parsed.orgId,
+    });
+
+    if (result.outcome === "error") {
+      const error =
+        result.reason === "unknown_plan" || result.reason === "no_duration"
+          ? "plan_unavailable"
+          : "grant_failed";
+      return NextResponse.json({ error }, { status: 500 });
+    }
+
+    revalidatePath("/org", "layout");
+    revalidatePath("/dashboard");
+
+    return NextResponse.json({
+      status: "COMPLETED",
+      plan: result.plan.name,
+      currentPeriodEnd:
+        result.outcome === "granted" ? result.currentPeriodEnd : null,
+    });
+  }
+
   // A two-segment custom_id means the order was created before exam scoping
   // shipped. It grants all-access, because that is what the buyer paid for.
   // Logged so we can confirm the window has closed and drop the branch.
@@ -74,23 +119,12 @@ export async function POST(
     console.warn("paypal_legacy_custom_id", { orderId, userId: parsed.userId });
   }
 
-  const admin = createAdminClient();
-  const { cents, currency } = parseCaptureAmount(capture.amount);
-
   // Records the money BEFORE resolving the plan. The old order returned
   // plan_unavailable here with the capture already settled and nothing written
   // down anywhere but a log line.
   const result = await recordCapturedPurchase(admin, {
-    userId: user.id,
-    planId: parsed.planId,
+    ...shared,
     examId: parsed.examId,
-    paypalOrderId: order.id,
-    captureId: capture.id,
-    customId: capture.custom_id ?? unit?.custom_id ?? null,
-    amountCents: cents,
-    currency,
-    capturedAt: capture.create_time ?? null,
-    source: "capture_route",
   });
 
   if (result.outcome === "error") {

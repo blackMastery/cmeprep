@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
  */
 const TABS: readonly { href: string; label: string }[] = [
   { href: "/org/members", label: "Members" },
+  { href: "/org/billing", label: "Billing" },
 ];
 
 export function OrgNav() {

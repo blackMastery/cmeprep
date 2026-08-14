@@ -71,7 +71,16 @@ export type AuditAction =
   | "org.invite_resend"
   | "org.member_join"
   | "org.member_remove"
-  | "org.member_role_change";
+  | "org.member_role_change"
+  // Org lifecycle + billing (SPEC §5/§11). org_subscription.create covers
+  // BOTH grant paths — meta.via says whether PayPal or an admin did it.
+  | "org.create"
+  | "org.update"
+  | "org.suspend"
+  | "org.unsuspend"
+  | "org_subscription.create"
+  | "org_subscription.update"
+  | "org_subscription.cancel";
 
 /**
  * Append an admin action to `audit_logs`.

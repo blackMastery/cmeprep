@@ -3,7 +3,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
 import { dispatchPaypalEvent, type WebhookEvent } from "@/lib/paypal-events";
-import { grantPlanPurchase } from "@/lib/subscriptions";
+import { grantOrgPlanPurchase, grantPlanPurchase } from "@/lib/subscriptions";
+import { parseAnyPurchaseCustomId } from "@/lib/subscriptions-core";
 import {
   emptyPass,
   hasBudget,
@@ -163,7 +164,10 @@ async function repairUnclaimedPayments(
   const { data: rows, error } = await admin
     .from("payments")
     .select("*")
+    // "Unclaimed" is per kind: a personal grant sets subscription_id, an org
+    // grant sets org_subscription_id, and either one settles the debt.
     .is("subscription_id", null)
+    .is("org_subscription_id", null)
     // Only money the buyer is still owed access for. A denied capture never
     // funded, a reversed one was charged back, and a fully refunded one has
     // been handed back — granting against any of those would be a gift.
@@ -203,6 +207,14 @@ async function repairPayment(
   admin: AdminClient,
   payment: Payment
 ): Promise<boolean> {
+  // Org purchases repair through their own path. Detected from org_id OR the
+  // custom_id: an org id that failed its FK pre-check leaves org_id null, and
+  // the custom_id is then the only trace of what was bought.
+  const parsedCustomId = parseAnyPurchaseCustomId(payment.custom_id);
+  if (payment.org_id !== null || parsedCustomId?.kind === "org") {
+    return repairOrgPayment(admin, payment, parsedCustomId);
+  }
+
   // The common case: the grant succeeded and only the link write was lost.
   const { data: sub } = await admin
     .from("subscriptions")
@@ -297,6 +309,134 @@ async function repairPayment(
     granted: grant.outcome === "granted",
   });
   return true;
+}
+
+/** Pass B for org purchases: same shape, org-side tables and links. */
+async function repairOrgPayment(
+  admin: AdminClient,
+  payment: Payment,
+  parsedCustomId: ReturnType<typeof parseAnyPurchaseCustomId>
+): Promise<boolean> {
+  const orgId =
+    payment.org_id ??
+    (parsedCustomId?.kind === "org" ? parsedCustomId.orgId : null);
+
+  // The common case: the grant succeeded and only the link write was lost.
+  const { data: orgSub } = await admin
+    .from("org_subscriptions")
+    .select("id, org_id")
+    .eq("paypal_order_id", payment.paypal_order_id)
+    .maybeSingle();
+
+  if (orgSub) {
+    await linkOrgPayment(admin, payment, orgSub.id, orgSub.org_id);
+    await audit(
+      payment.user_id,
+      "payment.reconcile_repair",
+      payment.user_id,
+      {
+        paymentId: payment.id,
+        paypalOrderId: payment.paypal_order_id,
+        orgSubscriptionId: orgSub.id,
+        reason: "link_only",
+      },
+      orgSub.org_id
+    );
+    return true;
+  }
+
+  const failReason = !orgId
+    ? "unknown_org"
+    : !payment.plan_id
+      ? "unknown_plan"
+      : !payment.user_id
+        ? "unknown_user"
+        : null;
+  if (failReason) {
+    console.error("reconcile_unclaimed_org_payment", {
+      paymentId: payment.id,
+      paypalOrderId: payment.paypal_order_id,
+      customId: payment.custom_id,
+      reason: failReason,
+    });
+    await audit(payment.user_id, "payment.reconcile_failed", payment.user_id, {
+      paymentId: payment.id,
+      paypalOrderId: payment.paypal_order_id,
+      reason: failReason,
+    });
+    return false;
+  }
+
+  const { data: plan } = await admin
+    .from("plans")
+    .select("*")
+    .eq("id", payment.plan_id!)
+    .maybeSingle();
+
+  if (!plan || plan.kind !== "org" || plan.duration_months === null) {
+    console.error("reconcile_unclaimed_org_payment_bad_plan", {
+      paymentId: payment.id,
+      planId: payment.plan_id,
+    });
+    await audit(payment.user_id, "payment.reconcile_failed", payment.user_id, {
+      paymentId: payment.id,
+      paypalOrderId: payment.paypal_order_id,
+      reason:
+        !plan || plan.kind !== "org" ? "unknown_plan" : "no_duration",
+    });
+    return false;
+  }
+
+  const grant = await grantOrgPlanPurchase(admin, {
+    orgId: orgId!,
+    buyerId: payment.user_id!,
+    plan,
+    paypalOrderId: payment.paypal_order_id,
+    captureId: payment.paypal_capture_id,
+    meta: { via: "reconcile_sweep", paymentId: payment.id },
+  });
+
+  if (grant.outcome === "error") {
+    await audit(payment.user_id, "payment.reconcile_failed", payment.user_id, {
+      paymentId: payment.id,
+      paypalOrderId: payment.paypal_order_id,
+      reason: grant.reason,
+    });
+    return false;
+  }
+
+  await linkOrgPayment(admin, payment, grant.orgSubscriptionId, orgId!);
+  await audit(
+    payment.user_id,
+    "payment.reconcile_repair",
+    payment.user_id,
+    {
+      paymentId: payment.id,
+      paypalOrderId: payment.paypal_order_id,
+      orgSubscriptionId: grant.orgSubscriptionId,
+      granted: grant.outcome === "granted",
+    },
+    orgId
+  );
+  return true;
+}
+
+async function linkOrgPayment(
+  admin: AdminClient,
+  payment: Payment,
+  orgSubscriptionId: string,
+  orgId: string
+): Promise<void> {
+  const { error } = await admin
+    .from("payments")
+    .update({
+      org_subscription_id: orgSubscriptionId,
+      org_id: orgId,
+      grant_failure: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payment.id);
+  if (error) throw new Error(error.message);
 }
 
 async function linkPayment(

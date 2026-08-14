@@ -17,10 +17,14 @@ import {
   recordTerminalReversal,
 } from "@/lib/payments";
 import {
+  recordCapturedOrgPurchase,
   recordCapturedPurchase,
   syncRoleFromSubscriptions,
 } from "@/lib/subscriptions";
-import { parsePurchaseCustomId } from "@/lib/subscriptions-core";
+import {
+  parseAnyPurchaseCustomId,
+  type ParsedCustomId,
+} from "@/lib/subscriptions-core";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -85,18 +89,49 @@ export async function dispatchPaypalEvent(
   }
 }
 
-/** Capture completed — grant if the capture route never ran (browser died). */
-async function handleCaptureCompleted(admin: AdminClient, event: WebhookEvent) {
-  const resource = event.resource;
-  const parsed = parsePurchaseCustomId(resource?.custom_id);
-  const orderId = resource?.supplementary_data?.related_ids?.order_id;
-  if (!parsed || !orderId) return;
-
-  const { cents, currency } = parseCaptureAmount(resource?.amount);
+/**
+ * One captured order, whichever product its custom_id names. Both webhook
+ * grant paths funnel through here so the personal/org branch exists once.
+ */
+async function recordParsedCapture(
+  admin: AdminClient,
+  parsed: ParsedCustomId,
+  order: {
+    paypalOrderId: string;
+    captureId: string | null;
+    customId: string | null;
+    amountCents: number | null;
+    currency: string | null;
+    capturedAt: string | null;
+    source: "webhook_capture" | "webhook_approved";
+  }
+): Promise<void> {
+  if (parsed.kind === "org") {
+    await recordCapturedOrgPurchase(admin, {
+      userId: parsed.userId,
+      planId: parsed.planId,
+      orgId: parsed.orgId,
+      ...order,
+    });
+    return;
+  }
   await recordCapturedPurchase(admin, {
     userId: parsed.userId,
     planId: parsed.planId,
     examId: parsed.examId,
+    ...order,
+  });
+}
+
+/** Capture completed — grant if the capture route never ran (browser died). */
+async function handleCaptureCompleted(admin: AdminClient, event: WebhookEvent) {
+  const resource = event.resource;
+  const parsed = parseAnyPurchaseCustomId(resource?.custom_id);
+  const orderId = resource?.supplementary_data?.related_ids?.order_id;
+  if (!parsed || !orderId) return;
+
+  const { cents, currency } = parseCaptureAmount(resource?.amount);
+  await recordParsedCapture(admin, parsed, {
     paypalOrderId: orderId,
     captureId: resource?.id ?? null,
     customId: resource?.custom_id ?? null,
@@ -110,7 +145,7 @@ async function handleCaptureCompleted(admin: AdminClient, event: WebhookEvent) {
 /** Order approved but never captured — the buyer's browser died mid-flow. */
 async function handleOrderApproved(admin: AdminClient, event: WebhookEvent) {
   const orderId = event.resource?.id;
-  const parsed = parsePurchaseCustomId(
+  const parsed = parseAnyPurchaseCustomId(
     event.resource?.purchase_units?.[0]?.custom_id
   );
   if (!orderId || !parsed) return;
@@ -123,10 +158,7 @@ async function handleOrderApproved(admin: AdminClient, event: WebhookEvent) {
   const capture = unit?.payments?.captures?.[0] ?? null;
   const { cents, currency } = parseCaptureAmount(capture?.amount);
 
-  await recordCapturedPurchase(admin, {
-    userId: parsed.userId,
-    planId: parsed.planId,
-    examId: parsed.examId,
+  await recordParsedCapture(admin, parsed, {
     paypalOrderId: orderId,
     captureId: capture?.id ?? null,
     customId: capture?.custom_id ?? unit?.custom_id ?? null,
@@ -285,6 +317,40 @@ async function revokeSubscriptionForOrder(
   orderId: string,
   reason: { trigger: RefundTrigger; eventType: string }
 ): Promise<void> {
+  // Org purchases first: one order bought exactly one of the two kinds, and
+  // for an org that kind is an org_subscriptions row. Cancelling it drops the
+  // whole org's read-time grant on the next entitlement check — with NO grace,
+  // because a chargeback is not an accounts-payable delay.
+  const { data: orgSub } = await admin
+    .from("org_subscriptions")
+    .select("id, org_id, plan, status")
+    .eq("paypal_order_id", orderId)
+    .maybeSingle();
+  if (orgSub) {
+    if (orgSub.status === "cancelled") return;
+    const { error } = await admin
+      .from("org_subscriptions")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", orgSub.id);
+    if (error) throw new Error(error.message);
+
+    await audit(
+      null,
+      "org_subscription.cancel",
+      orgSub.org_id,
+      {
+        orgSubscriptionId: orgSub.id,
+        plan: orgSub.plan,
+        paypalOrderId: orderId,
+        trigger: reason.trigger,
+        via: "paypal_webhook",
+        eventType: reason.eventType,
+      },
+      orgSub.org_id
+    );
+    return;
+  }
+
   const { data: sub } = await admin
     .from("subscriptions")
     .select("id, user_id, plan, status, exam_id")

@@ -52,13 +52,15 @@ export default async function CheckoutPage(
     .eq("id", planId)
     .maybeSingle();
 
-  // Self-serve checkout is for active paid plans with a known duration;
-  // anything else (free, retired, admin-granted) has no buy page.
+  // Self-serve checkout is for active paid PERSONAL plans with a known
+  // duration; anything else (free, retired, admin-granted, org) has no buy
+  // page here — org plans check out from /org/billing.
   if (
     !plan ||
     !plan.is_active ||
     plan.price_cents <= 0 ||
-    plan.duration_months === null
+    plan.duration_months === null ||
+    plan.kind !== "personal"
   ) {
     notFound();
   }
