@@ -334,6 +334,11 @@ export type OrgSubscription = Timestamps & {
   plan_id: string | null;
   /** Free text snapshot; presets come from the plans table. */
   plan: string;
+  /**
+   * Public exam this period buys; null = all-access comp grant (admin/manual
+   * only), mirroring subscriptions.exam_id.
+   */
+  exam_id: string | null;
   status: SubStatus;
   current_period_end: string;
   /** Idempotency key for the PayPal race; null for admin grants. */
