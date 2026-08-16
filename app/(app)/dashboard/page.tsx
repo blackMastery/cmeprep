@@ -220,7 +220,11 @@ export default async function DashboardPage() {
             />
           )}
           <WeakAreas subjects={(subjects ?? []) as SubjectAccuracy[]} />
-          <AccountPanel profile={user.profile} examNames={entitledExamNames} />
+          <AccountPanel
+            profile={user.profile}
+            examNames={entitledExamNames}
+            orgCovered={orgCovered}
+          />
           {/* Org-less users only — and not while an invite banner is already
               offering them an org to join. */}
           {!orgCtx && !inviteNotice && <OrgUpsellCard />}

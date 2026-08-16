@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -72,6 +72,8 @@ export function TutorRunner({
     cancelPendingFlush,
     markClean,
     timeSpent,
+    accrueTime,
+    beginStint,
   } = useAnswerAutosave(test.id, questions);
 
   const [reveals, setReveals] = useState<Map<string, TakeReveal>>(() => {
@@ -90,24 +92,16 @@ export function TutorRunner({
   const [finishing, setFinishing] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const questionEnteredAt = useRef<number>(0);
-
   const current = questions[index];
 
   // ── Track per-question time (same mechanism as the exam runner)
   useEffect(() => {
     if (!current) return;
     const questionId = current.questionId;
-    const spent = timeSpent.current;
-    questionEnteredAt.current = Date.now();
+    beginStint();
 
-    return () => {
-      const elapsed = Math.round(
-        (Date.now() - questionEnteredAt.current) / 1000
-      );
-      spent.set(questionId, (spent.get(questionId) ?? 0) + elapsed);
-    };
-  }, [current, timeSpent]);
+    return () => accrueTime(questionId);
+  }, [current, accrueTime, beginStint]);
 
   const reveal = useCallback(
     async (question: TakeQuestion, selection: string[]) => {
@@ -127,9 +121,8 @@ export function TutorRunner({
         return next;
       });
 
-      const stintSec = Math.round(
-        (Date.now() - questionEnteredAt.current) / 1000
-      );
+      // Bank the stint so far — the reveal is this question's final write.
+      accrueTime(question.questionId);
       try {
         const res = await fetch(`/api/tests/${test.id}/reveal`, {
           method: "POST",
@@ -137,8 +130,7 @@ export function TutorRunner({
           body: JSON.stringify({
             questionId: question.questionId,
             selectedOptionIds: selection,
-            timeSpentSec:
-              (timeSpent.current.get(question.questionId) ?? 0) + stintSec,
+            timeSpentSec: timeSpent.current.get(question.questionId) ?? 0,
           }),
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -181,7 +173,15 @@ export function TutorRunner({
         setPendingReveal(false);
       }
     },
-    [markClean, pendingReveal, reveals, setAnswers, test.id, timeSpent]
+    [
+      accrueTime,
+      markClean,
+      pendingReveal,
+      reveals,
+      setAnswers,
+      test.id,
+      timeSpent,
+    ]
   );
 
   const select = useCallback(
@@ -564,12 +564,20 @@ export function TutorRunner({
               <ExplanationStrip explanation={currentReveal.explanation} />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
+                  {/* Keyed by question: both children seed their state from
+                      props with useState, which only runs on mount. Without a
+                      key React reuses one instance across the whole session,
+                      so stepping between questions carried the previous
+                      question's note and bookmark over — and saving then wrote
+                      that note onto the wrong question. */}
                   <QuestionNoteEditor
+                    key={current.questionId}
                     questionId={current.questionId}
                     initialBody={notesByQuestion[current.questionId] ?? null}
                   />
                 </div>
                 <BookmarkToggle
+                  key={current.questionId}
                   questionId={current.questionId}
                   initialBookmarked={initialBookmarkedIds.includes(
                     current.questionId
@@ -687,10 +695,12 @@ function FinishDialog({
           <DialogDescription>
             {unanswered > 0 ? (
               <>
-                {unanswered} of {total}{" "}
-                {unanswered === 1 ? "question is" : "questions are"} still
-                unchecked — they won&apos;t count toward your score. You can
-                also save &amp; exit and pick the session up later.
+                {/* "questions" agrees with the TOTAL, and the trailing {" "}
+                    keeps JSX from gluing "are" to "still". */}
+                {unanswered} of {total} questions{" "}
+                {unanswered === 1 ? "is" : "are"}{" "}
+                still unchecked — they won&apos;t count toward your score. You
+                can also save &amp; exit and pick the session up later.
               </>
             ) : (
               <>You checked every question. Nice work.</>

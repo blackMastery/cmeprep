@@ -54,6 +54,7 @@ export default async function OrgManageLayout({
       <OrgAdminAccessBanner
         state={state}
         suspended={session.org.suspended_at !== null}
+        everSubscribed={subs.length > 0}
         graceEndsAt={
           state === "grace" && latestActiveEnd
             ? orgGraceEnd(latestActiveEnd).toISOString()

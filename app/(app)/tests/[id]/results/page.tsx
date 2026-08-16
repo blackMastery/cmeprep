@@ -5,6 +5,7 @@ import { ArrowRight, LayoutDashboard } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { finalizeIfExpired, getTestForUser } from "@/lib/tests";
 import { getTestResults } from "@/lib/results";
+import { getExamAccess } from "@/lib/entitlements";
 import { accuracyTone, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,12 @@ export default async function ResultsPage(
   }
 
   const results = await getTestResults(test, user.id);
+
+  // Same rule as the new-test wall (SPEC §3): a member whose org covers the
+  // bank is not metered, so "2 free tests left — upgrade for unlimited mock
+  // exams" was both untrue and an upsell for access they already have.
+  const access = await getExamAccess(user);
+
   const tutor = test.mode === "tutor";
   const percentage = Math.round(Number(test.score ?? 0));
   // Tutor score is correct/answered, so "wrong" must use the same base —
@@ -113,7 +120,7 @@ export default async function ResultsPage(
         </Card>
       )}
 
-      <TrialResultsUpsell profile={user.profile} />
+      {!access.org && <TrialResultsUpsell profile={user.profile} />}
 
       {/* Tutor sessions already showed every explanation inline, so the
           dashboard is the primary next step and review the secondary one. */}

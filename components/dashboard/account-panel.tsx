@@ -9,13 +9,20 @@ export function AccountPanel({
   profile,
   /** Exam names this account covers; null = every exam (trial, comp, admin). */
   examNames,
+  /** Their org covers the bank, so trial credits are not what gates them. */
+  orgCovered = false,
 }: {
   profile: Profile;
   examNames: string[] | null;
+  orgCovered?: boolean;
 }) {
   const isTrial = profile.role === "trial";
   const remaining = profile.trials_limit - profile.trials_used;
-  const nearLimit = isTrial && remaining <= 1;
+  // An org member keeps role 'trial' — the badge should still say so — but
+  // their practice never spends a credit (SPEC §3), so the meter and the
+  // "upgrade to keep practising" nudge are noise at best and wrong at worst.
+  const metered = isTrial && !orgCovered;
+  const nearLimit = metered && remaining <= 1;
 
   return (
     <Card className="[--card-spacing:--spacing(5)]">
@@ -31,7 +38,7 @@ export function AccountPanel({
               </Badge>
             </dd>
           </div>
-          {isTrial && (
+          {metered && (
             <div className="flex items-center justify-between">
               <dt className="text-muted-foreground">Trials used</dt>
               <dd className="font-semibold tabular-nums">

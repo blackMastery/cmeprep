@@ -235,7 +235,9 @@ export default async function MemberReadinessPage(
             <SignalBar
               label="Study cadence"
               value={Math.min(100, (recentDays / CADENCE_TARGET_DAYS) * 100)}
-              detail={`${recentDays} active days in the last 4 weeks`}
+              detail={`${recentDays} active ${
+                recentDays === 1 ? "day" : "days"
+              } in the last 4 weeks`}
             />
             {detail.pacingSecPerQuestion !== null && (
               <p className="border-t border-border pt-3 text-xs text-muted-foreground">

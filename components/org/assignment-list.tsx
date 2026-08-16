@@ -165,9 +165,11 @@ export function AssignmentList({ items }: { items: AssignmentListItem[] }) {
                   {item.mode === "tutor"
                     ? "tutor mode"
                     : `${item.durationMin} min`}
-                  {item.latestScore !== null && item.latestTotal !== null && (
+                  {/* score is a PERCENTAGE, not a correct-answer count —
+                      pairing it with the question total read as "70/10". */}
+                  {item.latestScore !== null && (
                     <span className="tabular-nums">
-                      · latest {item.latestScore}/{item.latestTotal}
+                      · latest {item.latestScore}%
                     </span>
                   )}
                   {/* Overrides count, labeled — say how it was actually done. */}

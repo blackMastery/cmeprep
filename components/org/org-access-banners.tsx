@@ -13,10 +13,14 @@ export function OrgAdminAccessBanner({
   state,
   suspended,
   graceEndsAt,
+  everSubscribed = true,
 }: {
   state: "active" | "grace" | "locked";
   suspended: boolean;
   graceEndsAt: string | null;
+  /** False for an org that has never held a plan — nothing lapsed, so the
+      locked copy must not talk about losing access or renewing. */
+  everSubscribed?: boolean;
 }) {
   if (suspended) {
     return (
@@ -59,16 +63,24 @@ export function OrgAdminAccessBanner({
             </span>
             . Renew to keep everyone studying.
           </>
-        ) : (
+        ) : everSubscribed ? (
           <>
             Your organisation has{" "}
             <span className="font-semibold">no active plan</span> — members
             have lost access until it renews.
           </>
+        ) : (
+          <>
+            Your organisation has{" "}
+            <span className="font-semibold">no plan yet</span> — choose an
+            examination to give your team access.
+          </>
         )}
       </p>
       <Button size="sm" asChild>
-        <Link href="/org/billing">Renew now</Link>
+        <Link href="/org/billing">
+          {everSubscribed ? "Renew now" : "Choose a plan"}
+        </Link>
       </Button>
     </div>
   );

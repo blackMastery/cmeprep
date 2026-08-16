@@ -51,6 +51,24 @@ function shortDate(iso: string): string {
   });
 }
 
+/**
+ * Format a bare YYYY-MM-DD calendar date (last_active_day, sitting dates).
+ *
+ * These are already the intended calendar day — last_active_day is bucketed
+ * in America/Guyana by the user_exam_stats view. Rendering them through
+ * shortDate() re-read them as UTC midnight and then formatted in the server's
+ * zone, which shifts west-of-UTC deployments back a day: a member who last
+ * practised on the 15th read as "14 Aug". Pinning the formatter to UTC keeps
+ * the day exactly as stored, which is also what the CSV export emits.
+ */
+function shortDay(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
 function one(value: string | string[] | undefined): string | undefined {
   const v = Array.isArray(value) ? value[0] : value;
   return v && v.length > 0 ? v : undefined;
@@ -205,7 +223,7 @@ export default async function OrgDashboardPage(props: PageProps<"/org">) {
               {e.name}
               {e.sittingOn && (
                 <span className="ml-1.5 text-xs text-muted-foreground">
-                  {shortDate(`${e.sittingOn}T00:00:00Z`)}
+                  {shortDay(e.sittingOn)}
                 </span>
               )}
             </Link>
@@ -403,7 +421,7 @@ export default async function OrgDashboardPage(props: PageProps<"/org">) {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.lastActiveDay
-                        ? shortDate(`${row.lastActiveDay}T00:00:00Z`)
+                        ? shortDay(row.lastActiveDay)
                         : "Never"}
                     </TableCell>
                     <TableCell className="tabular-nums">

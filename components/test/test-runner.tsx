@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -44,13 +44,12 @@ export function TestRunner({ state }: { state: TakeState }) {
     scheduleSave,
     flush,
     cancelPendingFlush,
-    timeSpent,
+    accrueTime,
+    beginStint,
   } = useAnswerAutosave(test.id, questions);
 
   const [submitting, setSubmitting] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-
-  const questionEnteredAt = useRef<number>(0);
 
   const current = questions[index];
 
@@ -58,16 +57,12 @@ export function TestRunner({ state }: { state: TakeState }) {
   useEffect(() => {
     if (!current) return;
     const questionId = current.questionId;
-    const spent = timeSpent.current;
-    questionEnteredAt.current = Date.now();
+    beginStint();
 
-    return () => {
-      const elapsed = Math.round(
-        (Date.now() - questionEnteredAt.current) / 1000
-      );
-      spent.set(questionId, (spent.get(questionId) ?? 0) + elapsed);
-    };
-  }, [current, timeSpent]);
+    // Bank whatever is left of the stint on the way out; answering already
+    // banked (and reset) the part before the save, so this cannot double up.
+    return () => accrueTime(questionId);
+  }, [current, accrueTime, beginStint]);
 
   const select = useCallback(
     (optionId: string) => {
@@ -89,9 +84,11 @@ export function TestRunner({ state }: { state: TakeState }) {
         return next;
       });
 
+      // Before the save, not after: the debounced flush reads timeSpent.
+      accrueTime(current.questionId);
       scheduleSave(current.questionId);
     },
-    [current, scheduleSave, setAnswers]
+    [accrueTime, current, scheduleSave, setAnswers]
   );
 
   const toggleFlag = useCallback(() => {
@@ -108,8 +105,9 @@ export function TestRunner({ state }: { state: TakeState }) {
       });
       return next;
     });
+    accrueTime(current.questionId);
     scheduleSave(current.questionId);
-  }, [current, scheduleSave, setAnswers]);
+  }, [accrueTime, current, scheduleSave, setAnswers]);
 
   const go = useCallback(
     (nextIndex: number) => {

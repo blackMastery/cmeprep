@@ -58,8 +58,10 @@ export function SubmitDialog({
               <strong className="font-semibold">
                 {unanswered} of {total}
               </strong>{" "}
-              {unanswered === 1 ? "question is" : "questions are"} still
-              unanswered. Unanswered questions are marked incorrect.
+              {/* "questions" agrees with the TOTAL, not the unanswered count:
+                  "1 of 10 question is" was wrong at exactly one left. */}
+              questions {unanswered === 1 ? "is" : "are"} still unanswered.
+              Unanswered questions are marked incorrect.
             </span>
           </div>
         )}

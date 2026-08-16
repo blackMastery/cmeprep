@@ -33,6 +33,36 @@ export function useAnswerAutosave(testId: string, questions: TakeQuestion[]) {
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeSpent = useRef<Map<string, number>>(new Map());
 
+  /** Start of the current, not-yet-banked stint on the displayed question. */
+  const stintStartedAtRef = useRef<number>(0);
+
+  /** Start the clock for the question now on screen. */
+  const beginStint = useCallback(() => {
+    stintStartedAtRef.current = Date.now();
+  }, []);
+
+  /**
+   * Bank the time spent on `questionId` since the last accrual and restart
+   * the stint clock.
+   *
+   * Must be called BEFORE scheduling a save, not only when the question is
+   * left: the autosave fires ~800ms after the answer while the learner is
+   * still on the question, so a total banked only on exit was always written
+   * as 0 — and the question is clean by then, so nothing ever corrected it.
+   * Every exam attempt landed with time_spent_sec = 0, which is what made the
+   * org pacing signal read "about 0s per question".
+   *
+   * Resetting the clock on each accrual is what keeps the exit accrual from
+   * double-counting the stint this call just banked.
+   */
+  const accrueTime = useCallback((questionId: string) => {
+    const now = Date.now();
+    const elapsed = Math.round((now - stintStartedAtRef.current) / 1000);
+    stintStartedAtRef.current = now;
+    const spent = timeSpent.current;
+    spent.set(questionId, (spent.get(questionId) ?? 0) + elapsed);
+  }, []);
+
   // The debounced flush runs ~800ms after a click, but a callback closed over
   // `answers` would serialize the value from the render that scheduled it —
   // i.e. always one interaction stale, silently dropping the user's most
@@ -159,5 +189,7 @@ export function useAnswerAutosave(testId: string, questions: TakeQuestion[]) {
     cancelPendingFlush,
     markClean,
     timeSpent,
+    accrueTime,
+    beginStint,
   };
 }

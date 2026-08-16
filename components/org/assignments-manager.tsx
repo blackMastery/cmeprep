@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import {
   createAssignment,
   deleteAssignment,
@@ -87,6 +87,23 @@ export function AssignmentsManager({
   const [audience, setAudience] = useState<"all" | "selected" | "department">(
     "all"
   );
+
+  // React 19 resets the form's DOM once the action settles, but it cannot
+  // reset the state behind these controlled selects — leaving the select
+  // showing "Exam (timed)" while `mode` still said "tutor", so the Minutes
+  // field stayed hidden and the next submit failed "Pick a time limit"
+  // against a field that wasn't on screen. Clear both together, from the
+  // submit itself: React has already built the FormData by the time this
+  // runs, so resetting here cannot affect what is sent.
+  const createAndReset = useCallback(
+    (formData: FormData) => {
+      createAction(formData);
+      setExamId(exams[0]?.id ?? "");
+      setMode("exam");
+      setAudience("all");
+    },
+    [createAction, exams]
+  );
   const exam = useMemo(
     () => exams.find((e) => e.id === examId) ?? null,
     [exams, examId]
@@ -106,7 +123,7 @@ export function AssignmentsManager({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={createAction} className="space-y-4">
+          <form action={createAndReset} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <AdminField
                 label="Title"
@@ -178,7 +195,16 @@ export function AssignmentsManager({
 
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Subjects</legend>
-              {!exam || exam.subjects.length === 0 ? (
+              {/* The exam list is entitlement-filtered, so "no exams at all"
+                  means the org's plan lapsed — saying the exam has no
+                  subjects sent admins hunting through the question bank. */}
+              {exams.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No examinations available to assign. Your organisation needs
+                  an active plan for an examination before you can set work on
+                  it.
+                </p>
+              ) : !exam || exam.subjects.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   This exam has no subjects with published questions yet.
                 </p>

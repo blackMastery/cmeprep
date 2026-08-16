@@ -180,9 +180,17 @@ export async function getTestResults(
     ];
   });
 
-  // Per-subject accuracy for the results bars
+  // Per-subject accuracy for the results bars.
+  //
+  // The denominator must match the headline score's, or the two contradict
+  // each other. Exam mode scores correct/TOTAL — a blank is wrong. Tutor mode
+  // scores correct/ANSWERED, so a skipped question must not drag a subject
+  // down, and a subject with nothing answered has no reading at all rather
+  // than a fabricated 0%.
+  const tutorScoring = test.mode === "tutor";
   const bySubject = new Map<string, SubjectBreakdown>();
   for (const q of reviewQuestions) {
+    if (tutorScoring && !q.answered) continue;
     const key = q.subjectName;
     const entry =
       bySubject.get(key) ??

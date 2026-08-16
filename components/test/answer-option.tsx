@@ -11,6 +11,11 @@ export type AnswerState = "idle" | "correct" | "incorrect" | "missed";
  * Colour is never the only signal: correct is green + check, incorrect is
  * red + cross, and the missed-correct row adds a "Correct answer" label — so
  * the states stay distinguishable without relying on colour vision.
+ *
+ * The check/cross glyph sits in an aria-hidden badge (it replaces the letter,
+ * which is decoration), so the graded states also carry sr-only text. Without
+ * it a screen reader announced a right and a wrong pick identically — the
+ * verdict existed only as an icon and a colour.
  */
 export function AnswerOption({
   id,
@@ -88,6 +93,11 @@ export function AnswerOption({
 
       <span className="pt-0.5 text-[0.95rem] leading-relaxed text-foreground">
         {label}
+        {(isCorrect || isIncorrect) && (
+          <span className="sr-only">
+            {isCorrect ? " — your answer, correct" : " — your answer, incorrect"}
+          </span>
+        )}
       </span>
 
       {isMissed && (
