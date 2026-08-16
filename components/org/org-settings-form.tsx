@@ -5,6 +5,7 @@ import { ImagePlus, Loader2 } from "lucide-react";
 import {
   createOrgLogoUploadUrl,
   saveOrgLogo,
+  updateOrgExamDate,
   updateOrgSettings,
 } from "@/app/(app)/org/(manage)/settings/actions";
 import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
@@ -27,16 +28,24 @@ import {
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
+export type SittingExam = {
+  id: string;
+  name: string;
+  sittingOn: string | null;
+};
+
 export function OrgSettingsForm({
   name,
   passMarkPct,
   inactivityDays,
   logoPath,
+  exams,
 }: {
   name: string;
   passMarkPct: number;
   inactivityDays: number;
   logoPath: string | null;
+  exams: SittingExam[];
 }) {
   const [state, action] = useActionState<OrgActionState, FormData>(
     updateOrgSettings,
@@ -82,8 +91,54 @@ export function OrgSettingsForm({
         </CardContent>
       </Card>
 
+      {exams.length > 0 && <SittingDatesCard exams={exams} />}
+
       <LogoCard logoPath={logoPath} />
     </div>
+  );
+}
+
+function SittingDatesCard({ exams }: { exams: SittingExam[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Exam sittings</CardTitle>
+        <CardDescription>
+          When your cohort sits each exam. The date frames readiness on your
+          dashboard (days remaining, urgency) — it never changes anyone&apos;s
+          score. Leave blank if there&apos;s no fixed date.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {exams.map((exam) => (
+          <SittingDateRow key={exam.id} exam={exam} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SittingDateRow({ exam }: { exam: SittingExam }) {
+  const [state, action] = useActionState<OrgActionState, FormData>(
+    updateOrgExamDate,
+    null
+  );
+
+  return (
+    <form action={action} className="space-y-2">
+      <input type="hidden" name="examId" value={exam.id} />
+      <div className="flex flex-wrap items-end gap-3">
+        <AdminField
+          label={exam.name}
+          name="sittingOn"
+          type="date"
+          defaultValue={exam.sittingOn ?? ""}
+          className="min-w-44"
+        />
+        <AdminSubmit>Save</AdminSubmit>
+      </div>
+      <FormMessage error={state?.error} success={state?.success} />
+    </form>
   );
 }
 

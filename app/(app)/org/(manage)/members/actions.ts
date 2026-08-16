@@ -48,6 +48,15 @@ export async function inviteMembers(
   const role = orgMemberRoleSchema.safeParse(formData.get("role"));
   if (!role.success) return { error: "Pick a role for the invites." };
 
+  // Optional department, copied onto the membership at accept ("" = none).
+  const rawDept = String(formData.get("departmentId") ?? "");
+  let departmentId: string | null = null;
+  if (rawDept !== "") {
+    const dept = uuid().safeParse(rawDept);
+    if (!dept.success) return { error: "Unknown department." };
+    departmentId = dept.data;
+  }
+
   const { emails, invalid } = parseInviteEmails(
     String(formData.get("emails") ?? "")
   );
@@ -57,6 +66,16 @@ export async function inviteMembers(
   if (emails.length === 0) return { error: "Enter at least one email." };
 
   const admin = createAdminClient();
+
+  if (departmentId !== null) {
+    const { data: dept } = await admin
+      .from("org_departments")
+      .select("id")
+      .eq("id", departmentId)
+      .eq("org_id", session.org.id)
+      .maybeSingle();
+    if (!dept) return { error: "Unknown department." };
+  }
 
   // Split the batch: already a member here (skip), live invite pending
   // (skip), expired invite (renew in place — the partial unique index means
@@ -87,6 +106,10 @@ export async function inviteMembers(
 
   const toInsert: string[] = [];
   const toRenew: OrgInvite[] = [];
+  // Live invites whose role/department differ from this batch: updated in
+  // place (they already hold a seat) so the new batch's intent is never
+  // silently dropped; identical live invites are skipped.
+  const toUpdate: OrgInvite[] = [];
   let skipped = 0;
 
   for (const email of emails) {
@@ -97,15 +120,23 @@ export async function inviteMembers(
     }
     const existing = inviteByEmail.get(email);
     if (existing) {
-      if (isInvitePending(existing, now)) skipped++;
-      else toRenew.push(existing); // expired — renew, reclaiming a seat
+      if (!isInvitePending(existing, now)) {
+        toRenew.push(existing); // expired — renew, reclaiming a seat
+      } else if (
+        existing.role !== role.data ||
+        existing.department_id !== departmentId
+      ) {
+        toUpdate.push(existing);
+      } else {
+        skipped++;
+      }
       continue;
     }
     toInsert.push(email);
   }
 
   const wanted = toInsert.length + toRenew.length;
-  if (wanted === 0) {
+  if (wanted === 0 && toUpdate.length === 0) {
     return { success: "Everyone on that list is already invited or a member." };
   }
 
@@ -138,6 +169,7 @@ export async function inviteMembers(
           org_id: session.org.id,
           email,
           role: role.data,
+          department_id: departmentId,
           invited_by: session.user.id,
           expires_at: expiresAt,
         }))
@@ -148,10 +180,12 @@ export async function inviteMembers(
   }
 
   for (const invite of toRenew) {
+    // Renewal re-stamps role AND department — the new batch's intent wins.
     await admin
       .from("org_invites")
       .update({
         role: role.data,
+        department_id: departmentId,
         invited_by: session.user.id,
         expires_at: expiresAt,
       })
@@ -160,21 +194,40 @@ export async function inviteMembers(
       .is("revoked_at", null);
   }
 
+  for (const invite of toUpdate) {
+    // Same intent-wins rule for LIVE invites, without touching expires_at —
+    // the seat is already held, so this is a correction, not a renewal.
+    await admin
+      .from("org_invites")
+      .update({
+        role: role.data,
+        department_id: departmentId,
+        invited_by: session.user.id,
+      })
+      .eq("id", invite.id)
+      .is("accepted_at", null)
+      .is("revoked_at", null);
+  }
+
   // Two concurrent admins can both pass the pre-check; there is no
   // transaction here, so re-count AFTER the insert and roll our rows back if
-  // the org went over (SPEC §4, belt and braces).
-  const after = await getOrgSeatUsage(session.org, now);
-  if (after.members + after.pendingInvites > after.seatLimit) {
-    if (inserted.length > 0) {
-      await admin
-        .from("org_invites")
-        .delete()
-        .in(
-          "id",
-          inserted.map((i) => i.id)
-        );
+  // the org went over (SPEC §4, belt and braces). Skipped for an update-only
+  // batch: it took no seats, so an over-cap org (seat_limit lowered) must
+  // not fail a harmless correction.
+  if (wanted > 0) {
+    const after = await getOrgSeatUsage(session.org, now);
+    if (after.members + after.pendingInvites > after.seatLimit) {
+      if (inserted.length > 0) {
+        await admin
+          .from("org_invites")
+          .delete()
+          .in(
+            "id",
+            inserted.map((i) => i.id)
+          );
+      }
+      return { error: "Someone else just used those seats — try again." };
     }
-    return { error: "Someone else just used those seats — try again." };
   }
 
   // Brand-new addresses get the Supabase auth invite email (account +
@@ -197,7 +250,9 @@ export async function inviteMembers(
     {
       emails: [...toInsert, ...toRenew.map((i) => i.email)],
       role: role.data,
+      departmentId,
       renewed: toRenew.length,
+      updated: toUpdate.length,
       emailed,
       skipped,
     },
@@ -206,11 +261,14 @@ export async function inviteMembers(
 
   revalidateMembers();
   const total = inserted.length + toRenew.length;
-  return {
-    success: `Invited ${total} ${total === 1 ? "person" : "people"}.${
-      skipped > 0 ? ` ${skipped} already invited or member.` : ""
-    }`,
-  };
+  const parts = [
+    total > 0 ? `Invited ${total} ${total === 1 ? "person" : "people"}.` : null,
+    toUpdate.length > 0
+      ? `Updated ${toUpdate.length} pending invite${toUpdate.length === 1 ? "" : "s"}.`
+      : null,
+    skipped > 0 ? `${skipped} already invited or member.` : null,
+  ].filter(Boolean);
+  return { success: parts.join(" ") };
 }
 
 export async function revokeInvite(

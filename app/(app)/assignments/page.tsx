@@ -15,7 +15,11 @@ export default async function AssignmentsPage() {
   const membership = await getOrgMembership(user.id);
   if (!membership) redirect("/dashboard");
 
-  const assignments = await assignmentsForMember(membership.org.id, user.id);
+  const assignments = await assignmentsForMember(
+    membership.org.id,
+    user.id,
+    membership.membership
+  );
 
   const items: AssignmentListItem[] = assignments.map((row) => ({
     id: row.assignment.id,
@@ -23,11 +27,16 @@ export default async function AssignmentsPage() {
     description: row.assignment.description,
     dueAt: row.assignment.due_at,
     numQuestions: row.assignment.config.num_questions,
-    durationMin: Math.round(row.assignment.config.duration_sec / 60),
+    mode: row.assignment.config.mode ?? "exam",
+    durationMin:
+      row.assignment.config.duration_sec !== undefined
+        ? Math.round(row.assignment.config.duration_sec / 60)
+        : null,
     status: row.status,
     latestTestId: row.latestTestId,
     latestScore: row.latestScore,
     latestTotal: row.latestTotal,
+    completedMode: row.completedMode,
   }));
 
   return (

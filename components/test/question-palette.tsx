@@ -7,6 +7,11 @@ export type PaletteEntry = {
   index: number;
   answered: boolean;
   flagged: boolean;
+  /** Tutor mode: the graded outcome once revealed. Exam callers omit it —
+   * mid-exam correctness must never be renderable, even here. */
+  revealState?: "correct" | "incorrect" | null;
+  /** Tutor missed-only filter: visually recede without losing the button. */
+  dimmed?: boolean;
 };
 
 export function QuestionPalette({
@@ -20,6 +25,7 @@ export function QuestionPalette({
 }) {
   const answered = entries.filter((e) => e.answered).length;
   const flagged = entries.filter((e) => e.flagged).length;
+  const graded = entries.some((e) => e.revealState != null);
 
   return (
     <div className="space-y-4">
@@ -45,16 +51,27 @@ export function QuestionPalette({
               type="button"
               onClick={() => onJump(entry.index)}
               aria-label={`Question ${entry.index + 1}${
-                entry.answered ? ", answered" : ", not answered"
+                entry.revealState === "correct"
+                  ? ", correct"
+                  : entry.revealState === "incorrect"
+                    ? ", incorrect"
+                    : entry.answered
+                      ? ", answered"
+                      : ", not answered"
               }${entry.flagged ? ", flagged" : ""}`}
               aria-current={isCurrent ? "true" : undefined}
               className={cn(
                 "relative flex aspect-square items-center justify-center rounded-lg border text-sm font-medium tabular-nums transition-colors",
                 "focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
                 isCurrent && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-                entry.answered
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/50"
+                entry.revealState === "correct"
+                  ? "border-success bg-success text-success-foreground"
+                  : entry.revealState === "incorrect"
+                    ? "border-destructive bg-destructive text-destructive-foreground"
+                    : entry.answered
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-muted-foreground hover:border-primary/50",
+                entry.dimmed && "opacity-35"
               )}
             >
               {entry.index + 1}
@@ -72,17 +89,42 @@ export function QuestionPalette({
       </div>
 
       <dl className="space-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span className="size-3 rounded-sm bg-primary" aria-hidden="true" />
-          <dt>Answered</dt>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="size-3 rounded-sm border border-border bg-card"
-            aria-hidden="true"
-          />
-          <dt>Not answered</dt>
-        </div>
+        {graded ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="size-3 rounded-sm bg-success" aria-hidden="true" />
+              <dt>Correct</dt>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="size-3 rounded-sm bg-destructive"
+                aria-hidden="true"
+              />
+              <dt>Incorrect</dt>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="size-3 rounded-sm border border-border bg-card"
+                aria-hidden="true"
+              />
+              <dt>Not answered</dt>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="size-3 rounded-sm bg-primary" aria-hidden="true" />
+              <dt>Answered</dt>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="size-3 rounded-sm border border-border bg-card"
+                aria-hidden="true"
+              />
+              <dt>Not answered</dt>
+            </div>
+          </>
+        )}
       </dl>
     </div>
   );

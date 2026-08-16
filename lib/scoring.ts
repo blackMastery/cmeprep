@@ -94,6 +94,30 @@ export function scoreTest(
 }
 
 /**
+ * Tutor-mode scoring: identical per-question grading, but the percentage is
+ * correct/ANSWERED rather than correct/total. Tutor sessions may be finished
+ * with unanswered questions ("Finish — blanks don't count"), so blanks must
+ * not drag the score down; completion is reported separately as
+ * answered/total. This is the ONE place that rule lives.
+ */
+export function scoreTutorTest(
+  questions: readonly {
+    questionId: string;
+    correctOptionIds: readonly string[];
+  }[],
+  answers: ReadonlyMap<string, readonly string[]>
+): TestScore {
+  const score = scoreTest(questions, answers);
+  return {
+    ...score,
+    percentage:
+      score.answered === 0
+        ? 0
+        : Math.round((score.correct / score.answered) * 1000) / 10,
+  };
+}
+
+/**
  * Consecutive-day streak ending today (or yesterday — a day in progress
  * shouldn't reset a streak until it is actually missed).
  *

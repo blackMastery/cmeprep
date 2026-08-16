@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   listAssignmentProgress,
+  listOrgDepartments,
   listOrgMembers,
   listOrgSubscriptions,
   requireOrgAdmin,
@@ -22,11 +23,12 @@ export default async function OrgAssignmentsPage() {
   // RLS narrows the catalogue to public + own bank; the entitlement filter
   // below narrows further to what the org's per-exam plan actually covers —
   // offering an unentitled exam would only fail at the action.
-  const [tree, members, progress, orgSubs] = await Promise.all([
+  const [tree, members, progress, orgSubs, departments] = await Promise.all([
     listExamCatalogTree(),
     listOrgMembers(session.org.id),
     listAssignmentProgress(session.org.id),
     listOrgSubscriptions(session.org.id),
+    listOrgDepartments(session.org.id),
   ]);
   const orgAccess = orgAccessOf(
     {
@@ -66,20 +68,38 @@ export default async function OrgAssignmentsPage() {
   }));
 
   const rows: AssignmentRow[] = progress.map(
-    ({ assignment, targeted, completed, late }) => ({
+    ({
+      assignment,
+      targeted,
+      completed,
+      late,
+      completedTutor,
+      departmentName,
+    }) => ({
       id: assignment.id,
       title: assignment.title,
       dueAt: assignment.due_at,
       audience: assignment.audience,
       numQuestions: assignment.config.num_questions,
-      durationMin: Math.round(assignment.config.duration_sec / 60),
+      mode: assignment.config.mode ?? "exam",
+      durationMin:
+        assignment.config.duration_sec !== undefined
+          ? Math.round(assignment.config.duration_sec / 60)
+          : null,
       targeted,
       completed,
       late,
+      completedTutor,
+      departmentName,
     })
   );
 
   return (
-    <AssignmentsManager exams={exams} members={memberOptions} rows={rows} />
+    <AssignmentsManager
+      exams={exams}
+      members={memberOptions}
+      departments={departments.map((d) => ({ id: d.id, name: d.name }))}
+      rows={rows}
+    />
   );
 }

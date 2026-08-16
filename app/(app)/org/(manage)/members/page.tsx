@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   getOrgSeatUsage,
+  listOrgDepartments,
   listOrgInvites,
   listOrgMembers,
   requireOrgAdmin,
@@ -8,6 +9,7 @@ import {
 import { isInvitePending } from "@/lib/orgs-core";
 import { absoluteUrl } from "@/lib/site";
 import { Progress } from "@/components/ui/progress";
+import { DepartmentsCard } from "@/components/org/departments-card";
 import {
   MembersManager,
   type InviteItem,
@@ -20,11 +22,14 @@ export default async function OrgMembersPage() {
   const session = await requireOrgAdmin();
   const now = new Date();
 
-  const [members, invites, usage] = await Promise.all([
+  const [members, invites, usage, departments] = await Promise.all([
     listOrgMembers(session.org.id),
     listOrgInvites(session.org.id),
     getOrgSeatUsage(session.org, now),
+    listOrgDepartments(session.org.id),
   ]);
+
+  const departmentName = new Map(departments.map((d) => [d.id, d.name]));
 
   const memberItems: MemberItem[] = members.map((row) => ({
     userId: row.member.user_id,
@@ -32,6 +37,7 @@ export default async function OrgMembersPage() {
     email: row.email,
     role: row.member.role,
     joinedAt: row.member.joined_at,
+    departmentId: row.member.department_id,
   }));
 
   const inviteItems: InviteItem[] = invites.map((invite) => ({
@@ -40,6 +46,15 @@ export default async function OrgMembersPage() {
     role: invite.role,
     expiresAt: invite.expires_at,
     pending: isInvitePending(invite, now),
+    departmentName: invite.department_id
+      ? (departmentName.get(invite.department_id) ?? null)
+      : null,
+  }));
+
+  const departmentItems = departments.map((d) => ({
+    id: d.id,
+    name: d.name,
+    memberCount: members.filter((m) => m.member.department_id === d.id).length,
   }));
 
   const used = usage.members + usage.pendingInvites;
@@ -65,9 +80,12 @@ export default async function OrgMembersPage() {
         </p>
       </section>
 
+      <DepartmentsCard departments={departmentItems} />
+
       <MembersManager
         members={memberItems}
         invites={inviteItems}
+        departments={departments.map((d) => ({ id: d.id, name: d.name }))}
         currentUserId={session.user.id}
         joinBaseUrl={absoluteUrl("/org/join/")}
       />

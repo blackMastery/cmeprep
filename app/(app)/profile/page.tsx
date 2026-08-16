@@ -4,9 +4,15 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { listExamCatalog } from "@/lib/catalog";
-import { getOrgMembership } from "@/lib/orgs";
+import { getOrgDepartment, getOrgMembership } from "@/lib/orgs";
 import type { Subscription } from "@/lib/supabase/types";
 import { OrgUpsellCard } from "@/components/org/org-upsell-card";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { IdentityCard } from "@/components/profile/identity-card";
 import { PlanCard } from "@/components/profile/plan-card";
@@ -34,6 +40,13 @@ export default async function ProfilePage() {
       getOrgMembership(user.id),
     ]);
   const subscriptions = (subs ?? []) as Subscription[];
+  const memberDepartment =
+    membership && membership.membership.department_id
+      ? await getOrgDepartment(
+          membership.org.id,
+          membership.membership.department_id
+        )
+      : null;
   const examNames = Object.fromEntries(
     catalog.map((exam) => [exam.id, exam.name])
   );
@@ -86,6 +99,19 @@ export default async function ProfilePage() {
             subscriptions={subscriptions}
             examNames={examNames}
           />
+          {/* Read-only: departments are assigned by org admins. */}
+          {membership && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Organisation</CardTitle>
+                <CardDescription>
+                  {memberDepartment
+                    ? `${memberDepartment.name} · ${membership.org.name}`
+                    : membership.org.name}
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
           {/* One org per account — only pitch founding one to the org-less. */}
           {!membership && <OrgUpsellCard />}
         </div>

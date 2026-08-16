@@ -42,14 +42,27 @@ export async function PATCH(
   const admin = createAdminClient();
 
   // Only accept answers for questions that actually belong to this test.
-  const { data: links } = await admin
-    .from("test_questions")
-    .select("question_id")
-    .eq("test_id", id);
+  const [{ data: links }, revealedRes] = await Promise.all([
+    admin.from("test_questions").select("question_id").eq("test_id", id),
+    // Tutor mode only — exam rows can never be revealed, so exam autosaves
+    // (the hottest write path) skip the extra query. Best-effort filter: the
+    // rare reveal landing between this read and the upsert can still clobber
+    // the staged selection, but never revealed_at (not in `rows`), and both
+    // resume (getTakeState) and finalize treat the attempts row as the
+    // graded truth for revealed questions, so the stale write is inert.
+    test.mode === "tutor"
+      ? admin
+          .from("test_answers")
+          .select("question_id")
+          .eq("test_id", id)
+          .not("revealed_at", "is", null)
+      : Promise.resolve({ data: null }),
+  ]);
   const allowed = new Set((links ?? []).map((l) => l.question_id));
+  const locked = new Set((revealedRes.data ?? []).map((r) => r.question_id));
 
   const rows = parsed.data.answers
-    .filter((a) => allowed.has(a.questionId))
+    .filter((a) => allowed.has(a.questionId) && !locked.has(a.questionId))
     .map((a) => ({
       test_id: id,
       question_id: a.questionId,

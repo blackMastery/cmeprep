@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { createTestSchema, uuid } from "@/lib/validation";
+import { createTestSchema, testModeSchema, uuid } from "@/lib/validation";
 import { examAccessFrom } from "@/lib/entitlements";
 import { canAccessExam, consumesTrialCredit } from "@/lib/entitlements-core";
+import { countsTowardDeptAssignment } from "@/lib/orgs-core";
 import { shuffle } from "@/lib/scoring";
 import type { OrgAssignment, TestConfig } from "@/lib/supabase/types";
 
 /**
- * POST /api/tests — create a timed test.
+ * POST /api/tests — create a test: a timed exam or an untimed tutor session.
  *
  * Server-authoritative: picks the questions, freezes the option order, sets
- * expires_at, and consumes a trial credit atomically. The response contains
- * no correctness data.
+ * expires_at (exam mode only — tutor sessions never expire), and consumes a
+ * trial credit atomically. The response contains no correctness data.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -49,12 +50,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
     }
 
-    // Addressed to this member? Membership + (all | targeted). Late starts
-    // are allowed — a late completion beats none, and it is flagged.
+    // Addressed to this member? Membership + (all | targeted | department
+    // cohort). Late starts are allowed — a late completion beats none, and
+    // it is flagged.
     const [{ data: membership }, { data: target }] = await Promise.all([
       admin
         .from("org_members")
-        .select("org_id")
+        .select("org_id, department_id, department_changed_at")
         .eq("user_id", user.id)
         .eq("org_id", assignment.org_id)
         .maybeSingle(),
@@ -65,9 +67,33 @@ export async function POST(request: Request) {
         .eq("user_id", user.id)
         .maybeSingle(),
     ]);
-    if (!membership || (assignment.audience === "selected" && !target)) {
+    const addressed =
+      membership !== null &&
+      (assignment.audience === "all" ||
+        (assignment.audience === "selected" && target !== null) ||
+        (assignment.audience === "department" &&
+          countsTowardDeptAssignment(membership, assignment)));
+    if (!addressed) {
       return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
     }
+  }
+
+  // The member may launch an assignment in the other mode ("do this mock as
+  // practice") — completions still count, labeled with the mode actually used.
+  let modeOverride: "exam" | "tutor" | null = null;
+  if (
+    assignment &&
+    typeof body === "object" &&
+    body !== null &&
+    "mode" in body
+  ) {
+    const override = testModeSchema.safeParse(
+      (body as Record<string, unknown>).mode
+    );
+    if (!override.success) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    modeOverride = override.data;
   }
 
   const parsed = assignment ? null : createTestSchema.safeParse(body);
@@ -78,18 +104,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const { examId, subjectIds, difficulty, numQuestions, durationMin } =
+  const { examId, subjectIds, difficulty, numQuestions, durationMin, mode } =
     assignment
       ? {
           examId: assignment.config.exam_id ?? "",
           subjectIds: assignment.config.subject_ids,
           difficulty: assignment.config.difficulty,
           numQuestions: assignment.config.num_questions,
-          durationMin: Math.round(assignment.config.duration_sec / 60),
+          // Tutor prescriptions carry no duration; if the member overrides
+          // one INTO exam mode, default to a minute per question so the
+          // override never dies for lack of a timer setting.
+          durationMin: Math.round(
+            (assignment.config.duration_sec ??
+              assignment.config.num_questions * 60) / 60
+          ),
+          mode: modeOverride ?? assignment.config.mode ?? ("exam" as const),
         }
       : parsed!.data;
   if (!examId) {
     return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
+  }
+  // createTestSchema guarantees this pair for wizard requests; assignments
+  // get the fallback above. Belt-and-braces so exam inserts can never trip
+  // the tests_expires_at_by_mode CHECK with a null deadline.
+  if (mode === "exam" && durationMin === undefined) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
   // ── Entitlement: a paid plan buys ONE exam. This is the hard block — the
@@ -234,21 +273,30 @@ export async function POST(request: Request) {
     optionsByQuestion.set(opt.question_id, list);
   }
 
+  // config.mode is deliberately NOT set here — tests.mode (the column) is
+  // the single source of truth on test rows; config.mode exists only as an
+  // assignment prescription input.
   const config: TestConfig = {
     subject_ids: subjectIds,
     difficulty,
     num_questions: picked.length,
-    duration_sec: durationMin * 60,
+    ...(mode === "exam" ? { duration_sec: durationMin! * 60 } : {}),
     exam_id: examId,
   };
 
-  const expiresAt = new Date(Date.now() + durationMin * 60_000).toISOString();
+  // Tutor sessions are untimed and resumable indefinitely (CHECK-constrained
+  // to a null deadline).
+  const expiresAt =
+    mode === "exam"
+      ? new Date(Date.now() + durationMin! * 60_000).toISOString()
+      : null;
 
   const { data: test, error: testError } = await admin
     .from("tests")
     .insert({
       user_id: user.id,
       status: "in_progress",
+      mode,
       config,
       expires_at: expiresAt,
       total_questions: picked.length,

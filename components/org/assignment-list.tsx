@@ -15,11 +15,16 @@ export type AssignmentListItem = {
   description: string | null;
   dueAt: string;
   numQuestions: number;
-  durationMin: number;
+  /** The org's prescribed mode; the member may start in the other one. */
+  mode: "exam" | "tutor";
+  /** Null exactly when mode='tutor' — tutor prescriptions are untimed. */
+  durationMin: number | null;
   status: AssignmentStatus;
   latestTestId: string | null;
   latestScore: number | null;
   latestTotal: number | null;
+  /** Mode the qualifying completion was actually done in. */
+  completedMode: "exam" | "tutor" | null;
 };
 
 const STATUS_LABEL: Record<AssignmentStatus, string> = {
@@ -54,26 +59,35 @@ function StatusBadge({ status }: { status: AssignmentStatus }) {
   );
 }
 
-/** Launches the prescribed test — the server ignores everything but the id. */
+/**
+ * Launches the prescribed test. The config always comes from the server-side
+ * prescription; `mode` is the one member choice — doing an exam assignment
+ * as tutor practice (or vice versa) still counts, labeled with the mode used.
+ */
 function StartButton({
   assignmentId,
   label,
+  prescribedMode,
 }: {
   assignmentId: string;
   label: string;
+  prescribedMode: "exam" | "tutor";
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function start() {
+  async function start(mode?: "exam" | "tutor") {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/tests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignmentId }),
+        body: JSON.stringify({
+          assignmentId,
+          ...(mode !== undefined ? { mode } : {}),
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -90,9 +104,21 @@ function StartButton({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button onClick={start} disabled={busy} aria-busy={busy}>
+      <Button onClick={() => start()} disabled={busy} aria-busy={busy}>
         {busy ? "Starting…" : label}
       </Button>
+      <button
+        type="button"
+        onClick={() =>
+          start(prescribedMode === "tutor" ? "exam" : "tutor")
+        }
+        disabled={busy}
+        className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+      >
+        {prescribedMode === "tutor"
+          ? "or take it as a timed exam"
+          : "or practise it in tutor mode"}
+      </button>
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}
@@ -136,12 +162,22 @@ export function AssignmentList({ items }: { items: AssignmentListItem[] }) {
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <CalendarClock className="size-3.5" aria-hidden="true" />
                   Due {longDate(item.dueAt)} · {item.numQuestions} questions ·{" "}
-                  {item.durationMin} min
+                  {item.mode === "tutor"
+                    ? "tutor mode"
+                    : `${item.durationMin} min`}
                   {item.latestScore !== null && item.latestTotal !== null && (
                     <span className="tabular-nums">
                       · latest {item.latestScore}/{item.latestTotal}
                     </span>
                   )}
+                  {/* Overrides count, labeled — say how it was actually done. */}
+                  {item.completedMode !== null &&
+                    item.completedMode !== item.mode && (
+                      <span>
+                        · done in{" "}
+                        {item.completedMode === "tutor" ? "tutor" : "exam"} mode
+                      </span>
+                    )}
                 </p>
               </div>
 
@@ -159,12 +195,17 @@ export function AssignmentList({ items }: { items: AssignmentListItem[] }) {
                       </Link>
                     </Button>
                   )}
-                  <StartButton assignmentId={item.id} label="Retake" />
+                  <StartButton
+                    assignmentId={item.id}
+                    label="Retake"
+                    prescribedMode={item.mode}
+                  />
                 </div>
               ) : (
                 <StartButton
                   assignmentId={item.id}
                   label={item.status === "overdue" ? "Start late" : "Start"}
+                  prescribedMode={item.mode}
                 />
               )}
             </CardContent>

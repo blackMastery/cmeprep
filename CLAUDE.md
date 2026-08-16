@@ -90,13 +90,20 @@ and does the DB/network work. Put business rules in the core module so vitest
 can cover them, and keep each rule stated exactly once — the cores cross-import
 rather than restate (e.g. entitlements defers to `isEffectivelyActive`).
 
-### Correctness never reaches the browser mid-test
+### Correctness never reaches the browser mid-exam
 
 `question_options` is revoked from client roles; students read
-`question_options_public` (no `is_correct`). Only `lib/tests.ts` and
-`lib/results.ts` read correctness, and results/review refuse to serve it while
-a test is `in_progress`. `lib/scoring.ts` must not be imported by a Client
-Component. Multi-correct scoring is all-or-nothing in v1.
+`question_options_public` (no `is_correct`). Only `lib/tests.ts`,
+`lib/results.ts` and the tutor reveal route
+(`app/api/tests/[id]/reveal/route.ts`) read correctness, and results/review
+refuse to serve it while a test is `in_progress`. The ONE sanctioned mid-test
+exception is **tutor mode** (SPEC §16): the reveal route grades and locks one
+answer at a time, and `getTakeState` re-serves reveal data for
+already-revealed questions of a tutor test — both are gated on
+`mode === 'tutor'`, and those gates are the security boundary. Exam-mode
+tests must never be served correctness while in progress. `lib/scoring.ts`
+must not be imported by a Client Component. Multi-correct scoring is
+all-or-nothing in v1.
 
 ### Timing
 

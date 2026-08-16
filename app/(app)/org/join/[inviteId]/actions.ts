@@ -62,11 +62,38 @@ export async function acceptInvite(
     };
   }
 
-  const { error: memberError } = await admin.from("org_members").insert({
+  // The invite's department rides onto the membership. A department deleted
+  // BEFORE our read already nulled invite.department_id (FK SET NULL); one
+  // deleted between read and insert violates the FK — retry once without it,
+  // landing the member unassigned rather than failing the join. The retry is
+  // keyed to the department FK specifically so an unrelated 23503 (org or
+  // profile row gone) still surfaces as the failure it is.
+  const FK_VIOLATION = "23503";
+  const membershipRow = (departmentId: string | null) => ({
     org_id: invite.org_id,
     user_id: user.id,
     role: invite.role,
+    department_id: departmentId,
+    department_changed_at: departmentId ? new Date().toISOString() : null,
   });
+  // What the member actually received — the audit row must record this, not
+  // the invite's pre-retry intent.
+  let grantedDepartmentId = invite.department_id;
+  let { error: memberError } = await admin
+    .from("org_members")
+    .insert(membershipRow(invite.department_id));
+  if (
+    memberError?.code === FK_VIOLATION &&
+    invite.department_id !== null &&
+    `${memberError.message} ${memberError.details ?? ""}`.includes(
+      "department_id"
+    )
+  ) {
+    grantedDepartmentId = null;
+    ({ error: memberError } = await admin
+      .from("org_members")
+      .insert(membershipRow(null)));
+  }
   if (memberError) {
     // The unique constraints already said no — either a double-click (now a
     // member of this org: fine) or a race with joining another org.
@@ -88,7 +115,7 @@ export async function acceptInvite(
     user.id,
     "org.member_join",
     user.id,
-    { inviteId: invite.id, role: invite.role },
+    { inviteId: invite.id, role: invite.role, departmentId: grantedDepartmentId },
     invite.org_id
   );
 

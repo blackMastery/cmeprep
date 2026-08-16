@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Flame, Plus, Target, TrendingUp } from "lucide-react";
 import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getLifetimeStats } from "@/lib/stats";
+import { getLifetimeStats, getOwnReadiness } from "@/lib/stats";
 import { firstName } from "@/lib/names";
 import {
   canAccessExam,
@@ -13,6 +13,7 @@ import {
 import { orgGrantContextFrom } from "@/lib/entitlements";
 import {
   assignmentsForMember,
+  getOrgDepartment,
   getOrgMembership,
   pendingInviteForEmail,
 } from "@/lib/orgs";
@@ -20,6 +21,7 @@ import { OrgInviteBanner } from "@/components/org/org-invite-banner";
 import { OrgUpsellCard } from "@/components/org/org-upsell-card";
 import { MemberAccessBanner } from "@/components/org/org-access-banners";
 import { AssignmentsCard } from "@/components/dashboard/assignments-card";
+import { ReadinessCard } from "@/components/dashboard/readiness-card";
 import { daysUntil } from "@/lib/subscriptions-core";
 import { orgGraceEnd, orgSubscriptionState } from "@/lib/orgs-core";
 import { listExamCatalog } from "@/lib/catalog";
@@ -40,7 +42,7 @@ export default async function DashboardPage() {
   // One shared lifetime-stats read (also used by /profile) plus three page
   // queries; RLS scopes everything to this user automatically.
   const [
-    { stats: userStats, streak },
+    { stats: userStats, examStats, tutorStats, streak },
     { data: subjects },
     { data: tests },
     { data: subs },
@@ -72,11 +74,26 @@ export default async function DashboardPage() {
   const subscriptions = (subs ?? []) as SubscriptionScope[];
   const greetingName = firstName(user.profile.full_name);
 
-  // Sequential on purpose: both reads depend on membership existing at all,
+  // Sequential on purpose: these reads depend on membership existing at all,
   // and non-members (the common case) skip them entirely.
   const membership = orgCtx ? await getOrgMembership(user.id) : null;
-  const memberAssignments = membership
-    ? await assignmentsForMember(membership.org.id, user.id)
+  const [memberAssignments, memberDepartment, ownReadiness] = membership
+    ? await Promise.all([
+        assignmentsForMember(membership.org.id, user.id, membership.membership),
+        membership.membership.department_id
+          ? getOrgDepartment(
+              membership.org.id,
+              membership.membership.department_id
+            )
+          : null,
+        getOwnReadiness(user.id),
+      ])
+    : [null, null, null];
+  // "Cardiology · Springfield General" — the read-only department label.
+  const orgLabel = membership
+    ? memberDepartment
+      ? `${memberDepartment.name} · ${membership.org.name}`
+      : membership.org.name
     : null;
 
   // null = all exams (trial, admin, an all-access row, or an org comp) — the
@@ -171,9 +188,14 @@ export default async function DashboardPage() {
             userStats?.attempted ? `${Math.round(userStats.accuracy_pct)}%` : "—"
           }
           hint={
-            userStats?.attempted
-              ? `${userStats.correct} of ${userStats.attempted} correct`
-              : "Take a test to see this"
+            // Instant-feedback tutor accuracy isn't comparable to timed exam
+            // accuracy, so once both modes have data the split replaces the
+            // plain count. The headline number stays combined.
+            examStats && tutorStats
+              ? `Exam ${Math.round(examStats.accuracy_pct)}% · Tutor ${Math.round(tutorStats.accuracy_pct)}%`
+              : userStats?.attempted
+                ? `${userStats.correct} of ${userStats.attempted} correct`
+                : "Take a test to see this"
           }
         />
         <StatCard
@@ -190,10 +212,11 @@ export default async function DashboardPage() {
           <PastTests tests={(tests ?? []) as Test[]} />
         </div>
         <div className="space-y-6">
+          {ownReadiness && <ReadinessCard own={ownReadiness} />}
           {membership && memberAssignments && (
             <AssignmentsCard
               assignments={memberAssignments}
-              orgName={membership.org.name}
+              orgName={orgLabel ?? membership.org.name}
             />
           )}
           <WeakAreas subjects={(subjects ?? []) as SubjectAccuracy[]} />

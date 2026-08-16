@@ -174,9 +174,11 @@ const SUPPORT_TERMS: Feature[] = [
 ];
 
 const RISK_SIGNALS = [
-  "Practice accuracy trending below the pass threshold",
-  "Weak subjects left unattempted close to exam day",
-  "Mock-exam scores falling behind the cohort",
+  "A 0–100 readiness score per member, per exam — explainable, never a black box",
+  "Timed mock results weighted above untimed practice accuracy",
+  "Accuracy trend, subject coverage and study cadence over the last 8 weeks",
+  "Set your sitting date and watch the countdown frame who needs help now",
+  "One-click CSV export for reporting upward",
 ];
 
 function FeatureGrid({
@@ -298,12 +300,13 @@ export default function TeamsPage() {
         <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:py-20 lg:grid-cols-2 lg:gap-16">
           <div>
             <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              See who&apos;s at risk — before exam day
+              Know who&apos;s ready — before exam day
             </h2>
             <p className="mt-3 text-lg text-muted-foreground">
-              Risk flagging surfaces staff whose practice performance suggests
-              they&apos;re likely to struggle on the real exam, while there&apos;s
-              still time to intervene.
+              Exam readiness scores every member from their real practice —
+              accuracy against your pass mark, trend, coverage and cadence —
+              and flags who&apos;s likely to struggle while there&apos;s still
+              time to intervene.
             </p>
 
             <ul className="mt-8 space-y-3">

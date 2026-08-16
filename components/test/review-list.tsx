@@ -9,6 +9,7 @@ import { QuestionImage } from "@/components/test/question-image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnswerOption, type AnswerState } from "@/components/test/answer-option";
+import { ExplanationStrip } from "@/components/test/explanation-strip";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
 import { QuestionNoteEditor } from "@/components/question-note-editor";
 
@@ -187,15 +188,7 @@ function ReviewCard({
           })}
         </div>
 
-        {/* Explanation strip — matches the marketing page's sample card */}
-        <div className="rounded-xl border-l-2 border-primary bg-secondary/60 px-4 py-3.5">
-          <p className="mb-1 text-xs font-semibold tracking-wide text-primary uppercase">
-            Explanation
-          </p>
-          <p className="text-sm leading-relaxed text-foreground/90">
-            {question.explanation}
-          </p>
-        </div>
+        <ExplanationStrip explanation={question.explanation} />
 
         <QuestionNoteEditor
           questionId={question.questionId}

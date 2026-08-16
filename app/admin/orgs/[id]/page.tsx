@@ -107,6 +107,11 @@ export default async function AdminOrgDetailPage(
           name: row.profile?.full_name ?? null,
           email: row.email,
           role: row.member.role,
+          departmentName: row.member.department_id
+            ? (detail.departments.find(
+                (d) => d.id === row.member.department_id
+              )?.name ?? null)
+            : null,
         }))}
         invites={detail.invites.map((invite) => ({
           id: invite.id,
@@ -114,6 +119,7 @@ export default async function AdminOrgDetailPage(
           role: invite.role,
           expiresAt: invite.expires_at,
         }))}
+        departmentCount={detail.departments.length}
       />
 
       {detail.payments.length > 0 && (

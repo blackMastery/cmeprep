@@ -72,6 +72,12 @@ export type AuditAction =
   | "org.member_join"
   | "org.member_remove"
   | "org.member_role_change"
+  | "org.member_department_change"
+  // Departments are hard-deleted (they are labels, not content), so the
+  // delete row's meta carries the name — the only record left of it.
+  | "org.department_create"
+  | "org.department_rename"
+  | "org.department_delete"
   // Org lifecycle + billing (SPEC §5/§11). org_subscription.create covers
   // BOTH grant paths — meta.via says whether PayPal or an admin did it.
   | "org.create"

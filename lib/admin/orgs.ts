@@ -6,6 +6,7 @@ import type { OrgSubscriptionState } from "@/lib/orgs-core";
 import { uuid } from "@/lib/validation";
 import type {
   Org,
+  OrgDepartment,
   OrgInvite,
   OrgMember,
   OrgSubscription,
@@ -90,6 +91,8 @@ export async function listOrgsForAdmin(): Promise<AdminOrgRow[]> {
 export type AdminOrgDetail = {
   org: Org;
   members: { member: OrgMember; profile: Profile | null; email: string | null }[];
+  /** Read-only here — department CRUD is org-side only. */
+  departments: OrgDepartment[];
   invites: OrgInvite[];
   subscriptions: OrgSubscription[];
   payments: Payment[];
@@ -114,6 +117,7 @@ export async function getOrgDetailForAdmin(
 
   const [
     { data: members },
+    { data: departments },
     { data: invites },
     { data: subs },
     { data: payments },
@@ -125,6 +129,11 @@ export async function getOrgDetailForAdmin(
       .select("*")
       .eq("org_id", id)
       .order("joined_at", { ascending: true }),
+    admin
+      .from("org_departments")
+      .select("*")
+      .eq("org_id", id)
+      .order("name", { ascending: true }),
     admin
       .from("org_invites")
       .select("*")
@@ -178,6 +187,7 @@ export async function getOrgDetailForAdmin(
       profile: profileById.get(member.user_id) ?? null,
       email: emailById.get(member.user_id) ?? null,
     })),
+    departments: (departments ?? []) as OrgDepartment[],
     invites: (invites ?? []) as OrgInvite[],
     subscriptions,
     payments: (payments ?? []) as Payment[],

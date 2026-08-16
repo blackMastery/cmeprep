@@ -20,13 +20,12 @@ import { AnswerOption } from "@/components/test/answer-option";
 import { QuestionPalette } from "@/components/test/question-palette";
 import { TestTimer } from "@/components/test/test-timer";
 import { SubmitDialog } from "@/components/test/submit-dialog";
-import { AutosaveIndicator, type SaveState } from "@/components/test/autosave-indicator";
+import { AutosaveIndicator } from "@/components/test/autosave-indicator";
+import { useAnswerAutosave } from "@/components/test/use-answer-autosave";
 
 const LETTERS = "ABCDEFGH".split("");
-const AUTOSAVE_DEBOUNCE_MS = 800;
 
-type LocalAnswer = { selected: string[]; flagged: boolean };
-
+/** The timed exam runner. Tutor sessions render TutorRunner instead. */
 export function TestRunner({ state }: { state: TakeState }) {
   const router = useRouter();
   const { test, questions } = state;
@@ -38,37 +37,20 @@ export function TestRunner({ state }: { state: TakeState }) {
     return firstUnanswered === -1 ? 0 : firstUnanswered;
   });
 
-  const [answers, setAnswers] = useState<Map<string, LocalAnswer>>(() => {
-    const initial = new Map<string, LocalAnswer>();
-    for (const q of questions) {
-      initial.set(q.questionId, {
-        selected: q.selectedOptionIds,
-        flagged: q.flagged,
-      });
-    }
-    return initial;
-  });
+  const {
+    answers,
+    setAnswers,
+    saveState,
+    scheduleSave,
+    flush,
+    cancelPendingFlush,
+    timeSpent,
+  } = useAnswerAutosave(test.id, questions);
 
-  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [submitting, setSubmitting] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const dirtyRef = useRef<Set<string>>(new Set());
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const questionEnteredAt = useRef<number>(0);
-  const timeSpent = useRef<Map<string, number>>(new Map());
-
-  // The debounced flush runs ~800ms after a click, but a callback closed over
-  // `answers` would serialize the value from the render that scheduled it —
-  // i.e. always one interaction stale, silently dropping the user's most
-  // recent answer or flag. Reading through a ref at flush time fixes that.
-  // Synced in an effect (not during render) so concurrent rendering stays safe;
-  // the commit lands long before the debounce fires.
-  const answersRef = useRef(answers);
-  useEffect(() => {
-    answersRef.current = answers;
-  }, [answers]);
 
   const current = questions[index];
 
@@ -85,91 +67,7 @@ export function TestRunner({ state }: { state: TakeState }) {
       );
       spent.set(questionId, (spent.get(questionId) ?? 0) + elapsed);
     };
-  }, [current]);
-
-  const buildPayload = useCallback(
-    (ids: string[]) => ({
-      answers: ids.flatMap((questionId) => {
-        const answer = answersRef.current.get(questionId);
-        if (!answer) return [];
-        return [
-          {
-            questionId,
-            selectedOptionIds: answer.selected,
-            flagged: answer.flagged,
-            timeSpentSec: timeSpent.current.get(questionId) ?? 0,
-          },
-        ];
-      }),
-    }),
-    []
-  );
-
-  const flush = useCallback(async () => {
-    const ids = [...dirtyRef.current];
-    if (ids.length === 0) return;
-    dirtyRef.current.clear();
-
-    const payload = buildPayload(ids);
-    if (payload.answers.length === 0) return;
-
-    setSaveState("saving");
-    try {
-      const res = await fetch(`/api/tests/${test.id}/answers`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      setSaveState("saved");
-
-      // Fade the confirmation back out; cleared on unmount below.
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = setTimeout(
-        () => setSaveState((s) => (s === "saved" ? "idle" : s)),
-        2500
-      );
-    } catch {
-      // Put them back so the next tick retries.
-      ids.forEach((id) => dirtyRef.current.add(id));
-      setSaveState("error");
-    }
-  }, [buildPayload, test.id]);
-
-  const scheduleSave = useCallback(
-    (questionId: string) => {
-      dirtyRef.current.add(questionId);
-      setSaveState("saving");
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(flush, AUTOSAVE_DEBOUNCE_MS);
-    },
-    [flush]
-  );
-
-  // Don't leave timers running after the test screen goes away.
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    };
-  }, []);
-
-  // ── Flush pending work when the page goes away (tab close, phone lock).
-  useEffect(() => {
-    const onHide = () => {
-      const ids = [...dirtyRef.current];
-      if (ids.length === 0) return;
-      const payload = buildPayload(ids);
-      if (payload.answers.length === 0) return;
-      // sendBeacon survives unload where fetch may not.
-      navigator.sendBeacon?.(
-        `/api/tests/${test.id}/answers?beacon=1`,
-        new Blob([JSON.stringify(payload)], { type: "application/json" })
-      );
-    };
-    document.addEventListener("pagehide", onHide);
-    return () => document.removeEventListener("pagehide", onHide);
-  }, [buildPayload, test.id]);
+  }, [current, timeSpent]);
 
   const select = useCallback(
     (optionId: string) => {
@@ -193,7 +91,7 @@ export function TestRunner({ state }: { state: TakeState }) {
 
       scheduleSave(current.questionId);
     },
-    [current, scheduleSave]
+    [current, scheduleSave, setAnswers]
   );
 
   const toggleFlag = useCallback(() => {
@@ -211,7 +109,7 @@ export function TestRunner({ state }: { state: TakeState }) {
       return next;
     });
     scheduleSave(current.questionId);
-  }, [current, scheduleSave]);
+  }, [current, scheduleSave, setAnswers]);
 
   const go = useCallback(
     (nextIndex: number) => {
@@ -223,7 +121,7 @@ export function TestRunner({ state }: { state: TakeState }) {
 
   const submit = useCallback(async () => {
     setSubmitting(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
+    cancelPendingFlush();
     await flush();
     try {
       const res = await fetch(`/api/tests/${test.id}/submit`, {
@@ -234,7 +132,7 @@ export function TestRunner({ state }: { state: TakeState }) {
       // Fall through: the results page finalizes an expired test anyway.
     }
     router.replace(`/tests/${test.id}/results`);
-  }, [flush, router, test.id]);
+  }, [cancelPendingFlush, flush, router, test.id]);
 
   const handleExpire = useCallback(() => {
     if (!submitting) void submit();
@@ -305,11 +203,16 @@ export function TestRunner({ state }: { state: TakeState }) {
           <AutosaveIndicator state={saveState} />
 
           <div className="ml-auto flex items-center gap-2">
-            <TestTimer
-              expiresAt={test.expires_at}
-              serverNow={state.serverNow}
-              onExpire={handleExpire}
-            />
+            {/* Exam tests always have a deadline (CHECK-constrained); tutor
+                sessions never reach this runner — take/page.tsx routes them
+                to TutorRunner. */}
+            {test.expires_at !== null && (
+              <TestTimer
+                expiresAt={test.expires_at}
+                serverNow={state.serverNow}
+                onExpire={handleExpire}
+              />
+            )}
 
             {/* Palette as a sheet on mobile */}
             <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>

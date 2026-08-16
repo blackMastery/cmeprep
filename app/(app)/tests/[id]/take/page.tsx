@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { finalizeIfExpired, getTakeState, getTestForUser } from "@/lib/tests";
 import { TestRunner } from "@/components/test/test-runner";
+import { TutorRunner } from "@/components/test/tutor-runner";
 
 export const metadata: Metadata = { title: "Test in progress" };
 
@@ -16,7 +18,8 @@ export default async function TakeTestPage(
   if (!existing) notFound();
 
   // If the deadline passed while the user was away, score it now and send
-  // them to results instead of handing back a live-looking test.
+  // them to results instead of handing back a live-looking test. (No-op for
+  // tutor sessions — they have no deadline.)
   const test = await finalizeIfExpired(existing, user.id);
   if (test.status !== "in_progress") {
     redirect(`/tests/${id}/results`);
@@ -25,5 +28,37 @@ export default async function TakeTestPage(
   const state = await getTakeState(id, user.id);
   if (!state) notFound();
 
-  return <TestRunner state={state} />;
+  if (state.test.mode !== "tutor") {
+    return <TestRunner state={state} />;
+  }
+
+  // Tutor sessions surface bookmark + note editing at reveal time, so the
+  // runner needs the learner's existing rows up front (RLS-scoped, same
+  // pattern as the review page).
+  const questionIds = state.questions.map((q) => q.questionId);
+  const idFilter = questionIds.length > 0 ? questionIds : [""];
+  const supabase = await createClient();
+  const [{ data: bookmarkRows }, { data: noteRows }] = await Promise.all([
+    supabase
+      .from("bookmarks")
+      .select("question_id")
+      .eq("user_id", user.id)
+      .in("question_id", idFilter),
+    supabase
+      .from("notes")
+      .select("question_id, body")
+      .eq("user_id", user.id)
+      .in("question_id", idFilter),
+  ]);
+
+  const notesByQuestion: Record<string, string> = {};
+  for (const n of noteRows ?? []) notesByQuestion[n.question_id] = n.body;
+
+  return (
+    <TutorRunner
+      state={state}
+      initialBookmarkedIds={(bookmarkRows ?? []).map((b) => b.question_id)}
+      notesByQuestion={notesByQuestion}
+    />
+  );
 }

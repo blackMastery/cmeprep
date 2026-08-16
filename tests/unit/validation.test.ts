@@ -4,6 +4,10 @@ import {
   createTestSchema,
   emailSchema,
   fullNameSchema,
+  orgAssignmentSchema,
+  orgDepartmentNameSchema,
+  orgExamDateSchema,
+  sittingDateSchema,
   parseFeatureLines,
   parseInviteEmails,
   passwordSchema,
@@ -72,6 +76,47 @@ describe("createTestSchema", () => {
   it("rejects an unreasonable duration", () => {
     expect(
       createTestSchema.safeParse({ ...valid, durationMin: 1000 }).success
+    ).toBe(false);
+  });
+
+  it("defaults mode to exam", () => {
+    const result = createTestSchema.safeParse(valid);
+    expect(result.success && result.data.mode).toBe("exam");
+  });
+
+  it("requires a duration for exam mode", () => {
+    expect(
+      createTestSchema.safeParse({ ...valid, durationMin: undefined }).success
+    ).toBe(false);
+    expect(
+      createTestSchema.safeParse({
+        ...valid,
+        mode: "exam",
+        durationMin: undefined,
+      }).success
+    ).toBe(false);
+  });
+
+  it("accepts tutor mode without a duration (untimed)", () => {
+    expect(
+      createTestSchema.safeParse({
+        ...valid,
+        mode: "tutor",
+        durationMin: undefined,
+      }).success
+    ).toBe(true);
+  });
+
+  it("tolerates a stray duration on a tutor request", () => {
+    // Ignored server-side; older clients must not be locked out for sending it.
+    expect(
+      createTestSchema.safeParse({ ...valid, mode: "tutor" }).success
+    ).toBe(true);
+  });
+
+  it("rejects an unknown mode", () => {
+    expect(
+      createTestSchema.safeParse({ ...valid, mode: "practice" }).success
     ).toBe(false);
   });
 });
@@ -343,6 +388,101 @@ describe("safeRedirectPath", () => {
 
   it("honours a custom fallback", () => {
     expect(safeRedirectPath("//evil.com", "/login")).toBe("/login");
+  });
+});
+
+describe("orgDepartmentNameSchema", () => {
+  it("trims and enforces the 2–80 bounds of the check constraint", () => {
+    expect(orgDepartmentNameSchema.parse("  ER  ")).toBe("ER");
+    expect(orgDepartmentNameSchema.safeParse("E").success).toBe(false);
+    expect(orgDepartmentNameSchema.safeParse("x".repeat(81)).success).toBe(false);
+    expect(orgDepartmentNameSchema.safeParse("x".repeat(80)).success).toBe(true);
+  });
+});
+
+describe("orgAssignmentSchema audiences", () => {
+  const base = {
+    title: "Weekly ER drill",
+    examId: SEED_EXAM,
+    subjectIds: [SEED_SUBJECT],
+    numQuestions: 10,
+    durationMin: 20,
+    dueDate: "2026-09-01",
+  };
+
+  it("accepts a department audience with and without an id", () => {
+    // The department-requires-id rule lives in the action, not the schema.
+    expect(
+      orgAssignmentSchema.safeParse({ ...base, audience: "department" }).success
+    ).toBe(true);
+    const parsed = orgAssignmentSchema.safeParse({
+      ...base,
+      audience: "department",
+      departmentId: V4,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.departmentId).toBe(V4);
+  });
+
+  it("rejects a malformed department id and unknown audiences", () => {
+    expect(
+      orgAssignmentSchema.safeParse({
+        ...base,
+        audience: "department",
+        departmentId: "not-a-uuid",
+      }).success
+    ).toBe(false);
+    expect(
+      orgAssignmentSchema.safeParse({ ...base, audience: "team" }).success
+    ).toBe(false);
+  });
+
+  it("defaults mode to exam and requires its duration", () => {
+    const parsed = orgAssignmentSchema.safeParse({ ...base, audience: "all" });
+    expect(parsed.success && parsed.data.mode).toBe("exam");
+    expect(
+      orgAssignmentSchema.safeParse({
+        ...base,
+        audience: "all",
+        durationMin: undefined,
+      }).success
+    ).toBe(false);
+  });
+
+  it("accepts a tutor prescription without a duration", () => {
+    expect(
+      orgAssignmentSchema.safeParse({
+        ...base,
+        audience: "all",
+        mode: "tutor",
+        durationMin: undefined,
+      }).success
+    ).toBe(true);
+  });
+});
+
+describe("sitting date schemas", () => {
+  it("accepts an ISO date and rejects other formats", () => {
+    expect(sittingDateSchema.safeParse("2027-03-01").success).toBe(true);
+    expect(sittingDateSchema.safeParse("03/01/2027").success).toBe(false);
+    expect(sittingDateSchema.safeParse("2027-3-1").success).toBe(false);
+    expect(sittingDateSchema.safeParse("").success).toBe(false);
+  });
+
+  it("rejects far-future and ancient dates", () => {
+    expect(sittingDateSchema.safeParse("2099-01-01").success).toBe(false);
+    expect(sittingDateSchema.safeParse("2019-12-31").success).toBe(false);
+  });
+
+  it("orgExamDateSchema allows null to clear the date", () => {
+    const parsed = orgExamDateSchema.safeParse({
+      examId: SEED_EXAM,
+      sittingOn: null,
+    });
+    expect(parsed.success && parsed.data.sittingOn).toBeNull();
+    expect(
+      orgExamDateSchema.safeParse({ examId: "nope", sittingOn: null }).success
+    ).toBe(false);
   });
 });
 

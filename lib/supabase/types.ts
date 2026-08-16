@@ -10,15 +10,24 @@ export type UserRole = "trial" | "student" | "admin";
 export type QuestionType = "mcq_single" | "mcq_multi" | "image_based";
 export type Difficulty = "easy" | "medium" | "hard";
 export type TestStatus = "in_progress" | "submitted" | "abandoned";
+/** text + check constraint in Postgres, NOT a pg enum (payments precedent). */
+export type TestMode = "exam" | "tutor";
 export type SubStatus = "active" | "expired" | "cancelled";
 
 export type TestConfig = {
   subject_ids: string[];
   difficulty: Difficulty | "mixed";
   num_questions: number;
-  duration_sec: number;
+  /** Absent on tutor tests — they are untimed. */
+  duration_sec?: number;
   /** Absent on tests created before the exam level existed. */
   exam_id?: string;
+  /**
+   * Assignment-prescription input ONLY (org_assignments.config): the launch
+   * route reads it as the org's default mode and never copies it onto the
+   * test row — tests.mode (the column) is the single source of truth there.
+   */
+  mode?: TestMode;
 };
 
 type Timestamps = { created_at: string };
@@ -94,12 +103,19 @@ export type Test = Timestamps & {
   id: string;
   user_id: string;
   status: TestStatus;
+  mode: TestMode;
   config: TestConfig;
   started_at: string;
-  expires_at: string;
+  /** Null exactly when mode='tutor' (CHECK-constrained) — tutor sessions
+   * never expire and stay resumable indefinitely. */
+  expires_at: string | null;
   submitted_at: string | null;
+  /** % of total_questions for exam mode; % of answered_questions for tutor. */
   score: number | null;
   total_questions: number;
+  /** Written at finalize (both modes); null while in progress / legacy rows.
+   * Completion % = answered_questions / total_questions. */
+  answered_questions: number | null;
   /** Launched from an org assignment; completion tracking keys off this. */
   assignment_id: string | null;
 };
@@ -117,6 +133,9 @@ export type TestAnswer = {
   selected_option_ids: string[];
   flagged: boolean;
   time_spent_sec: number;
+  /** Tutor only: set once by the reveal endpoint, never cleared. A revealed
+   * answer is locked — the answers PATCH skips these rows. */
+  revealed_at: string | null;
   updated_at: string;
 };
 
@@ -177,6 +196,58 @@ export type SubjectAccuracy = {
 export type UserDailyActivity = {
   user_id: string;
   day: string;
+};
+
+/** Exam vs tutor accuracy split; legacy null-test_id attempts count as exam. */
+export type UserModeStats = {
+  user_id: string;
+  mode: TestMode;
+  attempted: number;
+  correct: number;
+  accuracy_pct: number;
+};
+
+/* Readiness views (20260817000001): callers MUST filter on the GROUP BY
+ * columns — an unfiltered select aggregates the whole attempts table. */
+
+/** Per-user per-exam ISO-week (Mon, America/Guyana) accuracy split by mode. */
+export type UserExamWeeklyModeAccuracy = {
+  user_id: string;
+  exam_id: string;
+  /** date (YYYY-MM-DD), Monday of the ISO week in America/Guyana. */
+  week_start: string;
+  mode: TestMode;
+  attempts: number;
+  correct: number;
+  time_spent_sec: number;
+  /** Attempts that carried a non-null time_spent_sec (pacing denominator). */
+  timed_attempts: number;
+};
+
+/** Per-user per-exam ISO-week distinct active days (deduped across modes). */
+export type UserExamWeeklyActivity = {
+  user_id: string;
+  exam_id: string;
+  week_start: string;
+  active_days: number;
+};
+
+/** Per-user per-exam all-time totals + last active day. */
+export type UserExamStats = {
+  user_id: string;
+  exam_id: string;
+  attempts: number;
+  correct: number;
+  /** date (YYYY-MM-DD) in America/Guyana. */
+  last_active_day: string;
+};
+
+/** Every subject of an exam with its published question count. */
+export type ExamSubjectCounts = {
+  exam_id: string;
+  subject_id: string;
+  subject_name: string;
+  question_count: number;
 };
 
 /** Published, non-deleted questions per subject — the buyer-facing count. */
@@ -305,11 +376,25 @@ export type Org = Timestamps & {
   updated_at: string | null;
 };
 
+/** Department/team label within an org. One per member in v1; deletes are
+ * HARD (FKs SET NULL) — a null reference means "unassigned". */
+export type OrgDepartment = {
+  id: string;
+  org_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type OrgMember = {
   org_id: string;
   user_id: string;
   role: OrgMemberRole;
   joined_at: string;
+  department_id: string | null;
+  /** When the CURRENT department_id was assigned — the completion-cohort
+   * input (lib/orgs-core.ts). Meaningful only while department_id is set. */
+  department_changed_at: string | null;
 };
 
 export type OrgInvite = {
@@ -319,6 +404,8 @@ export type OrgInvite = {
   email: string;
   role: OrgMemberRole;
   invited_by: string | null;
+  /** Copied onto the membership at accept; null = join unassigned. */
+  department_id: string | null;
   created_at: string;
   expires_at: string;
   accepted_at: string | null;
@@ -346,7 +433,7 @@ export type OrgSubscription = Timestamps & {
   updated_at: string | null;
 };
 
-export type OrgAssignmentAudience = "all" | "selected";
+export type OrgAssignmentAudience = "all" | "selected" | "department";
 
 /** A prescribed test config + due date (SPEC §7). */
 export type OrgAssignment = {
@@ -358,6 +445,9 @@ export type OrgAssignment = {
   config: TestConfig;
   due_at: string;
   audience: OrgAssignmentAudience;
+  /** Set only when audience='department'. Null in that audience means the
+   * department was hard-deleted — the assignment reaches nobody. */
+  department_id: string | null;
   created_by: string | null;
   created_at: string;
   deleted_at: string | null;
@@ -366,6 +456,16 @@ export type OrgAssignment = {
 export type OrgAssignmentTarget = {
   assignment_id: string;
   user_id: string;
+};
+
+/** Optional sitting date per org per entitled exam. FRAMING ONLY — drives
+ * days-remaining copy and sort priority, never the readiness score/bands. */
+export type OrgExamDate = {
+  org_id: string;
+  exam_id: string;
+  /** date (YYYY-MM-DD) */
+  sitting_on: string;
+  updated_at: string;
 };
 
 /** Which storefront sells the plan; the two never mix in one checkout. */
@@ -439,17 +539,24 @@ export type Database = {
       plans: Table<Plan>;
       contact_messages: Table<ContactMessage>;
       orgs: Table<Org>;
+      org_departments: Table<OrgDepartment>;
       org_members: Table<OrgMember>;
       org_invites: Table<OrgInvite>;
       org_subscriptions: Table<OrgSubscription>;
       org_assignments: Table<OrgAssignment>;
       org_assignment_targets: Table<OrgAssignmentTarget>;
+      org_exam_dates: Table<OrgExamDate>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;
       user_stats: View<UserStats>;
       subject_accuracy: View<SubjectAccuracy>;
       user_daily_activity: View<UserDailyActivity>;
+      user_mode_stats: View<UserModeStats>;
+      user_exam_weekly_mode_accuracy: View<UserExamWeeklyModeAccuracy>;
+      user_exam_weekly_activity: View<UserExamWeeklyActivity>;
+      user_exam_stats: View<UserExamStats>;
+      exam_subject_counts: View<ExamSubjectCounts>;
       user_emails: View<UserEmail>;
       subject_question_counts: View<SubjectQuestionCount>;
     };
@@ -458,6 +565,7 @@ export type Database = {
       is_org_member: { Args: { org: string }; Returns: boolean };
       is_org_admin: { Args: { org: string }; Returns: boolean };
       is_assignment_target: { Args: { assignment: string }; Returns: boolean };
+      is_department_member: { Args: { dept: string }; Returns: boolean };
       assignment_org: { Args: { assignment: string }; Returns: string | null };
       exam_is_visible: { Args: { exam: string }; Returns: boolean };
       specialty_is_visible: { Args: { specialty: string }; Returns: boolean };

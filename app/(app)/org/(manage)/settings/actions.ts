@@ -9,7 +9,8 @@ import {
   extensionForType,
   ORG_BRANDING_BUCKET,
 } from "@/lib/storage";
-import { orgNameSchema } from "@/lib/validation";
+import { orgExamDateSchema, orgNameSchema } from "@/lib/validation";
+import { listOrgEntitledExams } from "@/lib/orgs";
 import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
 
 /** requireOrgAdmin() first, outside try/catch — house rule. */
@@ -73,6 +74,62 @@ export async function updateOrgSettings(
   );
   revalidateSettings();
   return { success: "Settings saved." };
+}
+
+/**
+ * Set or clear one entitled exam's sitting date (SPEC §8 v2). The date is
+ * FRAMING only — readiness copy and sort priority — never a score input.
+ */
+export async function updateOrgExamDate(
+  _prev: OrgActionState,
+  formData: FormData
+): Promise<OrgActionState> {
+  const session = await requireOrgAdmin();
+
+  const parsed = orgExamDateSchema.safeParse({
+    examId: formData.get("examId"),
+    // "" = clear — mapped to null BEFORE parsing, per the coerce convention.
+    sittingOn: formData.get("sittingOn") || null,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const { examId, sittingOn } = parsed.data;
+
+  // An org must not pin dates on exams it doesn't hold.
+  const entitled = await listOrgEntitledExams(session.org);
+  const exam = entitled.find((e) => e.id === examId);
+  if (!exam) return { error: "Unknown examination." };
+
+  const admin = createAdminClient();
+  const { error } =
+    sittingOn === null
+      ? await admin
+          .from("org_exam_dates")
+          .delete()
+          .eq("org_id", session.org.id)
+          .eq("exam_id", examId)
+      : await admin.from("org_exam_dates").upsert(
+          {
+            org_id: session.org.id,
+            exam_id: examId,
+            sitting_on: sittingOn,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "org_id,exam_id" }
+        );
+  if (error) return { error: "Could not save the sitting date." };
+
+  await audit(
+    session.user.id,
+    "org.update",
+    session.org.id,
+    { examDate: { examId, before: exam.sittingOn, after: sittingOn } },
+    session.org.id
+  );
+  revalidatePath("/org/settings");
+  revalidatePath("/org");
+  return {
+    success: sittingOn === null ? "Sitting date cleared." : "Sitting date saved.",
+  };
 }
 
 /**

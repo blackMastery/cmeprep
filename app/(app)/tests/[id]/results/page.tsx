@@ -29,31 +29,51 @@ export default async function ResultsPage(
   }
 
   const results = await getTestResults(test, user.id);
+  const tutor = test.mode === "tutor";
   const percentage = Math.round(Number(test.score ?? 0));
-  const wrongCount = results.total - results.correct;
+  // Tutor score is correct/answered, so "wrong" must use the same base —
+  // skipped questions were never graded.
+  const wrongCount = tutor
+    ? results.answered - results.correct
+    : results.total - results.correct;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:py-14">
       {/* Hero score */}
       <div className="text-center">
         <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-          Your score
+          {tutor ? "Tutor session score" : "Your score"}
         </p>
         <p className="mt-2 font-display text-7xl font-semibold tracking-tight text-primary tabular-nums sm:text-8xl">
           {percentage}
           <span className="text-4xl sm:text-5xl">%</span>
         </p>
-        <p className="mt-3 text-muted-foreground">
-          <span className="font-semibold text-foreground">
-            {results.correct}
-          </span>{" "}
-          of {results.total} correct
-          {results.answered < results.total && (
-            <> · {results.total - results.answered} left blank</>
-          )}
-          {" · "}
-          {formatDuration(results.durationSec)} taken
-        </p>
+        {tutor ? (
+          // Untimed and blanks-don't-count: completion replaces duration.
+          <p className="mt-3 text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              {results.correct}
+            </span>{" "}
+            of {results.answered} answered correct
+            {" · "}
+            {results.answered} of {results.total} questions checked
+            {results.answered < results.total && (
+              <> · {results.total - results.answered} skipped</>
+            )}
+          </p>
+        ) : (
+          <p className="mt-3 text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              {results.correct}
+            </span>{" "}
+            of {results.total} correct
+            {results.answered < results.total && (
+              <> · {results.total - results.answered} left blank</>
+            )}
+            {" · "}
+            {formatDuration(results.durationSec)} taken
+          </p>
+        )}
       </div>
 
       <EcgDivider className="my-8" />
@@ -95,9 +115,24 @@ export default async function ResultsPage(
 
       <TrialResultsUpsell profile={user.profile} />
 
+      {/* Tutor sessions already showed every explanation inline, so the
+          dashboard is the primary next step and review the secondary one. */}
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-        {wrongCount > 0 ? (
+        {tutor && (
           <Button size="xl" className="flex-1" asChild>
+            <Link href="/dashboard">
+              <LayoutDashboard data-icon="inline-start" />
+              Back to dashboard
+            </Link>
+          </Button>
+        )}
+        {wrongCount > 0 ? (
+          <Button
+            size="xl"
+            variant={tutor ? "outline" : "default"}
+            className="flex-1"
+            asChild
+          >
             <Link href={`/tests/${id}/review?filter=wrong`}>
               Review {wrongCount} wrong{" "}
               {wrongCount === 1 ? "answer" : "answers"}
@@ -105,19 +140,26 @@ export default async function ResultsPage(
             </Link>
           </Button>
         ) : (
-          <Button size="xl" className="flex-1" asChild>
+          <Button
+            size="xl"
+            variant={tutor ? "outline" : "default"}
+            className="flex-1"
+            asChild
+          >
             <Link href={`/tests/${id}/review`}>
               Review all answers
               <ArrowRight data-icon="inline-end" />
             </Link>
           </Button>
         )}
-        <Button size="xl" variant="outline" className="flex-1" asChild>
-          <Link href="/dashboard">
-            <LayoutDashboard data-icon="inline-start" />
-            Back to dashboard
-          </Link>
-        </Button>
+        {!tutor && (
+          <Button size="xl" variant="outline" className="flex-1" asChild>
+            <Link href="/dashboard">
+              <LayoutDashboard data-icon="inline-start" />
+              Back to dashboard
+            </Link>
+          </Button>
+        )}
       </div>
     </div>
   );

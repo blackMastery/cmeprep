@@ -8,15 +8,43 @@ export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 // (fixed-value seed ids, UUIDv7, etc). Match the database's definition.
 export const uuid = () => z.guid();
 
-export const createTestSchema = z.object({
-  examId: uuid(),
-  subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
-  difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
-  numQuestions: z.number().int().min(5).max(100),
-  durationMin: z.number().int().min(5).max(240),
-});
+export const TEST_MODES = ["exam", "tutor"] as const;
+export const testModeSchema = z.enum(TEST_MODES);
+
+export const createTestSchema = z
+  .object({
+    examId: uuid(),
+    subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
+    difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
+    numQuestions: z.number().int().min(5).max(100),
+    mode: testModeSchema.default("exam"),
+    // Required for exam mode (superRefine); tutor sessions are untimed —
+    // a stray durationMin on a tutor request is accepted and ignored, so an
+    // older client can't be locked out by sending it.
+    durationMin: z.number().int().min(5).max(240).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.mode === "exam" && v.durationMin === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["durationMin"],
+        message: "Pick a time limit",
+      });
+    }
+  });
 
 export type CreateTestInput = z.infer<typeof createTestSchema>;
+
+/**
+ * POST /api/tests/[id]/reveal — tutor mode's "commit this answer" call.
+ * Carries the selection itself so grading never depends on the autosave
+ * PATCH having landed first.
+ */
+export const revealAnswerSchema = z.object({
+  questionId: uuid(),
+  selectedOptionIds: z.array(uuid()).min(1, "Select an answer").max(10),
+  timeSpentSec: z.number().int().min(0).max(86_400).optional(),
+});
 
 export const saveAnswerSchema = z.object({
   questionId: uuid(),
@@ -309,6 +337,13 @@ export const orgNameSchema = z
   .min(2, "Enter your organisation's name")
   .max(120, "Keep the name under 120 characters");
 
+/** Bounds mirror the org_departments name check constraint (2–80). */
+export const orgDepartmentNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Give the department a name")
+  .max(80, "Keep the name under 80 characters");
+
 /**
  * Org checkout: like the personal schema, the exam is MANDATORY — an org
  * buys one public exam per checkout; all-access grants are admin-only.
@@ -323,24 +358,41 @@ export const createOrgPaypalOrderSchema = z.object({
  * An assignment prescribes a full test config (same bounds as
  * createTestSchema) plus a title, a due date and an audience.
  */
-export const orgAssignmentSchema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(2, "Give the assignment a title")
-    .max(140, "Keep the title under 140 characters"),
-  description: z.string().trim().max(2000, "Too long").default(""),
-  examId: uuid(),
-  subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
-  difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
-  numQuestions: z.coerce.number().int().min(5).max(100),
-  durationMin: z.coerce.number().int().min(5).max(240),
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a due date"),
-  audience: z.enum(["all", "selected"]),
-  targetIds: z.array(uuid()).default([]),
-});
+export const orgAssignmentSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(2, "Give the assignment a title")
+      .max(140, "Keep the title under 140 characters"),
+    description: z.string().trim().max(2000, "Too long").default(""),
+    examId: uuid(),
+    subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
+    difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
+    numQuestions: z.coerce.number().int().min(5).max(100),
+    mode: testModeSchema.default("exam"),
+    // Required for exam mode, absent for tutor (untimed). NOTE z.coerce turns
+    // "" into 0 — the action must map "" → undefined BEFORE parsing, per the
+    // trialsLimitSchema convention above.
+    durationMin: z.coerce.number().int().min(5).max(240).optional(),
+    dueDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a due date"),
+    audience: z.enum(["all", "selected", "department"]),
+    targetIds: z.array(uuid()).default([]),
+    // Required exactly when audience='department' — that rule lives in the
+    // action, like the selected-requires-targets check.
+    departmentId: uuid().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.mode === "exam" && v.durationMin === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["durationMin"],
+        message: "Pick a time limit",
+      });
+    }
+  });
 
 /**
  * The invite textarea: addresses separated by whitespace, commas or
@@ -375,3 +427,22 @@ export const fullNameSchema = z
   .trim()
   .min(2, "Enter your full name")
   .max(120, "That name is too long");
+
+/**
+ * An org's exam sitting date (<input type="date"> value). Bounded to three
+ * years out — a typo'd year would otherwise frame readiness against a
+ * sitting a decade away.
+ */
+export const sittingDateSchema = z.iso
+  .date("Pick a valid date")
+  .refine((d) => {
+    const t = Date.parse(`${d}T00:00:00Z`);
+    const max = Date.now() + 3 * 365 * 86_400_000;
+    return t >= Date.parse("2020-01-01") && t <= max;
+  }, "That date looks wrong — sittings can be at most 3 years out");
+
+/** null = clear the sitting date. Actions map "" → null BEFORE parsing. */
+export const orgExamDateSchema = z.object({
+  examId: uuid(),
+  sittingOn: sittingDateSchema.nullable(),
+});

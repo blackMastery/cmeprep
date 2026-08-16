@@ -32,7 +32,9 @@ const STATUS_BADGE: Record<
 /**
  * Full-history table. A past-deadline test can still read `in_progress`
  * here — it displays as stored, and opening it runs finalizeIfExpired on
- * the take/results pages, which fixes the row (existing behavior).
+ * the take/results pages, which fixes the row (existing behavior). Tutor
+ * rows show "In progress" indefinitely by design: untimed sessions never
+ * expire and stay resumable forever.
  */
 export function HistoryTable({ tests }: { tests: Test[] }) {
   return (
@@ -62,6 +64,11 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {test.total_questions}
+                    {test.mode === "tutor" && (
+                      <Badge variant="secondary" className="ml-2">
+                        Tutor
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {score == null ? (
@@ -74,6 +81,14 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                         )}
                       >
                         {score}%
+                        {/* Tutor scores are % of answered; show the base. */}
+                        {test.mode === "tutor" &&
+                          test.answered_questions != null && (
+                            <span className="ml-1.5 font-normal text-muted-foreground">
+                              · {test.answered_questions}/{test.total_questions}{" "}
+                              answered
+                            </span>
+                          )}
                       </span>
                     )}
                   </TableCell>

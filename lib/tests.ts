@@ -1,7 +1,12 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { correctOptionsInTest, scoreTest } from "@/lib/scoring";
+import {
+  correctOptionsInTest,
+  isSelectionCorrect,
+  scoreTest,
+  scoreTutorTest,
+} from "@/lib/scoring";
 import type {
   Difficulty,
   QuestionType,
@@ -11,6 +16,13 @@ import type {
 
 /** Network grace so a submit fired at 00:00 isn't rejected in flight. */
 export const SUBMIT_GRACE_SEC = 30;
+
+/** Per-question feedback served ONLY for revealed questions of a tutor test. */
+export type TakeReveal = {
+  isCorrect: boolean;
+  correctOptionIds: string[];
+  explanation: string;
+};
 
 export type TakeQuestion = {
   questionId: string;
@@ -24,6 +36,10 @@ export type TakeQuestion = {
   options: { id: string; label: string }[];
   selectedOptionIds: string[];
   flagged: boolean;
+  /** Tutor only: set once the reveal endpoint graded and locked the answer.
+   * MUST stay null for exam-mode tests so a client can never render
+   * correctness mid-exam even by accident. */
+  reveal: TakeReveal | null;
 };
 
 export type TakeState = {
@@ -58,7 +74,9 @@ export async function getTestForUser(
 
 /**
  * Everything the take screen needs. Deliberately omits `is_correct` —
- * this payload is safe to send to an in-progress client.
+ * this payload is safe to send to an in-progress client. The ONE sanctioned
+ * exception is loadRevealData below: questions of a TUTOR test whose answer
+ * the reveal endpoint has already graded and locked.
  */
 export async function getTakeState(
   testId: string,
@@ -93,7 +111,7 @@ export async function getTakeState(
         .in("question_id", questionIds),
       admin
         .from("test_answers")
-        .select("question_id, selected_option_ids, flagged")
+        .select("question_id, selected_option_ids, flagged, revealed_at")
         .eq("test_id", testId),
     ]);
 
@@ -107,11 +125,14 @@ export async function getTakeState(
     (answers ?? []).map((a) => [a.question_id, a])
   );
 
+  const revealByQuestion = await loadRevealData(admin, test, links, answers ?? []);
+
   const take: TakeQuestion[] = links.flatMap((link) => {
     const q = questionById.get(link.question_id);
     if (!q) return [];
 
     const answer = answerByQuestion.get(link.question_id);
+    const reveal = revealByQuestion.get(link.question_id);
 
     return [
       {
@@ -126,8 +147,19 @@ export async function getTakeState(
           const opt = optionById.get(id);
           return opt ? [{ id: opt.id, label: opt.label }] : [];
         }),
-        selectedOptionIds: answer?.selected_option_ids ?? [],
+        // For revealed questions the attempts row is the graded truth — a
+        // stale autosave racing the reveal may have clobbered the staged
+        // selection, but it can never touch the attempt.
+        selectedOptionIds:
+          reveal?.selectedOptionIds ?? answer?.selected_option_ids ?? [],
         flagged: answer?.flagged ?? false,
+        reveal: reveal
+          ? {
+              isCorrect: reveal.isCorrect,
+              correctOptionIds: reveal.correctOptionIds,
+              explanation: reveal.explanation,
+            }
+          : null,
       },
     ];
   });
@@ -135,7 +167,104 @@ export async function getTakeState(
   return { test, questions: take, serverNow: new Date().toISOString() };
 }
 
+/**
+ * The ONE sanctioned exception to "correctness never reaches an in-progress
+ * client": a TUTOR-mode question whose answer the reveal endpoint has graded
+ * and locked (revealed_at set). Resume must re-open those questions in their
+ * explanation state. The mode gate on the first line is a security boundary —
+ * exam tests must always get an empty map.
+ */
+async function loadRevealData(
+  admin: ReturnType<typeof createAdminClient>,
+  test: Test,
+  links: { question_id: string; option_order: string[] }[],
+  answers: {
+    question_id: string;
+    selected_option_ids: string[];
+    revealed_at: string | null;
+  }[]
+): Promise<
+  Map<string, TakeReveal & { selectedOptionIds: string[] | undefined }>
+> {
+  const revealed = new Map<
+    string,
+    TakeReveal & { selectedOptionIds: string[] | undefined }
+  >();
+  if (test.mode !== "tutor") return revealed;
+
+  const revealedRows = answers.filter((a) => a.revealed_at !== null);
+  const revealedIds = revealedRows.map((a) => a.question_id);
+  if (revealedIds.length === 0) return revealed;
+  const stagedSelection = new Map(
+    revealedRows.map((a) => [a.question_id, a.selected_option_ids])
+  );
+
+  const [{ data: attempts }, { data: questions }, { data: correctOptions }] =
+    await Promise.all([
+      admin
+        .from("attempts")
+        .select("question_id, selected_option_ids, is_correct")
+        .eq("test_id", test.id)
+        .in("question_id", revealedIds),
+      admin
+        .from("questions")
+        .select("id, explanation")
+        .in("id", revealedIds),
+      admin
+        .from("question_options")
+        .select("id, question_id")
+        .in("question_id", revealedIds)
+        .eq("is_correct", true),
+    ]);
+
+  const attemptByQuestion = new Map(
+    (attempts ?? []).map((a) => [a.question_id, a])
+  );
+  const explanationById = new Map(
+    (questions ?? []).map((q) => [q.id, q.explanation as string])
+  );
+  const correctByQuestion = new Map<string, string[]>();
+  for (const opt of correctOptions ?? []) {
+    const list = correctByQuestion.get(opt.question_id) ?? [];
+    list.push(opt.id);
+    correctByQuestion.set(opt.question_id, list);
+  }
+  const frozenByQuestion = new Map(
+    links.map((l) => [l.question_id, l.option_order])
+  );
+
+  for (const questionId of revealedIds) {
+    // Same frozen-paper restriction as scoring — see correctOptionsInTest.
+    const correctOptionIds = correctOptionsInTest(
+      correctByQuestion.get(questionId) ?? [],
+      frozenByQuestion.get(questionId) ?? []
+    );
+    // The attempt row can be missing if the reveal crashed between locking
+    // and writing it (tutor finalize heals that). Grade the locked staged
+    // selection rather than defaulting to incorrect — otherwise resume
+    // paints a genuinely correct answer as "Incorrect" while rendering its
+    // options all-green, and disagrees with the healed final score.
+    const attempt = attemptByQuestion.get(questionId);
+    revealed.set(questionId, {
+      isCorrect:
+        attempt?.is_correct ??
+        isSelectionCorrect(
+          stagedSelection.get(questionId) ?? [],
+          correctOptionIds
+        ),
+      correctOptionIds,
+      explanation: explanationById.get(questionId) ?? "",
+      selectedOptionIds: attempt?.selected_option_ids,
+    });
+  }
+
+  return revealed;
+}
+
 export function isExpired(test: Test, graceSec = 0): boolean {
+  // Tutor sessions (expires_at null, CHECK-constrained) never expire — this
+  // is what keeps finalizeIfExpired a no-op for them on every read path.
+  if (test.expires_at === null) return false;
   return Date.now() > new Date(test.expires_at).getTime() + graceSec * 1000;
 }
 
@@ -155,17 +284,35 @@ export async function finalizeTest(
   if (!test) return null;
   if (test.status !== "in_progress") return test;
 
-  const [{ data: links }, { data: staged }] = await Promise.all([
-    // option_order is needed, not just question_id — see correctOptionsInTest.
-    admin
-      .from("test_questions")
-      .select("question_id, option_order")
-      .eq("test_id", testId),
-    admin
-      .from("test_answers")
-      .select("question_id, selected_option_ids, time_spent_sec")
-      .eq("test_id", testId),
-  ]);
+  const tutor = test.mode === "tutor";
+
+  const [{ data: links }, { data: allStaged }, { data: revealAttempts }] =
+    await Promise.all([
+      // option_order is needed, not just question_id — see correctOptionsInTest.
+      admin
+        .from("test_questions")
+        .select("question_id, option_order")
+        .eq("test_id", testId),
+      admin
+        .from("test_answers")
+        .select("question_id, selected_option_ids, time_spent_sec, revealed_at")
+        .eq("test_id", testId),
+      tutor
+        ? admin
+            .from("attempts")
+            .select("question_id, selected_option_ids")
+            .eq("test_id", testId)
+        : Promise.resolve({ data: null }),
+    ]);
+
+  // Tutor: only REVEALED answers exist as far as scoring is concerned. An
+  // unrevealed staged row is an in-flight multi-select the user never
+  // committed — it must not be graded, and (unlike exam mode) no attempts
+  // row may be written for it or for blanks: phantom wrong answers would
+  // poison accuracy, weak areas and streaks.
+  const staged = tutor
+    ? (allStaged ?? []).filter((a) => a.revealed_at !== null)
+    : (allStaged ?? []);
 
   const questionIds = (links ?? []).map((l) => l.question_id);
   const frozenByQuestion = new Map<string, string[]>(
@@ -186,34 +333,54 @@ export async function finalizeTest(
     correctByQuestion.set(opt.question_id, list);
   }
 
+  // Tutor: the reveal-time attempts row is the graded truth for a revealed
+  // question — a stale autosave racing the reveal can clobber the STAGED
+  // selection (revealed_at intact), and grading that here would overwrite
+  // the verdict the user was shown mid-session. Staged is only the fallback
+  // for a reveal that crashed between its lock and its attempts write.
+  const attemptSelection = new Map<string, string[]>(
+    (revealAttempts ?? []).map((a) => [a.question_id, a.selected_option_ids])
+  );
   const answers = new Map<string, string[]>(
-    (staged ?? []).map((a) => [a.question_id, a.selected_option_ids])
+    staged.map((a) => [
+      a.question_id,
+      (tutor ? attemptSelection.get(a.question_id) : undefined) ??
+        a.selected_option_ids,
+    ])
   );
   const timeByQuestion = new Map<string, number>(
-    (staged ?? []).map((a) => [a.question_id, a.time_spent_sec ?? 0])
+    staged.map((a) => [a.question_id, a.time_spent_sec ?? 0])
   );
 
-  const result = scoreTest(
-    questionIds.map((id) => ({
-      questionId: id,
-      // Score against the paper the student actually sat, not the question as
-      // it looks now — an admin may have edited it since.
-      correctOptionIds: correctOptionsInTest(
-        correctByQuestion.get(id) ?? [],
-        frozenByQuestion.get(id) ?? []
-      ),
-    })),
-    answers
-  );
-
-  const attemptRows = result.questions.map((q) => ({
-    test_id: testId,
-    user_id: userId,
-    question_id: q.questionId,
-    selected_option_ids: q.selectedOptionIds,
-    is_correct: q.isCorrect,
-    time_spent_sec: timeByQuestion.get(q.questionId) ?? null,
+  const scoreQuestions = questionIds.map((id) => ({
+    questionId: id,
+    // Score against the paper the student actually sat, not the question as
+    // it looks now — an admin may have edited it since.
+    correctOptionIds: correctOptionsInTest(
+      correctByQuestion.get(id) ?? [],
+      frozenByQuestion.get(id) ?? []
+    ),
   }));
+
+  // Tutor score is correct/answered — blanks are allowed at Finish and must
+  // not count against the user (completion is tracked separately).
+  const result = tutor
+    ? scoreTutorTest(scoreQuestions, answers)
+    : scoreTest(scoreQuestions, answers);
+
+  const attemptRows = result.questions
+    // Tutor: attempts for revealed questions only (see `staged` above). The
+    // reveal endpoint already wrote these rows; this deterministic re-upsert
+    // is a no-op that also heals a reveal that crashed before its write.
+    .filter((q) => !tutor || q.answered)
+    .map((q) => ({
+      test_id: testId,
+      user_id: userId,
+      question_id: q.questionId,
+      selected_option_ids: q.selectedOptionIds,
+      is_correct: q.isCorrect,
+      time_spent_sec: timeByQuestion.get(q.questionId) ?? null,
+    }));
 
   // Write the immutable answer log FIRST. If this fails the test must stay
   // in_progress rather than becoming a submitted test with no analytics
@@ -236,6 +403,7 @@ export async function finalizeTest(
     .update({
       status,
       score: result.percentage,
+      answered_questions: result.answered,
       submitted_at: new Date().toISOString(),
     })
     .eq("id", testId)

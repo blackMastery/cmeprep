@@ -29,6 +29,23 @@ const DIFFICULTIES = [
   { value: "hard", label: "Hard" },
 ] as const;
 
+const MODES = [
+  {
+    value: "tutor",
+    label: "Tutor mode",
+    description:
+      "Untimed practice — check each answer as you go, with full explanations. Pause and pick up again any time.",
+  },
+  {
+    value: "exam",
+    label: "Exam mode",
+    description:
+      "Simulate the real thing — timed, no feedback until you submit, scored at the end.",
+  },
+] as const;
+
+type Mode = (typeof MODES)[number]["value"];
+
 export function NewTestWizard({
   exams,
   upsellPlanId,
@@ -41,19 +58,20 @@ export function NewTestWizard({
 
   const unlocked = useMemo(() => exams.filter((e) => !e.locked), [exams]);
 
-  // With a single exam in the catalogue the Exam step disappears entirely —
-  // the flow looks exactly like the original three-step wizard. It stays
-  // visible whenever there is more than one, even if only one is unlocked,
-  // because the locked ones are the upsell.
+  // Mode comes first — it frames every choice after it ("practice or
+  // simulate?"). With a single exam in the catalogue the Exam step disappears
+  // entirely. It stays visible whenever there is more than one, even if only
+  // one is unlocked, because the locked ones are the upsell.
   const steps = useMemo(
     () =>
       exams.length > 1
-        ? (["Exam", "Subjects", "Format"] as const)
-        : (["Subjects", "Format"] as const),
+        ? (["Mode", "Exam", "Subjects", "Format"] as const)
+        : (["Mode", "Subjects", "Format"] as const),
     [exams.length]
   );
 
   const [stepIndex, setStepIndex] = useState(0);
+  const [mode, setMode] = useState<Mode | null>(null);
   const [examId, setExamId] = useState<string | null>(
     unlocked.length === 1 ? unlocked[0].id : null
   );
@@ -99,7 +117,9 @@ export function NewTestWizard({
           subjectIds,
           difficulty,
           numQuestions,
-          durationMin,
+          mode,
+          // Tutor sessions are untimed — no duration is sent at all.
+          ...(mode === "exam" ? { durationMin } : {}),
         }),
       });
       const data = await res.json();
@@ -125,11 +145,13 @@ export function NewTestWizard({
   const examReady = selectedExam !== null && !selectedExam.locked;
 
   const canAdvance =
-    currentStep === "Exam"
-      ? examReady
-      : currentStep === "Subjects"
-        ? subjectIds.length > 0
-        : true;
+    currentStep === "Mode"
+      ? mode !== null
+      : currentStep === "Exam"
+        ? examReady
+        : currentStep === "Subjects"
+          ? subjectIds.length > 0
+          : true;
 
   return (
     <div>
@@ -138,9 +160,9 @@ export function NewTestWizard({
           Start a new test
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {steps.length === 2
-            ? "Two quick steps — you'll be answering in under a minute."
-            : "Three quick steps — you'll be answering in under a minute."}
+          {steps.length === 3
+            ? "Three quick steps — you'll be answering in under a minute."
+            : "Four quick steps — you'll be answering in under a minute."}
         </p>
       </header>
 
@@ -173,6 +195,51 @@ export function NewTestWizard({
 
       <Card className="[--card-spacing:--spacing(6)]">
         <CardContent className="space-y-6">
+          {currentStep === "Mode" && (
+            <fieldset className="space-y-3">
+              <legend className="mb-3 font-display text-lg">
+                Practice with explanations, or simulate the exam?
+              </legend>
+              <div className="grid gap-2.5">
+                {MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    aria-pressed={mode === m.value}
+                    onClick={() => setMode(m.value)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-colors",
+                      "focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
+                      mode === m.value
+                        ? "border-primary bg-accent"
+                        : "border-border hover:border-primary/50 hover:bg-accent/50"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                        mode === m.value
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input"
+                      )}
+                      aria-hidden="true"
+                    >
+                      {mode === m.value && (
+                        <Check className="size-3" strokeWidth={3} />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">{m.label}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {m.description}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           {currentStep === "Exam" && (
             <fieldset className="space-y-3">
               <legend className="mb-3 font-display text-lg">
@@ -325,26 +392,33 @@ export function NewTestWizard({
                 </div>
               </fieldset>
 
-              <fieldset>
-                <legend className="mb-3 font-display text-lg">Time limit</legend>
-                <div className="flex flex-wrap gap-2">
-                  {[15, 30, 45, 60, 90].map((m) => (
-                    <Chip
-                      key={m}
-                      label={`${m} min`}
-                      selected={durationMin === m}
-                      onClick={() => setDurationMin(m)}
-                    />
-                  ))}
-                </div>
-              </fieldset>
+              {mode === "exam" && (
+                <fieldset>
+                  <legend className="mb-3 font-display text-lg">
+                    Time limit
+                  </legend>
+                  <div className="flex flex-wrap gap-2">
+                    {[15, 30, 45, 60, 90].map((m) => (
+                      <Chip
+                        key={m}
+                        label={`${m} min`}
+                        selected={durationMin === m}
+                        onClick={() => setDurationMin(m)}
+                      />
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               <EcgDivider className="my-2" />
 
               <dl className="grid grid-cols-3 gap-3 text-sm">
                 <Summary label="Subjects" value={String(subjectIds.length)} />
                 <Summary label="Questions" value={String(numQuestions)} />
-                <Summary label="Time" value={`${durationMin} min`} />
+                <Summary
+                  label="Time"
+                  value={mode === "exam" ? `${durationMin} min` : "Untimed"}
+                />
               </dl>
             </div>
           )}
@@ -391,6 +465,8 @@ export function NewTestWizard({
                     <Loader2 className="animate-spin" data-icon="inline-start" />
                     Building your test…
                   </>
+                ) : mode === "tutor" ? (
+                  "Start practising"
                 ) : (
                   "Start test"
                 )}

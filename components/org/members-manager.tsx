@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { Check, Copy } from "lucide-react";
 import {
   inviteMembers,
@@ -10,6 +11,7 @@ import {
   setMemberRole,
   type OrgActionState,
 } from "@/app/(app)/org/(manage)/members/actions";
+import { setMemberDepartment } from "@/app/(app)/org/(manage)/members/department-actions";
 import {
   AdminSelect,
   AdminSubmit,
@@ -40,6 +42,7 @@ export type MemberItem = {
   email: string | null;
   role: "admin" | "member";
   joinedAt: string;
+  departmentId: string | null;
 };
 
 export type InviteItem = {
@@ -48,7 +51,10 @@ export type InviteItem = {
   role: "admin" | "member";
   expiresAt: string;
   pending: boolean;
+  departmentName: string | null;
 };
+
+export type DepartmentOption = { id: string; name: string };
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -56,6 +62,67 @@ function shortDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * One inline auto-submitting select per member row (no bulk multi-select in
+ * v1). Controlled, with per-row action state: a rejected move snaps the
+ * select back to the server value and shows its error beside the row — an
+ * uncontrolled select would keep displaying the choice the server refused.
+ */
+function MemberDepartmentSelect({
+  userId,
+  departmentId,
+  departments,
+  memberLabel,
+}: {
+  userId: string;
+  departmentId: string | null;
+  departments: DepartmentOption[];
+  memberLabel: string;
+}) {
+  const [state, action] = useActionState<OrgActionState, FormData>(
+    setMemberDepartment,
+    null
+  );
+  const serverValue = departmentId ?? "";
+  // The optimistic choice, tagged with the action state it was made under.
+  // Displayed only while that state is still current: the action completing
+  // (success OR error) replaces the state object, which hands display back
+  // to the server value — so a rejected move snaps back, and a successful
+  // one shows the revalidated value. Derivation only; no effects.
+  const [choice, setChoice] = useState<{
+    value: string;
+    sinceState: OrgActionState;
+  } | null>(null);
+  const display =
+    choice !== null && choice.sinceState === state ? choice.value : serverValue;
+
+  return (
+    <form action={action}>
+      <input type="hidden" name="userId" value={userId} />
+      <select
+        name="departmentId"
+        value={display}
+        aria-label={`Department for ${memberLabel}`}
+        className="h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        onChange={(event) => {
+          setChoice({ value: event.target.value, sinceState: state });
+          event.currentTarget.form?.requestSubmit();
+        }}
+      >
+        <option value="">No department</option>
+        {departments.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+          </option>
+        ))}
+      </select>
+      {state?.error && (
+        <p className="mt-1 text-xs text-destructive">{state.error}</p>
+      )}
+    </form>
+  );
 }
 
 function CopyLinkButton({ url }: { url: string }) {
@@ -84,11 +151,13 @@ function CopyLinkButton({ url }: { url: string }) {
 export function MembersManager({
   members,
   invites,
+  departments,
   currentUserId,
   joinBaseUrl,
 }: {
   members: MemberItem[];
   invites: InviteItem[];
+  departments: DepartmentOption[];
   currentUserId: string;
   joinBaseUrl: string;
 }) {
@@ -143,6 +212,21 @@ export function MembersManager({
                 <option value="member">Member</option>
                 <option value="admin">Org admin</option>
               </AdminSelect>
+              {departments.length > 0 && (
+                <AdminSelect
+                  label="Department (optional)"
+                  name="departmentId"
+                  defaultValue=""
+                  className="w-52"
+                >
+                  <option value="">No department</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </AdminSelect>
+              )}
               <AdminSubmit>Send invites</AdminSubmit>
             </div>
             <FormMessage
@@ -173,6 +257,7 @@ export function MembersManager({
                   <TableRow>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
+                    {departments.length > 0 && <TableHead>Department</TableHead>}
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -186,6 +271,11 @@ export function MembersManager({
                       <TableCell>
                         {invite.role === "admin" ? "Org admin" : "Member"}
                       </TableCell>
+                      {departments.length > 0 && (
+                        <TableCell className="text-muted-foreground">
+                          {invite.departmentName ?? "—"}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {invite.pending ? (
                           <span className="text-muted-foreground">
@@ -254,6 +344,7 @@ export function MembersManager({
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  {departments.length > 0 && <TableHead>Department</TableHead>}
                   <TableHead>Joined</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -262,7 +353,13 @@ export function MembersManager({
                 {members.map((member) => (
                   <TableRow key={member.userId}>
                     <TableCell className="font-medium">
-                      {member.name ?? "—"}
+                      {/* Through to the readiness drill-down (SPEC §8 v2). */}
+                      <Link
+                        href={`/org/members/${member.userId}`}
+                        className="hover:underline"
+                      >
+                        {member.name ?? "—"}
+                      </Link>
                       {member.userId === currentUserId && (
                         <span className="ml-1.5 text-xs text-muted-foreground">
                           (you)
@@ -277,6 +374,18 @@ export function MembersManager({
                         <Badge variant="secondary">Member</Badge>
                       )}
                     </TableCell>
+                    {departments.length > 0 && (
+                      <TableCell>
+                        <MemberDepartmentSelect
+                          userId={member.userId}
+                          departmentId={member.departmentId}
+                          departments={departments}
+                          memberLabel={
+                            member.name ?? member.email ?? "member"
+                          }
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="text-muted-foreground">
                       {shortDate(member.joinedAt)}
                     </TableCell>

@@ -4,6 +4,7 @@ import {
   correctOptionsInTest,
   isSelectionCorrect,
   scoreTest,
+  scoreTutorTest,
   shuffle,
 } from "@/lib/scoring";
 
@@ -126,6 +127,54 @@ describe("scoreTest", () => {
 
   it("handles an empty test without dividing by zero", () => {
     expect(scoreTest([], new Map()).percentage).toBe(0);
+  });
+});
+
+describe("scoreTutorTest", () => {
+  const questions = [
+    { questionId: "q1", correctOptionIds: ["a"] },
+    { questionId: "q2", correctOptionIds: ["a", "b"] },
+    { questionId: "q3", correctOptionIds: ["c"] },
+    { questionId: "q4", correctOptionIds: ["d"] },
+  ];
+
+  it("computes percentage over answered questions only", () => {
+    const answers = new Map<string, string[]>([
+      ["q1", ["a"]], // correct
+      ["q2", ["a"]], // partial -> incorrect
+      // q3, q4 unanswered — excluded from the denominator
+    ]);
+    const result = scoreTutorTest(questions, answers);
+    expect(result.correct).toBe(1);
+    expect(result.answered).toBe(2);
+    expect(result.unanswered).toBe(2);
+    expect(result.percentage).toBe(50);
+  });
+
+  it("scores 0 when nothing was answered", () => {
+    expect(scoreTutorTest(questions, new Map()).percentage).toBe(0);
+  });
+
+  it("matches exam scoring when everything was answered", () => {
+    const answers = new Map<string, string[]>([
+      ["q1", ["a"]],
+      ["q2", ["b", "a"]],
+      ["q3", ["z"]],
+      ["q4", ["d"]],
+    ]);
+    expect(scoreTutorTest(questions, answers).percentage).toBe(
+      scoreTest(questions, answers).percentage
+    );
+  });
+
+  it("keeps multi-correct all-or-nothing and rounds to one decimal", () => {
+    // 2 of 3 answered correct = 66.666… -> 66.7; the unanswered q4 is ignored.
+    const answers = new Map<string, string[]>([
+      ["q1", ["a"]],
+      ["q2", ["a", "b"]],
+      ["q3", ["b"]],
+    ]);
+    expect(scoreTutorTest(questions, answers).percentage).toBe(66.7);
   });
 });
 

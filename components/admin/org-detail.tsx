@@ -63,6 +63,8 @@ export type OrgMemberItem = {
   name: string | null;
   email: string | null;
   role: "admin" | "member";
+  /** Read-only — department CRUD/assignment is org-side only. */
+  departmentName: string | null;
 };
 
 export type OrgInviteItem = {
@@ -366,11 +368,14 @@ export function OrgMembersCard({
   org,
   members,
   invites,
+  departmentCount,
 }: {
   org: OrgSummary;
   members: OrgMemberItem[];
   invites: OrgInviteItem[];
+  departmentCount: number;
 }) {
+  const showDepartments = departmentCount > 0;
   const [inviteState, inviteAction] = useActionState<AdminState, FormData>(
     adminInviteToOrg,
     null
@@ -390,8 +395,10 @@ export function OrgMembersCard({
         <CardTitle>People</CardTitle>
         <CardDescription>
           {members.length} member{members.length === 1 ? "" : "s"},{" "}
-          {invites.length} open invite{invites.length === 1 ? "" : "s"} —
-          seat cap {org.seatLimit}. Inviting an org admin here is how a
+          {invites.length} open invite{invites.length === 1 ? "" : "s"}
+          {showDepartments &&
+            ` · ${departmentCount} department${departmentCount === 1 ? "" : "s"}`}{" "}
+          — seat cap {org.seatLimit}. Inviting an org admin here is how a
           sales-led org gets its first one.
         </CardDescription>
       </CardHeader>
@@ -424,6 +431,7 @@ export function OrgMembersCard({
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
+                {showDepartments && <TableHead>Department</TableHead>}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -446,6 +454,11 @@ export function OrgMembersCard({
                       <Badge variant="secondary">Member</Badge>
                     )}
                   </TableCell>
+                  {showDepartments && (
+                    <TableCell className="text-muted-foreground">
+                      {member.departmentName ?? "—"}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex justify-end gap-1">
                       <form action={roleAction}>
@@ -497,12 +510,16 @@ export function OrgMembersCard({
                       {shortDate(invite.expiresAt)}
                     </Badge>
                   </TableCell>
+                  {showDepartments && <TableCell />}
                   <TableCell />
                 </TableRow>
               ))}
               {members.length === 0 && invites.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
+                  <TableCell
+                    colSpan={showDepartments ? 5 : 4}
+                    className="text-muted-foreground"
+                  >
                     Nobody yet — invite the first org admin above.
                   </TableCell>
                 </TableRow>

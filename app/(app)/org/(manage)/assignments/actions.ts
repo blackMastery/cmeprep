@@ -35,10 +35,14 @@ export async function createAssignment(
     subjectIds: formData.getAll("subjectIds").map(String),
     difficulty: formData.get("difficulty") ?? "mixed",
     numQuestions: formData.get("numQuestions"),
-    durationMin: formData.get("durationMin"),
+    mode: formData.get("mode") ?? "exam",
+    // "" → undefined BEFORE parsing (z.coerce turns "" into 0): tutor
+    // prescriptions submit no duration at all.
+    durationMin: formData.get("durationMin") || undefined,
     dueDate: formData.get("dueDate"),
     audience: formData.get("audience") ?? "all",
     targetIds: formData.getAll("targetIds").map(String),
+    departmentId: formData.get("departmentId") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const input = parsed.data;
@@ -46,8 +50,25 @@ export async function createAssignment(
   if (input.audience === "selected" && input.targetIds.length === 0) {
     return { error: "Pick at least one member, or assign to everyone." };
   }
+  if (input.audience === "department" && !input.departmentId) {
+    return { error: "Pick a department, or assign to everyone." };
+  }
 
   const admin = createAdminClient();
+
+  // Department audiences are dynamic: no target rows, membership resolves at
+  // read time against org_members.department_id.
+  let departmentId: string | null = null;
+  if (input.audience === "department" && input.departmentId) {
+    const { data: dept } = await admin
+      .from("org_departments")
+      .select("id")
+      .eq("id", input.departmentId)
+      .eq("org_id", session.org.id)
+      .maybeSingle();
+    if (!dept) return { error: "Unknown department." };
+    departmentId = dept.id;
+  }
 
   // The exam must be one the org's members can practise: their own bank, or
   // a public exam the org's plan actually covers — org purchases are per
@@ -105,12 +126,18 @@ export async function createAssignment(
     }
   }
 
+  // The ONE writer of config.mode: the org's prescribed default, which the
+  // launch route reads (and the member may override). Tutor prescriptions
+  // are untimed, so duration_sec is simply absent.
   const config: TestConfig = {
     subject_ids: input.subjectIds,
     difficulty: input.difficulty,
     num_questions: input.numQuestions,
-    duration_sec: input.durationMin * 60,
+    ...(input.mode === "exam"
+      ? { duration_sec: input.durationMin! * 60 }
+      : {}),
     exam_id: input.examId,
+    mode: input.mode,
   };
 
   // End-of-day UTC, same convention as subscription period ends.
@@ -125,6 +152,7 @@ export async function createAssignment(
       config,
       due_at: dueAt,
       audience: input.audience,
+      department_id: departmentId,
       created_by: session.user.id,
     })
     .select("id")
@@ -157,8 +185,10 @@ export async function createAssignment(
       examId: input.examId,
       subjects: input.subjectIds.length,
       numQuestions: input.numQuestions,
+      mode: input.mode,
       dueAt,
       audience: input.audience,
+      departmentId,
       targets: targetIds.length,
     },
     session.org.id

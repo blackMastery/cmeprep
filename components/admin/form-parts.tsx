@@ -19,6 +19,7 @@ export function AdminField({
   hint,
   error,
   className,
+  id,
   ...props
 }: React.ComponentProps<typeof Input> & {
   label: string;
@@ -26,20 +27,24 @@ export function AdminField({
   hint?: string;
   error?: string;
 }) {
+  // The id defaults to the field name, but forms rendered per-row (e.g.
+  // department renames) must pass a unique one — several rows can be open at
+  // once, and duplicate ids point every label at the first input.
+  const fieldId = id ?? name;
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={fieldId}>{label}</Label>
       <Input
-        id={name}
+        id={fieldId}
         name={name}
         aria-invalid={error ? true : undefined}
-        aria-describedby={hint || error ? `${name}-hint` : undefined}
+        aria-describedby={hint || error ? `${fieldId}-hint` : undefined}
         className="h-10"
         {...props}
       />
       {(hint || error) && (
         <p
-          id={`${name}-hint`}
+          id={`${fieldId}-hint`}
           className={cn(
             "text-xs",
             error ? "text-destructive" : "text-muted-foreground"

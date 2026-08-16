@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import type { Test } from "@/lib/supabase/types";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -76,6 +77,11 @@ export function PastTests({ tests }: { tests: Test[] }) {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {test.total_questions}
+                    {test.mode === "tutor" && (
+                      <Badge variant="secondary" className="ml-2">
+                        Tutor
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {inProgress ? (

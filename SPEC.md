@@ -33,8 +33,15 @@ All decisions below were made in an interview on 2026-08-13.
 
 - SSO/SAML and SCIM — remains "contact sales". (Supabase SAML SSO is the
   likely path later; nothing in this design blocks it.)
-- Sub-teams / named groups as assignment targets (assign to all or to
-  selected individuals only).
+- ~~Sub-teams / named groups as assignment targets (assign to all or to
+  selected individuals only).~~ **Built (2026-08-15) as Departments**: one
+  department per member (`org_members.department_id`), org-admin-managed from
+  the Members tab, a dynamic `department` assignment audience (cohort =
+  current members assigned before the due date), a dashboard department
+  filter + comparison strip with an "Unassigned" pseudo-department, optional
+  department on invites, and a read-only member-facing label. Departments
+  hard-delete (FKs SET NULL); no department-lead role, no per-department
+  threshold overrides.
 - Domain auto-join and shareable join links (invites only, strictly bound to
   the invited email).
 - Member-level access logging ("who viewed what") — only admin *actions* are
@@ -392,17 +399,26 @@ Two grant paths from day one, both idempotent, both landing in
 
 - **Assignment = prescribed test config + due date** (decision). Fields:
   title, optional description, `config` (validated by a zod schema matching
-  `TestConfig`: exam, subject_ids, difficulty, num_questions, duration_sec),
+  `TestConfig`: exam, subject_ids, difficulty, num_questions, duration_sec,
+  mode — `duration_sec` absent exactly when mode is `tutor`, see §16),
   `due_at`, audience (`all` | selected members).
 - Member experience: an **Assignments** card on the existing dashboard +
   an assignments list page under `(app)`. Each shows title, due date, status
   (Not started / In progress / Completed / Overdue). "Start" creates a test
   from the assignment's config verbatim — the member configures nothing —
   and stamps `tests.assignment_id`.
-- **Completion = a submitted test with that `assignment_id`.** Multiple
-  attempts allowed; the dashboard reports the **latest** submitted score.
-  Overdue = past `due_at` with no submitted attempt (late submissions still
+- **Completion = a submitted test with that `assignment_id` that passes
+  `qualifiesAsAssignmentCompletion` (lib/orgs-core.ts).** For exam mode that
+  is any submitted attempt; a tutor run must also have **every question
+  answered** — tutor scoring is correct/answered, so without the 100% bar a
+  member could check 3 easy questions and read as done at 100%. Multiple
+  attempts allowed; the dashboard reports the **latest** qualifying score.
+  Overdue = past `due_at` with no qualifying attempt (late submissions still
   complete it, flagged "late").
+- **Mode override (§16):** the org prescribes a mode; the member may launch
+  the assignment in the other one. Overridden completions count, but both
+  the member list and the org report label the mode actually used
+  (`completedTutor` / `completedMode`).
 - Config must reference content the org is entitled to (public exams or the
   org's own bank — which for an all-access org sub is anything visible to
   members). Validation at creation *and* at launch: if the subjects no longer
@@ -414,34 +430,66 @@ Two grant paths from day one, both idempotent, both landing in
 
 ---
 
-## 8. Org dashboard & risk flagging
+## 8. Org dashboard & exam readiness (v2 — replaces the binary risk flag)
 
 Org-admin pages under `/org` (server components; queries via the admin
-client **after** `requireOrgAdmin`, reusing the existing `user_stats`,
-`subject_accuracy`, `user_daily_activity` views filtered to member ids).
+client **after** `requireOrgAdmin`). Readiness is computed **read-time only**
+(no snapshots, no cron); the date-bucketed aggregation lives in four
+security-invoker views (`20260817000001_readiness.sql`):
+`user_exam_weekly_mode_accuracy`, `user_exam_weekly_activity`,
+`user_exam_stats`, `exam_subject_counts` — all exam-scoped through
+attempts→questions→subjects→specialties, all requiring callers to filter on
+their GROUP BY columns.
 
-- **Roster view:** each member — name/email, joined date, last active,
-  overall accuracy, questions attempted, assignment completion count, risk
-  status.
-- **Risk model (decision):** a member is **at risk** when either
-  - rolling accuracy < `orgs.pass_mark_pct` (rolling window: last 30 days of
-    attempts; fall back to all-time if fewer than 20 attempts in window — the
-    exact constants live in a pure `lib/orgs-core.ts` function with vitest
-    coverage), or
-  - no activity for `orgs.risk_inactivity_days` (default 7) — from
-    `user_daily_activity`.
-  Shown as OK / At risk with the triggering reason(s). No exam-date concept,
-  no cohort-relative statistics in v1.
-- **Privacy boundary (decision):** org-admins see **aggregates + risk status
-  only** — overall and per-subject accuracy, activity, mock/assignment
-  scores. **Never** individual answers, question-by-question review, notes,
-  or bookmarks. Enforced in the org query layer (no code path from org pages
-  into `lib/results.ts` review data), stated in the invite email/accept page
-  ("Your organisation sees your aggregate performance, not your answers").
+- **Readiness model (decision):** a 0–100 score per member **per entitled
+  exam**, banded `on_track (≥75) / borderline (≥55) / at_risk /
+  insufficient_data`, with named reason codes. Fixed product-owned formula
+  (`memberReadiness`, lib/orgs-core.ts, vitest-pinned) — there is no
+  ground-truth pass/fail data, so it is an explainable heuristic, never a
+  fitted predictor. Weighted signals over an 8-ISO-week window
+  (America/Guyana, Monday-start, matching the views):
+  - **Blended accuracy (0.5)** vs `orgs.pass_mark_pct` — exam-mode attempts
+    count double (tutor accuracy is inflated by instant feedback); falls back
+    to per-exam all-time under 20 window attempts.
+  - **Trend (0.15)** — recent 4 weeks vs prior 4; `declining_trend` at −5pts.
+  - **Subject coverage (0.2)** — covered = ≥5 attempts at ≥50% per subject,
+    over the exam's published-subject roster.
+  - **Cadence (0.15)** — active days in the recent 4 weeks vs a 12-day target.
+  Two **caps** keep the score below on_track regardless of the rest: no
+  submitted exam-mode test in the window (`no_timed_practice` — keyed off
+  tests rows, legacy null-test_id attempts can't satisfy it) and inactivity
+  per `orgs.risk_inactivity_days` (`inactive`). The v1 reasons
+  (`below_pass_mark`, `inactive`) survive as reason codes; the at_risk band
+  subsumes the old binary flag. Below 20 attempts window AND all-time the
+  band is `insufficient_data` with a **null score** — never a fake-precise
+  number.
+- **Sitting dates (decision):** optional per-org-per-exam `org_exam_dates`
+  row, set on org settings (audited). **Framing only** — days-remaining copy,
+  sort priority, "sitting passed" — bands and scores never move with the
+  calendar. Members can read their own org's dates (RLS).
+- **Surfaces:** dashboard table (score + band + reason chips + weekly
+  sparkline, sortable, at-risk filter, exam picker when the org holds >1
+  exam), per-member drill-down at `/org/members/[userId]` (signal breakdown,
+  per-subject accuracy bars, mock history — scores only, pacing shown for
+  context but never scored), department strip (avg readiness + band counts),
+  CSV export (`GET /api/org/readiness`, `requireOrgAdminJson`).
+- **Member-facing (decision):** the member dashboard shows their OWN score
+  soft-framed as "Exam readiness" — same formula via RLS reads
+  (`getOwnReadiness`), reasons rendered as guidance; the phrase "at risk"
+  and the existence of the admin-side flag never appear member-side. Org
+  members only in v1 (the inputs are org knobs).
+- **Privacy boundary (decision, unchanged):** org-admins see **aggregates +
+  readiness only** — overall and per-subject accuracy, activity,
+  mock/assignment scores. **Never** individual answers, question-by-question
+  review, notes, or bookmarks. Enforced in the org query layer (no code path
+  from org pages into `lib/results.ts` review data), stated in the invite
+  email/accept page ("Your organisation sees your aggregate performance, not
+  your answers").
 - **Assignment detail view:** per assignment — who completed (score, late
   flag), who hasn't started, due date.
-- Cohort headline stats: average accuracy, active-this-week count, at-risk
-  count, completion rate of open assignments.
+- Cohort headline stats: average readiness + accuracy, active-this-week
+  count, at_risk-band count, completion rate of open assignments.
+- No notifications in v1 (consistent with read-time-only compute).
 
 ---
 
@@ -546,3 +594,69 @@ Each step lands green on the full gate: `npm run lint`, `npx tsc --noEmit`,
 - Logo bucket public-read vs signed URLs: default **public-read** (logos are
   not sensitive); flip to signed if a customer objects.
 - `payments.org_subscription_id` column (flagged in §5) — recommended yes.
+
+---
+
+## 16. Tutor mode
+
+Untimed practice on the existing test scaffolding: each question grades and
+reveals its explanation the moment it is committed, then locks.
+
+### Data model
+
+- `tests.mode` (`'exam' | 'tutor'`, text + check, default `'exam'`) — the
+  single source of truth for a test's mode. `config.mode` exists only as the
+  **assignment prescription input** (§7); the launch route never copies it
+  onto the test row.
+- `tests.expires_at` is now nullable, CHECK-constrained to be **null exactly
+  when mode is tutor**. Tutor sessions never expire: `isExpired` returns
+  false on null, so `finalizeIfExpired` is a no-op and an in-progress tutor
+  row is resumable indefinitely — no sweep may ever "abandon" one.
+- `tests.answered_questions` — written at finalize in both modes;
+  completion % = answered/total without an attempts join.
+- `test_answers.revealed_at` — the reveal lock. Set once by the reveal
+  endpoint, never cleared; a revealed answer is immutable (the autosave
+  PATCH skips locked rows).
+- `user_mode_stats` view — exam vs tutor accuracy split for the dashboard
+  hint. Weak areas, streaks and the headline accuracy stay **combined**.
+
+### The reveal flow
+
+`POST /api/tests/[id]/reveal` takes `{questionId, selectedOptionIds}` (the
+body carries the selection so grading never races the autosave), verifies
+the caller owns an **in-progress tutor** test — the `mode !== 'tutor'` 400
+is a security boundary — then takes the lock (guarded update / insert on
+`revealed_at is null`), grades against the frozen `option_order` with the
+same `correctOptionsInTest` + `isSelectionCorrect` machinery as finalize,
+and upserts the `attempts` row immediately, so streaks and weak areas move
+even if the session is never finished. Idempotent: a concurrent reveal gets
+the stored outcome back and a differing selection is discarded.
+
+### The withholding-rule exception
+
+"Correctness never reaches the browser mid-test" gains its ONE sanctioned
+exception: `getTakeState` re-serves reveal data (correct options,
+explanation, the graded selection from `attempts`) for questions of a
+**tutor** test that are **already revealed**, so resume reopens them in
+their locked explanation state. The gate lives at the top of
+`loadRevealData` (lib/tests.ts); exam tests always get `reveal: null`.
+
+### Scoring & lifecycle
+
+- Score = **correct/answered** (`scoreTutorTest`, lib/scoring.ts), not
+  correct/total — Finish with unchecked questions is allowed and blanks
+  don't count against the user. Completion (answered/total) is reported
+  alongside the score on results, history and org reports. `tests.score`
+  therefore means % of total for exam rows and % of answered for tutor rows;
+  never average it across modes.
+- Tutor finalize writes attempts **only for revealed questions** (the
+  exam path writes blanks as wrong — tutor must not, or phantom wrongs
+  poison accuracy/weak areas), and grades each from its **attempts row**
+  (the reveal-time graded truth — a stale autosave can clobber the staged
+  selection, never the attempt), falling back to the locked staged
+  selection only to heal a reveal that crashed before its attempts write.
+- Billing is identical to exam tests: same entitlement check, same trial
+  credit at creation (burned even if the session is never finished).
+- Known v1 edge: a member who loses org-bank access mid-session can still
+  see reveal data inside their own in-progress tutor test; results/review
+  apply `withheldQuestionIds` as usual once finished.
