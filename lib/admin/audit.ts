@@ -88,7 +88,24 @@ export type AuditAction =
   | "org_subscription.update"
   | "org_subscription.cancel"
   | "org.assignment_create"
-  | "org.assignment_delete";
+  | "org.assignment_delete"
+  // Courses (course-spec.md). Structure edits are frequent while authoring,
+  // so lesson/question saves audit as one row per save, not per field;
+  // reorders write ONE row like plan.reorder.
+  | "course.create"
+  | "course.update"
+  | "course.publish"
+  | "course.unpublish"
+  | "course.delete"
+  | "course.restore"
+  | "course.module_save"
+  | "course.module_delete"
+  | "course.module_reorder"
+  | "course.lesson_save"
+  | "course.lesson_delete"
+  | "course.lesson_reorder"
+  | "course.question_save"
+  | "course.question_delete";
 
 /**
  * Append an admin action to `audit_logs`.

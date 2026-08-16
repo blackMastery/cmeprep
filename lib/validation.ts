@@ -422,6 +422,110 @@ export function parseInviteEmails(raw: string): {
   return { emails, invalid };
 }
 
+/* ── Courses ────────────────────────────────────────────────────── */
+
+export const COURSE_LESSON_KINDS = [
+  "video",
+  "image",
+  "text",
+  "pdf",
+  "quiz",
+] as const;
+
+export const courseMetaSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(2, "Give the course a title")
+    .max(140, "Keep the title under 140 characters"),
+  description: z.string().trim().max(2000, "Keep the description under 2000 characters"),
+});
+
+export const courseModuleTitleSchema = z
+  .string()
+  .trim()
+  .min(2, "Give the module a title")
+  .max(140, "Keep the title under 140 characters");
+
+/**
+ * One lesson save. passPct arrives only for quiz lessons; filePath only for
+ * file-backed kinds — the action pairs this with the kind checks that the
+ * course_lessons CHECK constraints restate in SQL.
+ */
+export const courseLessonSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(2, "Give the lesson a title")
+    .max(140, "Keep the title under 140 characters"),
+  kind: z.enum(COURSE_LESSON_KINDS),
+  bodyMd: z.string().max(40_000, "Lesson text is capped at 40,000 characters"),
+  /** Actions map "" → null BEFORE parsing (z.coerce turns "" into 0). */
+  passPct: z.coerce
+    .number()
+    .int("Whole percentages only")
+    .min(1, "At least 1%")
+    .max(100, "At most 100%")
+    .nullable(),
+  filePath: z.string().trim().min(1).max(3000).nullable(),
+  fileSize: z.coerce.number().int().min(0).max(1_000_000_000).nullable(),
+});
+
+export const courseQuestionSchema = z
+  .object({
+    promptMd: z
+      .string()
+      .trim()
+      .min(3, "Write the question")
+      .max(4000, "Keep the question under 4000 characters"),
+    explanationMd: z
+      .string()
+      .trim()
+      .max(4000, "Keep the explanation under 4000 characters"),
+    options: z
+      .array(
+        z.object({
+          /** Absent on newly added rows; present when editing existing. */
+          id: uuid().optional(),
+          label: z.string().trim().min(1, "Every option needs text").max(500),
+          isCorrect: z.boolean(),
+        })
+      )
+      .min(2, "Add at least two options")
+      .max(8, "Eight options is the maximum"),
+  })
+  .superRefine((v, ctx) => {
+    // Single-best-answer v1 — mirrors the exam bank's mcq_single rule.
+    if (v.options.filter((o) => o.isCorrect).length !== 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Choose exactly one correct option",
+      });
+    }
+    const seen = new Set<string>();
+    v.options.forEach((o, i) => {
+      const key = o.label.trim().toLowerCase();
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["options", i, "label"],
+          message: "Duplicate option text",
+        });
+      }
+      seen.add(key);
+    });
+  });
+
+/** A quiz submission: at most one pick per question; grading treats missing
+ * questions as wrong, so partial submissions are legal input. */
+export const courseQuizSubmitSchema = z.object({
+  lessonId: uuid(),
+  answers: z
+    .array(z.object({ questionId: uuid(), optionId: uuid() }))
+    .max(200),
+});
+
 export const fullNameSchema = z
   .string()
   .trim()

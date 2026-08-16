@@ -114,8 +114,9 @@ port = 54324
 
 [storage]
 enabled = true
-# The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+# The maximum file size allowed (e.g. "5MB", "500KB"). Raised from 50MiB for
+# course videos — the global cap must be >= the largest bucket cap below.
+file_size_limit = "500MiB"
 
 # Question images for image_based questions. Mirrored by
 # migrations/..._storage_question_images.sql, which is what applies on a
@@ -132,6 +133,13 @@ allowed_mime_types = ["image/png", "image/jpeg", "image/webp"]
 public = false
 file_size_limit = "25MiB"
 allowed_mime_types = ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
+
+# Course lesson media (video/image/pdf + covers). Private — served via signed
+# URLs after auth + unlock checks. Mirrored by migrations/..._courses.sql.
+[storage.buckets."course-content"]
+public = false
+file_size_limit = "500MiB"
+allowed_mime_types = ["video/mp4", "image/jpeg", "image/png", "image/webp", "application/pdf"]
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]

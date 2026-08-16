@@ -468,6 +468,102 @@ export type OrgExamDate = {
   updated_at: string;
 };
 
+/* ── Courses (20260818000001) ─────────────────────────────── */
+
+export type CourseStatus = "draft" | "published";
+/** text + check constraint in Postgres, NOT a pg enum (payments precedent). */
+export type CourseLessonKind = "video" | "image" | "text" | "pdf" | "quiz";
+
+export type Course = Timestamps & {
+  id: string;
+  title: string;
+  description: string;
+  /** Storage object path in the course-content bucket (private, signed URLs). */
+  cover_path: string | null;
+  status: CourseStatus;
+  created_by: string | null;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
+export type CourseModule = Timestamps & {
+  id: string;
+  course_id: string;
+  title: string;
+  position: number;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
+export type CourseLesson = Timestamps & {
+  id: string;
+  module_id: string;
+  title: string;
+  kind: CourseLessonKind;
+  position: number;
+  /** kind='text': the content; other kinds: optional intro above the media. */
+  body_md: string | null;
+  /** Non-null means the upload was confirmed — the object exists. */
+  file_path: string | null;
+  file_size: number | null;
+  /** Quiz pass threshold (%); null on non-quiz kinds (CHECK-constrained). */
+  pass_pct: number | null;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
+export type CourseQuestion = Timestamps & {
+  id: string;
+  lesson_id: string;
+  prompt_md: string;
+  explanation_md: string;
+  position: number;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
+export type CourseQuestionOption = {
+  id: string;
+  question_id: string;
+  label: string;
+  is_correct: boolean;
+  position: number;
+  /** Retired options stay so attempt snapshots keep resolving. */
+  deleted_at: string | null;
+};
+
+/** Client-safe option shape — deliberately has no `is_correct`. */
+export type CourseQuestionOptionPublic = {
+  id: string;
+  question_id: string;
+  label: string;
+  position: number;
+};
+
+export type CourseLessonProgress = {
+  user_id: string;
+  lesson_id: string;
+  completed_at: string;
+};
+
+/** One graded pick, snapshotted at attempt time — question edits never
+ * rewrite history. */
+export type CourseQuizAnswer = {
+  question_id: string;
+  option_id: string;
+  correct: boolean;
+};
+
+export type CourseQuizAttempt = {
+  id: string;
+  user_id: string;
+  lesson_id: string;
+  score_pct: number;
+  passed: boolean;
+  answers: CourseQuizAnswer[];
+  created_at: string;
+};
+
 /** Which storefront sells the plan; the two never mix in one checkout. */
 export type PlanKind = "personal" | "org";
 
@@ -546,9 +642,17 @@ export type Database = {
       org_assignments: Table<OrgAssignment>;
       org_assignment_targets: Table<OrgAssignmentTarget>;
       org_exam_dates: Table<OrgExamDate>;
+      courses: Table<Course>;
+      course_modules: Table<CourseModule>;
+      course_lessons: Table<CourseLesson>;
+      course_questions: Table<CourseQuestion>;
+      course_question_options: Table<CourseQuestionOption>;
+      course_lesson_progress: Table<CourseLessonProgress>;
+      course_quiz_attempts: Table<CourseQuizAttempt>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;
+      course_question_options_public: View<CourseQuestionOptionPublic>;
       user_stats: View<UserStats>;
       subject_accuracy: View<SubjectAccuracy>;
       user_daily_activity: View<UserDailyActivity>;
@@ -570,6 +674,8 @@ export type Database = {
       exam_is_visible: { Args: { exam: string }; Returns: boolean };
       specialty_is_visible: { Args: { specialty: string }; Returns: boolean };
       subject_is_visible: { Args: { subject: string }; Returns: boolean };
+      course_is_visible: { Args: { course: string }; Returns: boolean };
+      course_lesson_visible: { Args: { lesson: string }; Returns: boolean };
     };
     Enums: {
       user_role: UserRole;

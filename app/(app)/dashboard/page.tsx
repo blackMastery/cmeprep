@@ -21,7 +21,9 @@ import { OrgInviteBanner } from "@/components/org/org-invite-banner";
 import { OrgUpsellCard } from "@/components/org/org-upsell-card";
 import { MemberAccessBanner } from "@/components/org/org-access-banners";
 import { AssignmentsCard } from "@/components/dashboard/assignments-card";
+import { ContinueLearningCard } from "@/components/dashboard/continue-learning-card";
 import { ReadinessCard } from "@/components/dashboard/readiness-card";
+import { continueLearning } from "@/lib/courses";
 import { daysUntil } from "@/lib/subscriptions-core";
 import { orgGraceEnd, orgSubscriptionState } from "@/lib/orgs-core";
 import { listExamCatalog } from "@/lib/catalog";
@@ -48,6 +50,7 @@ export default async function DashboardPage() {
     { data: subs },
     orgCtx,
     inviteNotice,
+    courseCard,
   ] = await Promise.all([
     getLifetimeStats(user.id),
     supabase
@@ -69,6 +72,7 @@ export default async function DashboardPage() {
       .eq("user_id", user.id),
     orgGrantContextFrom(supabase, user.id),
     pendingInviteForEmail(user.email),
+    continueLearning(user.id),
   ]);
 
   const subscriptions = (subs ?? []) as SubscriptionScope[];
@@ -212,6 +216,7 @@ export default async function DashboardPage() {
           <PastTests tests={(tests ?? []) as Test[]} />
         </div>
         <div className="space-y-6">
+          {courseCard && <ContinueLearningCard data={courseCard} />}
           {ownReadiness && <ReadinessCard own={ownReadiness} />}
           {membership && memberAssignments && (
             <AssignmentsCard
