@@ -550,3 +550,19 @@ export const orgExamDateSchema = z.object({
   examId: uuid(),
   sittingOn: sittingDateSchema.nullable(),
 });
+
+/* ── Admin analytics dashboard ──────────────────────────────────── */
+
+/** Preset range tabs — must stay in sync with RANGE_PRESETS in
+ * lib/analytics-core.ts (imported here would drag core types into every
+ * validation consumer, so the tuple is restated and pinned by a test). */
+export const ANALYTICS_RANGES = ["7d", "30d", "90d", "12mo", "all"] as const;
+export const analyticsRangeSchema = z.enum(ANALYTICS_RANGES);
+
+/** Manual rollup trigger body (app/api/admin/analytics/rollup). */
+export const adminRollupSchema = z.object({
+  mode: z.enum(["nightly", "backfill"]).default("nightly"),
+});
+
+/** A rollup civil day (YYYY-MM-DD) from a query param. */
+export const analyticsDaySchema = z.iso.date();

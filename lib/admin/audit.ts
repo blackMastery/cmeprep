@@ -63,6 +63,10 @@ export type AuditAction =
   | "payment.reconcile"
   | "payment.reconcile_repair"
   | "payment.reconcile_failed"
+  // Analytics rollup job (lib/analytics.ts). Written every run like
+  // payment.reconcile — the heartbeat that shows the nightly cron is alive.
+  | "analytics.rollup"
+  | "analytics.backfill"
   // Org membership lifecycle (SPEC §4/§10). Bulk invites write ONE summary
   // row like question.bulk_import; org.member_join's actor is the joiner
   // (accepting an invite is the one org action a non-admin performs).

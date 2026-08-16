@@ -21,6 +21,8 @@ export type SideNavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Attention count rendered as a destructive pill; hidden at 0/undefined. */
+  badge?: number;
 };
 
 /**
@@ -51,7 +53,7 @@ export function SideNavLinks({
 
   return (
     <>
-      {items.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon, badge }) => {
         const active = href === current;
         return (
           <Link
@@ -68,6 +70,14 @@ export function SideNavLinks({
           >
             <Icon className="size-4 shrink-0" aria-hidden />
             {label}
+            {badge !== undefined && badge > 0 && (
+              <span
+                className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white"
+                aria-label={`${badge} needing attention`}
+              >
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
           </Link>
         );
       })}

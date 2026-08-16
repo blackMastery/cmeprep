@@ -64,6 +64,27 @@ export async function runReconciliationSweep(options?: {
   // way anyone notices the cron has silently stopped.
   await audit(null, "payment.reconcile", null, { ...summary });
 
+  // Flattened copy for the admin dashboard's ops section, which wants "latest
+  // run + is it stale" as an indexed query rather than a jsonb dig through
+  // audit_logs. Best-effort: losing this row must never fail the sweep.
+  try {
+    const { error } = await admin.from("reconcile_runs").insert({
+      duration_ms: summary.durationMs,
+      truncated: summary.truncated,
+      clean: summary.clean,
+      events_scanned: summary.events.scanned,
+      events_repaired: summary.events.repaired,
+      events_failed: summary.events.failed,
+      events_quarantined: summary.events.quarantined,
+      payments_scanned: summary.unclaimedPayments.scanned,
+      payments_repaired: summary.unclaimedPayments.repaired,
+      payments_failed: summary.unclaimedPayments.failed,
+    });
+    if (error) throw new Error(error.message);
+  } catch (error) {
+    console.error("reconcile_run_summary_write_failed", { error });
+  }
+
   return summary;
 }
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
+import { opsAlertCounts } from "@/lib/analytics";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminSidebar } from "@/components/admin/admin-nav";
 
@@ -26,11 +27,18 @@ export default async function AdminLayout({
 }) {
   const user = await requireAdmin();
 
+  // Two indexed head-counts per admin page load (payments_unclaimed_idx,
+  // payment_events_unprocessed_idx) — cheap enough to skip caching. Known
+  // limitation: layouts don't re-render on soft navigation, so the badge
+  // refreshes on hard loads and section changes, not every click.
+  const alerts = await opsAlertCounts();
+  const badges = { payments: alerts.unclaimed + alerts.backlog };
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <AdminHeader user={user} />
+      <AdminHeader user={user} badges={badges} />
       <div className="flex flex-1">
-        <AdminSidebar />
+        <AdminSidebar badges={badges} />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>

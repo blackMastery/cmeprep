@@ -585,6 +585,116 @@ export type Plan = Timestamps & {
   updated_at: string | null;
 };
 
+/* ── Admin analytics rollups (20260819000001) ─────────────────
+ * Derived data written by /api/cron/rollup (lib/analytics.ts); service-role
+ * only. Key columns use text sentinels ('none'/'unknown') because they sit in
+ * composite PKs, which cannot hold NULLs. */
+
+export type AnalyticsRevenueChannel = "personal" | "org";
+
+/** Gross revenue per day × breakdown key; whole days are recomputed. */
+export type AnalyticsDailyRevenue = {
+  day: string;
+  exam_key: string;
+  plan_key: string;
+  channel: AnalyticsRevenueChannel;
+  source: string;
+  currency: string;
+  payments_count: number;
+  gross_cents: number;
+  /** Captures that arrived with amount_cents null — data-quality alarm. */
+  null_amounts: number;
+  updated_at: string;
+};
+
+/** Refund deltas booked on the day they were OBSERVED — append-only. */
+export type AnalyticsDailyRefund = {
+  day: string;
+  exam_key: string;
+  plan_key: string;
+  channel: AnalyticsRevenueChannel;
+  source: string;
+  currency: string;
+  refunds_count: number;
+  refund_cents: number;
+  updated_at: string;
+};
+
+/** How much of a payment's refunded_cents has been booked into daily refunds. */
+export type AnalyticsRefundMark = {
+  payment_id: string;
+  booked_refunded_cents: number;
+  updated_at: string;
+};
+
+/** One row per user per active Guyana day (>=1 attempt) — WAU/MAU source. */
+export type AnalyticsActiveUserDay = {
+  day: string;
+  user_id: string;
+};
+
+export type AnalyticsDailyEngagement = {
+  day: string;
+  dau: number;
+  /** Trailing 7/30-day distinct users ending this day, stored as observed. */
+  wau: number;
+  mau: number;
+  tests_started_exam: number;
+  tests_started_tutor: number;
+  tests_submitted_exam: number;
+  tests_submitted_tutor: number;
+  /** Abandoned + (exam only) expired that day; tutor never expires. */
+  tests_ended_exam: number;
+  tests_ended_tutor: number;
+  attempts_count: number;
+  correct_count: number;
+  updated_at: string;
+};
+
+/** Platform accuracy per exam per day; exam via the question taxonomy. */
+export type AnalyticsDailyExamActivity = {
+  day: string;
+  exam_key: string;
+  attempts: number;
+  correct: number;
+  updated_at: string;
+};
+
+/** Per published question, fully recomputed nightly. Counts only — the
+ * hard/easy/cold thresholds live in lib/analytics-core.ts. */
+export type AnalyticsQuestionStat = {
+  question_id: string;
+  exam_id: string | null;
+  subject_id: string;
+  attempts_count: number;
+  correct_count: number;
+  last_attempted_at: string | null;
+  computed_at: string;
+};
+
+/** Flattened SweepSummary, one row per reconcile sweep run. */
+export type ReconcileRun = {
+  id: string;
+  ran_at: string;
+  duration_ms: number;
+  truncated: boolean;
+  clean: boolean;
+  events_scanned: number;
+  events_repaired: number;
+  events_failed: number;
+  events_quarantined: number;
+  payments_scanned: number;
+  payments_repaired: number;
+  payments_failed: number;
+};
+
+/** Rollup job state: 'backfill' cursor + 'last_nightly' summary. */
+export type AnalyticsState = {
+  key: string;
+  value: Record<string, unknown>;
+  updated_at: string;
+};
+
 /** Contact form submission. Service-role read/write only — never client-read. */
 export type ContactMessage = Timestamps & {
   id: string;
@@ -649,6 +759,15 @@ export type Database = {
       course_question_options: Table<CourseQuestionOption>;
       course_lesson_progress: Table<CourseLessonProgress>;
       course_quiz_attempts: Table<CourseQuizAttempt>;
+      analytics_daily_revenue: Table<AnalyticsDailyRevenue>;
+      analytics_daily_refunds: Table<AnalyticsDailyRefund>;
+      analytics_refund_marks: Table<AnalyticsRefundMark>;
+      analytics_active_user_days: Table<AnalyticsActiveUserDay>;
+      analytics_daily_engagement: Table<AnalyticsDailyEngagement>;
+      analytics_daily_exam_activity: Table<AnalyticsDailyExamActivity>;
+      analytics_question_stats: Table<AnalyticsQuestionStat>;
+      reconcile_runs: Table<ReconcileRun>;
+      analytics_state: Table<AnalyticsState>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;
@@ -676,6 +795,24 @@ export type Database = {
       subject_is_visible: { Args: { subject: string }; Returns: boolean };
       course_is_visible: { Args: { course: string }; Returns: boolean };
       course_lesson_visible: { Args: { lesson: string }; Returns: boolean };
+      analytics_recompute_question_stats: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      analytics_book_refund: {
+        Args: {
+          p_payment_id: string;
+          p_day: string;
+          p_exam_key: string;
+          p_plan_key: string;
+          p_channel: AnalyticsRevenueChannel;
+          p_source: string;
+          p_currency: string;
+          p_delta_cents: number;
+          p_new_booked_cents: number;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       user_role: UserRole;

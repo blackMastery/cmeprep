@@ -8,6 +8,7 @@ import {
   GraduationCap,
   ListChecks,
   Mail,
+  Receipt,
   Users,
 } from "lucide-react";
 import {
@@ -24,13 +25,32 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/orgs", label: "Orgs", icon: Building2 },
   { href: "/admin/plans", label: "Plans", icon: CreditCard },
+  { href: "/admin/payments", label: "Payments", icon: Receipt },
   { href: "/admin/messages", label: "Messages", icon: Mail },
 ];
 
-export function AdminSidebar() {
-  return <Sidebar items={ADMIN_NAV_ITEMS} />;
+/**
+ * Ops-attention counts from the layout (unclaimed payments + webhook
+ * backlog). A count on the nav is visible from any admin page; known
+ * limitation, noted in the layout: layouts do not re-render on soft
+ * navigation, so the badge refreshes on hard loads and section changes.
+ */
+export type AdminNavBadges = {
+  payments?: number;
+};
+
+function withBadges(badges: AdminNavBadges | undefined): SideNavItem[] {
+  return ADMIN_NAV_ITEMS.map((item) =>
+    item.href === "/admin/payments"
+      ? { ...item, badge: badges?.payments }
+      : item
+  );
 }
 
-export function AdminMobileNav() {
-  return <MobileNavSheet items={ADMIN_NAV_ITEMS} logoHref="/admin" />;
+export function AdminSidebar({ badges }: { badges?: AdminNavBadges }) {
+  return <Sidebar items={withBadges(badges)} />;
+}
+
+export function AdminMobileNav({ badges }: { badges?: AdminNavBadges }) {
+  return <MobileNavSheet items={withBadges(badges)} logoHref="/admin" />;
 }

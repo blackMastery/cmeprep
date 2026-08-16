@@ -1,16 +1,22 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
-import { AdminMobileNav } from "@/components/admin/admin-nav";
+import { AdminMobileNav, type AdminNavBadges } from "@/components/admin/admin-nav";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-export function AdminHeader({ user }: { user: SessionUser }) {
+export function AdminHeader({
+  user,
+  badges,
+}: {
+  user: SessionUser;
+  badges?: AdminNavBadges;
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
       <div className="flex h-16 w-full items-center gap-2 px-4 sm:gap-4">
-        <AdminMobileNav />
+        <AdminMobileNav badges={badges} />
         <Logo href="/admin" size="sm" />
         <Badge variant="secondary" className="hidden sm:inline-flex">
           Admin

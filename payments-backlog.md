@@ -26,8 +26,11 @@ The sweep and the payment record now produce good data. Nothing reads it.
   **Done when:** a failed grant or a failed sweep raises an alert somebody
   receives without opening Supabase Studio.
 
-- [ ] **`/admin/payments`.** Four queries, one page — without it the sweep is
-  observability nobody observes:
+- [x] **`/admin/payments`.** Built 2026-08-16 with the admin business
+  dashboard: a filterable payments list (day / exam / status / unclaimed)
+  plus ops alerts on `/admin` (unclaimed money, webhook backlog, stale
+  sweep — the sweep now persists each run to `reconcile_runs`) and a nav
+  badge. The amount-mismatch query below is the one view still unbuilt:
   ```sql
   select * from payments where subscription_id is null order by captured_at desc;
   select * from payments where amount_cents is distinct from plan_price_cents
@@ -148,13 +151,25 @@ select vault.create_secret('https://www.cmeprep.me/api/cron/reconcile', 'reconci
 select vault.create_secret('<same value as the CRON_SECRET env var>', 'reconcile_cron_secret');
 ```
 
+The nightly analytics rollup (admin dashboard) needs one more; it reuses
+`reconcile_cron_secret` as its bearer. After the first deploy, load history by
+POSTing `{"mode":"backfill"}` to `/api/admin/analytics/rollup` (as an admin)
+repeatedly until it reports `done: true`:
+
+```sql
+select vault.create_secret('https://www.cmeprep.me/api/cron/rollup', 'analytics_rollup_url');
+```
+
 Checks:
 
 ```sql
-select * from cron.job where jobname = 'reconcile-payments';
+select * from cron.job where jobname in ('reconcile-payments', 'analytics-rollup');
 select * from cron.job_run_details order by start_time desc limit 10;
 select * from net._http_response order by created desc limit 5;   -- ~6h retention
 select * from audit_logs where action = 'payment.reconcile' order by created_at desc limit 5;
+select * from reconcile_runs order by ran_at desc limit 5;        -- same data, typed
+select * from audit_logs where action = 'analytics.rollup' order by created_at desc limit 3;
+select value from analytics_state where key = 'last_nightly';
 ```
 
 Subscriptions that predate the payments table and so have no money row:
