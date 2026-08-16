@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateStreak } from "@/lib/scoring";
 import { orgAccessOf } from "@/lib/entitlements-core";
 import {
+  guyanaDay,
   memberReadiness,
   readinessWindowStart,
   sittingFraming,
@@ -12,6 +13,7 @@ import {
   type SittingFraming,
   type WeeklyModeBucket,
 } from "@/lib/orgs-core";
+import { pickPrimaryExam } from "@/lib/plan-core";
 import type {
   TestMode,
   UserModeStats,
@@ -144,32 +146,31 @@ export async function getOwnReadiness(
     (dates ?? []).map((d) => [d.exam_id, d.sitting_on as string])
   );
 
-  // Exam pick: soonest upcoming sitting wins; otherwise the entitled exam
-  // with the most window practice — measure what they're actually studying.
-  let examId: string | undefined = entitled
-    .filter((e) => {
-      const framing = sittingFraming(sittingByExam.get(e.id) ?? null, now);
-      return framing?.kind === "upcoming";
-    })
-    .sort((a, b) =>
-      sittingByExam.get(a.id)!.localeCompare(sittingByExam.get(b.id)!)
-    )[0]?.id;
-
   const { data: weeklyAll } = await supabase
     .from("user_exam_weekly_mode_accuracy")
     .select("exam_id, week_start, mode, attempts, correct")
     .eq("user_id", userId)
     .gte("week_start", windowStart);
-  if (examId === undefined) {
-    const byExam = new Map<string, number>();
-    const entitledIds = new Set(entitled.map((e) => e.id));
-    for (const r of weeklyAll ?? []) {
-      if (!entitledIds.has(r.exam_id)) continue;
-      byExam.set(r.exam_id, (byExam.get(r.exam_id) ?? 0) + r.attempts);
-    }
-    examId = [...byExam.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  // Exam pick: the same pure tiebreaker as the study-plan surfaces
+  // (pickPrimaryExam — soonest upcoming sitting, else most window practice,
+  // else first entitled). ONE deliberate input difference: readiness
+  // measures against the ORG's sitting dates only (they're org knobs),
+  // while the plan also honours a personal date.
+  const byExam = new Map<string, number>();
+  const entitledIds = new Set(entitled.map((e) => e.id));
+  for (const r of weeklyAll ?? []) {
+    if (!entitledIds.has(r.exam_id)) continue;
+    byExam.set(r.exam_id, (byExam.get(r.exam_id) ?? 0) + r.attempts);
   }
-  if (examId === undefined) examId = entitled[0].id;
+  const examId = pickPrimaryExam(
+    entitled.map((e) => ({
+      examId: e.id,
+      sittingOn: sittingByExam.get(e.id) ?? null,
+      windowAttempts: byExam.get(e.id) ?? 0,
+    })),
+    guyanaDay(now)
+  )!;
   const exam = entitled.find((e) => e.id === examId)!;
 
   const [

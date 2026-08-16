@@ -1,12 +1,24 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { createTestSchema, testModeSchema, uuid } from "@/lib/validation";
+import {
+  createTestSchema,
+  planGoalsDocSchema,
+  startPlanGoalSchema,
+  testModeSchema,
+  uuid,
+} from "@/lib/validation";
 import { examAccessFrom } from "@/lib/entitlements";
 import { canAccessExam, consumesTrialCredit } from "@/lib/entitlements-core";
-import { countsTowardDeptAssignment } from "@/lib/orgs-core";
+import { countsTowardDeptAssignment, guyanaDay, mondayOf } from "@/lib/orgs-core";
+import {
+  pickSessionQuestions,
+  prescriptionForGoal,
+  type PlanPrescription,
+} from "@/lib/plan-core";
+import { retryPoolQuestionIds } from "@/lib/plan";
 import { shuffle } from "@/lib/scoring";
-import type { OrgAssignment, TestConfig } from "@/lib/supabase/types";
+import type { OrgAssignment, StudyPlanWeek, TestConfig } from "@/lib/supabase/types";
 
 /**
  * POST /api/tests — create a test: a timed exam or an untimed tutor session.
@@ -96,7 +108,87 @@ export async function POST(request: Request) {
     modeOverride = override.data;
   }
 
-  const parsed = assignment ? null : createTestSchema.safeParse(body);
+  // ── Plan-goal launch (SPEC §17): like an assignment, the SERVER supplies
+  // the config — the client sends only { planWeekId, goalId } and the frozen
+  // week row is the prescription. The `.eq("user_id")` on the load is the
+  // ownership wall (admin client bypasses RLS); the goal→config rules live
+  // in prescriptionForGoal (lib/plan-core.ts), where vitest pins them.
+  let planPrescription: PlanPrescription | null = null;
+  /** Kicked off as soon as the focus subject is known — resolves alongside
+   * the candidates query so seeding costs no extra serial round trip. */
+  let retryPoolPromise: Promise<string[]> | null = null;
+  if (
+    !assignment &&
+    typeof body === "object" &&
+    body !== null &&
+    "planWeekId" in body
+  ) {
+    const parsedPlan = startPlanGoalSchema.safeParse(body);
+    if (!parsedPlan.success) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+    const { data: weekRow } = await admin
+      .from("study_plan_weeks")
+      .select("*")
+      .eq("id", parsedPlan.data.planWeekId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!weekRow) {
+      return NextResponse.json({ error: "Unknown plan goal" }, { status: 404 });
+    }
+    const week = weekRow as StudyPlanWeek;
+    // A stale tab must not launch last week's prescription.
+    if (week.week_start !== mondayOf(guyanaDay(new Date()))) {
+      return NextResponse.json(
+        {
+          error: "plan_week_ended",
+          message: "That plan week has ended — refresh your plan.",
+        },
+        { status: 400 }
+      );
+    }
+    const doc = planGoalsDocSchema.safeParse(week.goals);
+    const goal = doc.success
+      ? doc.data.goals.find((g) => g.id === parsedPlan.data.goalId)
+      : undefined;
+    if (!goal) {
+      return NextResponse.json({ error: "Unknown plan goal" }, { status: 404 });
+    }
+    // Mocks span every subject of the exam that has published questions.
+    const { data: roster } = await admin
+      .from("exam_subject_counts")
+      .select("subject_id, question_count")
+      .eq("exam_id", week.exam_id);
+    const prescription = prescriptionForGoal(
+      goal,
+      week.exam_id,
+      (roster ?? []).filter((s) => s.question_count > 0).map((s) => s.subject_id)
+    );
+    if (prescription === "not_launchable") {
+      // total_questions is a target, not a session — the UI links it to the
+      // wizard instead of a Start button.
+      return NextResponse.json({ error: "Unknown plan goal" }, { status: 404 });
+    }
+    if (prescription === "no_questions") {
+      return NextResponse.json(
+        {
+          error: "no_questions",
+          message: "No published questions in this examination yet.",
+        },
+        { status: 422 }
+      );
+    }
+    planPrescription = prescription;
+    if (prescription.seedSubjectId !== null) {
+      retryPoolPromise = retryPoolQuestionIds(
+        user.id,
+        prescription.seedSubjectId
+      );
+    }
+  }
+
+  const parsed =
+    assignment || planPrescription ? null : createTestSchema.safeParse(body);
   if (parsed && !parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid request" },
@@ -120,7 +212,7 @@ export async function POST(request: Request) {
           ),
           mode: modeOverride ?? assignment.config.mode ?? ("exam" as const),
         }
-      : parsed!.data;
+      : (planPrescription ?? parsed!.data);
   if (!examId) {
     return NextResponse.json({ error: "Unknown assignment" }, { status: 404 });
   }
@@ -243,10 +335,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const picked = shuffle(candidates).slice(
-    0,
-    Math.min(numQuestions, candidates.length)
-  );
+  // ── Retry seeding (plan focus sessions only): ~30% of the session comes
+  // from questions whose latest attempt was wrong, the rest is a fresh draw
+  // (pickSessionQuestions, plan-core — the mix rules are unit-tested there).
+  // Entirely server-side; the response stays { id }.
+  const target = Math.min(numQuestions, candidates.length);
+  const picked =
+    retryPoolPromise !== null
+      ? pickSessionQuestions(
+          candidates,
+          new Set(await retryPoolPromise),
+          target,
+          shuffle
+        )
+      : shuffle(candidates).slice(0, target);
 
   // ── Freeze option order per question
   const { data: options, error: optError } = await admin

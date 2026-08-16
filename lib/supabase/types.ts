@@ -564,6 +564,61 @@ export type CourseQuizAttempt = {
   created_at: string;
 };
 
+/* ── Study plans (20260820000001) ─────────────────────────── */
+
+/** text + check constraint in Postgres, NOT a pg enum (payments precedent). */
+export type PlanIntensity = "light" | "standard" | "intense";
+
+/** Per-user per-exam plan knobs. sitting_on null = inherit the org's
+ * org_exam_dates row; the personal date is never surfaced to org admins. */
+export type StudyPlanSettings = {
+  user_id: string;
+  exam_id: string;
+  intensity: PlanIntensity;
+  /** date (YYYY-MM-DD) */
+  sitting_on: string | null;
+  diagnostic_dismissed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One generated (and frozen) plan week. */
+export type StudyPlanWeek = {
+  id: string;
+  user_id: string;
+  exam_id: string;
+  /** Monday of the ISO week (YYYY-MM-DD, America/Guyana). */
+  week_start: string;
+  /** Versioned doc — parse with planGoalsDocSchema, never trust as typed. */
+  goals: unknown;
+  /** Snapshot the week was generated under; settings changes don't rewrite. */
+  intensity: PlanIntensity;
+  generated_at: string;
+};
+
+/** Per-user per-exam ISO-week attempts per (test, subject) — the focus-
+ * session grain. Filter on user_id/exam_id/week_start (PERF CONTRACT). */
+export type UserExamWeekTestSubjectAttempts = {
+  user_id: string;
+  exam_id: string;
+  week_start: string;
+  subject_id: string;
+  test_id: string;
+  mode: TestMode;
+  attempts: number;
+};
+
+/** Latest outcome per (user, question), published questions only — rows with
+ * is_correct=false are the retry pool. Always filter eq user_id first. */
+export type UserQuestionLatestOutcome = {
+  user_id: string;
+  exam_id: string;
+  subject_id: string;
+  question_id: string;
+  is_correct: boolean;
+  answered_at: string;
+};
+
 /** Which storefront sells the plan; the two never mix in one checkout. */
 export type PlanKind = "personal" | "org";
 
@@ -752,6 +807,8 @@ export type Database = {
       org_assignments: Table<OrgAssignment>;
       org_assignment_targets: Table<OrgAssignmentTarget>;
       org_exam_dates: Table<OrgExamDate>;
+      study_plan_settings: Table<StudyPlanSettings>;
+      study_plan_weeks: Table<StudyPlanWeek>;
       courses: Table<Course>;
       course_modules: Table<CourseModule>;
       course_lessons: Table<CourseLesson>;
@@ -780,6 +837,8 @@ export type Database = {
       user_exam_weekly_activity: View<UserExamWeeklyActivity>;
       user_exam_stats: View<UserExamStats>;
       exam_subject_counts: View<ExamSubjectCounts>;
+      user_exam_week_test_subject_attempts: View<UserExamWeekTestSubjectAttempts>;
+      user_question_latest_outcome: View<UserQuestionLatestOutcome>;
       user_emails: View<UserEmail>;
       subject_question_counts: View<SubjectQuestionCount>;
     };

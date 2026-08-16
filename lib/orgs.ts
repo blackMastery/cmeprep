@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser, requireUser, type SessionUser } from "@/lib/auth";
 import { orgAccessOf } from "@/lib/entitlements-core";
+import { planAdherenceForMembers, type MemberPlanAdherence } from "@/lib/plan";
 import {
   assignmentStatus,
   countsTowardDeptAssignment,
@@ -533,6 +534,10 @@ export type OrgMemberStats = {
   readiness: MemberReadiness;
   lastActiveDay: string | null;
   assignmentsCompleted: number;
+  /** Study-plan visibility (SPEC §17): this derived pair is ALL an org sees —
+   * goals, intensity and personal sitting dates stay private. */
+  planAdherencePct: number | null;
+  hasActivePlan: boolean;
 };
 
 export type OrgReadinessDashboard = {
@@ -660,6 +665,7 @@ export async function getOrgReadinessDashboard(
   const subjectsByUser = new Map<string, Map<string, SubjectStat>>();
   const hasMock = new Set<string>();
   const completed = new Map<string, Set<string>>();
+  const planByUser = new Map<string, MemberPlanAdherence>();
 
   for (const ids of chunk(members.map((m) => m.member.user_id), MEMBER_CHUNK)) {
     const [
@@ -668,6 +674,7 @@ export async function getOrgReadinessDashboard(
       { data: totals },
       { data: subjectRows },
       { data: mockRows },
+      planAdherence,
     ] = await Promise.all([
       admin
         .from("user_exam_weekly_mode_accuracy")
@@ -703,7 +710,10 @@ export async function getOrgReadinessDashboard(
         .eq("status", "submitted")
         .eq("config->>exam_id", examId)
         .gte("submitted_at", windowStartTs),
+      planAdherenceForMembers(examId, ids, now),
     ]);
+
+    for (const [id, adherence] of planAdherence) planByUser.set(id, adherence);
 
     for (const r of weekly ?? []) {
       const list = weeklyByUser.get(r.user_id) ?? [];
@@ -796,6 +806,8 @@ export async function getOrgReadinessDashboard(
       readiness: memberReadiness(input, now),
       lastActiveDay: totals?.lastActiveDay ?? null,
       assignmentsCompleted: completed.get(id)?.size ?? 0,
+      planAdherencePct: planByUser.get(id)?.adherencePct ?? null,
+      hasActivePlan: planByUser.get(id)?.hasActivePlan ?? false,
     };
   });
 
@@ -829,6 +841,9 @@ export type MemberReadinessDetail = {
   }[];
   /** Display only (SPEC §8 v2) — pacing never feeds the score. */
   pacingSecPerQuestion: number | null;
+  /** Study-plan visibility (SPEC §17) — the derived pair only. */
+  planAdherencePct: number | null;
+  hasActivePlan: boolean;
 };
 
 /**
@@ -866,6 +881,7 @@ export async function getMemberReadinessDetail(
     { data: roster },
     { data: mocks },
     { data: dateRow },
+    planAdherenceMap,
   ] = await Promise.all([
     admin.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
     admin.from("user_emails").select("email").eq("id", userId).maybeSingle(),
@@ -908,7 +924,9 @@ export async function getMemberReadinessDetail(
       .eq("org_id", org.id)
       .eq("exam_id", examId)
       .maybeSingle(),
+    planAdherenceForMembers(examId, [userId], now),
   ]);
+  const planAdherence = planAdherenceMap.get(userId);
 
   const weeklyBuckets: WeeklyModeBucket[] = (weekly ?? []).map((r) => ({
     weekStart: r.week_start,
@@ -991,6 +1009,8 @@ export async function getMemberReadinessDetail(
     })),
     pacingSecPerQuestion:
       timedAttempts > 0 ? Math.round(timedSeconds / timedAttempts) : null,
+    planAdherencePct: planAdherence?.adherencePct ?? null,
+    hasActivePlan: planAdherence?.hasActivePlan ?? false,
   };
 }
 

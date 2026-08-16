@@ -54,6 +54,8 @@ export async function GET(request: Request) {
       readiness: row.readiness,
       lastActiveDay: row.lastActiveDay,
       assignmentsCompleted: row.assignmentsCompleted,
+      planAdherencePct: row.planAdherencePct,
+      hasActivePlan: row.hasActivePlan,
     }))
   );
 

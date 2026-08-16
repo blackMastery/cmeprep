@@ -660,3 +660,59 @@ their locked explanation state. The gate lives at the top of
 - Known v1 edge: a member who loses org-bank access mid-session can still
   see reveal data inside their own in-progress tutor test; results/review
   apply `withheldQuestionIds` as usual once finished.
+
+---
+
+## 17. Study plans
+
+Rolling weekly goals per (user, exam), generated lazily on the student's
+first `/plan` visit each ISO week (America/Guyana Mondays, `mondayOf`/
+`guyanaDay`) and **frozen** for that week — progress is derived live from
+`attempts`/`tests`, the goals are not. No cron.
+
+### Data model
+
+- `study_plan_settings` (PK user+exam): `intensity` (`light|standard|
+  intense`, text + check), optional personal `sitting_on` (falls back to
+  `org_exam_dates` for org members; never surfaced org-side),
+  `diagnostic_dismissed_at`.
+- `study_plan_weeks` (unique user+exam+week_start — the lazy-generation race
+  lock): `goals` jsonb, a **versioned doc** (`{v:1, goals:[...]}`) parsed by
+  `planGoalsDocSchema` on every read; `intensity` snapshot; `inputs`
+  snapshot. Owner-only RLS with **no update/delete policy** — a generated
+  week is immutable (the one exception: dismissing the diagnostic
+  regenerates the current week, an explicit student choice).
+- Views: `user_exam_week_test_subject_attempts` (per-session attempts per
+  subject per week — focus-session progress) and
+  `user_question_latest_outcome` (`DISTINCT ON` latest attempt per question;
+  `is_correct=false` rows are the **retry pool**, and a correct retry exits
+  it automatically). Same PERF CONTRACT as the readiness views.
+
+### Generation (lib/plan-core.ts, pure)
+
+Order of rules: cold start (<20 all-time attempts, not dismissed → the week
+IS a **diagnostic mock** + a modest question target) → coverage gaps first
+(<5 attempts) → weakest practised subjects by accuracy → mock cadence
+(weekly, biweekly on light intensity and in the first 2 generated weeks) →
+volume ramp toward a known sitting (×1.25 at ≤4 weeks, ×1.5 at ≤2) → clamp
+every target to the published bank. Deterministic; vitest pins every branch.
+
+### Attribution & launch
+
+Progress is **activity-based**: any matching work counts (self-built tests,
+assignments) — total ← weekly attempts; focus session ← distinct tutor test
+with ≥10 attempts in the subject; mock ← submitted exam-mode test ≥20
+questions. One-click launch posts `{planWeekId, goalId}` to `POST
+/api/tests` (the assignment-prescription pattern: the server supplies the
+config from the frozen row; stale weeks are rejected). Focus sessions seed
+~30% from the retry pool, server-side only — the response stays `{id}` and
+correctness never reaches the browser.
+
+### Org visibility & access loss
+
+Org admins see exactly two derived values — rolling 4-week goal-completion
+% (missing weeks count 0 from the member's first plan week; no history at
+all reads null/"—") and has-a-plan-this-week — on the readiness roster,
+member detail and CSV. Goals, intensity and personal sitting dates stay
+private. Losing exam access hides the plan surface; rows are retained and a
+fresh week resumes on re-entitlement.

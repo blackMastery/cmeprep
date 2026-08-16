@@ -245,6 +245,16 @@ export default async function MemberReadinessPage(
                 timed work. Shown for context — pacing never moves the score.
               </p>
             )}
+            {/* Adherence only (SPEC §17): the plan's contents are the
+                member's own — the org sees whether it's being followed. */}
+            <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+              Study plan:{" "}
+              {detail.planAdherencePct !== null
+                ? `${detail.planAdherencePct}% of weekly goals met over the last 4 weeks`
+                : "no plan history for this exam"}
+              {detail.hasActivePlan ? " · active this week" : ""}. Shown for
+              context — the plan never moves the score.
+            </p>
           </CardContent>
         </Card>
 

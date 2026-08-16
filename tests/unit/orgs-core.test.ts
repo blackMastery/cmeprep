@@ -578,12 +578,15 @@ describe("readinessCsv", () => {
         },
         lastActiveDay: "2026-08-12",
         assignmentsCompleted: 2,
+        planAdherencePct: 75,
+        hasActivePlan: true,
       },
     ]);
     const [header, row] = csv.split("\n", 2);
     expect(header).toBe(
-      "name,email,department,score,band,reasons,accuracy_pct,trend_delta_pct,coverage_pct,last_active,assignments_completed"
+      "name,email,department,score,band,reasons,accuracy_pct,trend_delta_pct,coverage_pct,last_active,assignments_completed,plan_adherence_pct,has_active_plan"
     );
+    expect(csv).toContain("75,yes");
     expect(row).toContain('"Nurse ""Quotes"", Jane'); // quoted, quotes doubled
     expect(csv).toContain("no_timed_practice; low_coverage");
   });

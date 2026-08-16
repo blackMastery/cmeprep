@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
+import { useLaunchTest } from "@/components/use-launch-test";
 import type { AssignmentStatus } from "@/lib/orgs-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,34 +72,10 @@ function StartButton({
   label: string;
   prescribedMode: "exam" | "tutor";
 }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, launch } = useLaunchTest();
 
-  async function start(mode?: "exam" | "tutor") {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/tests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          assignmentId,
-          ...(mode !== undefined ? { mode } : {}),
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.message ?? data?.error ?? "Could not start the test.");
-        setBusy(false);
-        return;
-      }
-      router.push(`/tests/${data.id}/take`);
-    } catch {
-      setError("Network error. Check your connection and try again.");
-      setBusy(false);
-    }
-  }
+  const start = (mode?: "exam" | "tutor") =>
+    launch({ assignmentId, ...(mode !== undefined ? { mode } : {}) });
 
   return (
     <div className="flex flex-col items-end gap-1">

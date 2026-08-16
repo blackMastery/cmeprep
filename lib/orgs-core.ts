@@ -301,9 +301,27 @@ export function guyanaDay(at: Date): string {
   }).format(at);
 }
 
+/** Civil-date arithmetic (YYYY-MM-DD, UTC math on the day string) — stated
+ * once next to mondayOf so every consumer of the week contract shares it. */
+export function addDays(day: string, days: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Whole days from `b` to `a` (a − b). */
+export function dayDiff(a: string, b: string): number {
+  return (
+    (new Date(`${a}T00:00:00Z`).getTime() - new Date(`${b}T00:00:00Z`).getTime()) /
+    DAY_MS
+  );
+}
+
 /** Monday of the ISO week containing a civil date — MUST agree with the
  * views' `date_trunc('week', … at time zone 'America/Guyana')` or the
- * week_start >= filter clips a partial week. */
+ * week_start >= filter clips a partial week. Views bound by this contract:
+ * the readiness views (20260817000001) and the study-plan views
+ * (20260820000001, user_exam_week_test_subject_attempts). */
 export function mondayOf(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
   const dow = d.getUTCDay(); // 0 = Sunday
@@ -523,12 +541,17 @@ export function readinessCsv(
     >;
     lastActiveDay: string | null;
     assignmentsCompleted: number;
+    /** Study-plan visibility (SPEC §17): the derived pair is all the org
+     * export ever carries — goals/intensity/personal dates stay private. */
+    planAdherencePct: number | null;
+    hasActivePlan: boolean;
   }[]
 ): string {
   const header = [
     "name", "email", "department", "score", "band", "reasons",
     "accuracy_pct", "trend_delta_pct", "coverage_pct",
     "last_active", "assignments_completed",
+    "plan_adherence_pct", "has_active_plan",
   ].join(",");
   const lines = rows.map((r) =>
     [
@@ -543,6 +566,8 @@ export function readinessCsv(
       csvField(r.readiness.coveragePct),
       csvField(r.lastActiveDay),
       csvField(r.assignmentsCompleted),
+      csvField(r.planAdherencePct),
+      csvField(r.hasActivePlan ? "yes" : "no"),
     ].join(",")
   );
   return [header, ...lines].join("\n");

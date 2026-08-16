@@ -8,6 +8,7 @@ import {
   FilePlus2,
   History,
   LayoutDashboard,
+  ListTodo,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
 const NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tests/new", label: "New test", icon: FilePlus2 },
+  { href: "/plan", label: "Study plan", icon: ListTodo },
   { href: "/tests", label: "History", icon: History },
   { href: "/courses", label: "Courses", icon: BookOpen },
   { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },

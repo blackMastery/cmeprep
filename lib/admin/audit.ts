@@ -46,6 +46,10 @@ export type AuditAction =
   | "message.handle"
   | "message.reopen"
   | "message.delete"
+  // Study plans: the two sanctioned service-role deletes of a frozen week —
+  // both user-initiated/self-healing, audited because RLS was bypassed.
+  | "study_plan.dismiss_diagnostic"
+  | "study_plan.week_reset"
   // Money-side events. A SUCCESSFUL capture gets no action of its own — the
   // payments row IS the record, and subscription.create already carries
   // paymentId/paypalOrderId/captureId in its meta. There is no

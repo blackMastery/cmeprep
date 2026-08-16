@@ -379,6 +379,7 @@ export default async function OrgDashboardPage(props: PageProps<"/org">) {
                     </Link>
                   </TableHead>
                   <TableHead>Assignments</TableHead>
+                  <TableHead>Plan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -427,12 +428,27 @@ export default async function OrgDashboardPage(props: PageProps<"/org">) {
                     <TableCell className="tabular-nums">
                       {row.assignmentsCompleted}
                     </TableCell>
+                    {/* Adherence only (SPEC §17) — the plan itself is the
+                        member's; "—" = never planned this exam. */}
+                    <TableCell className="tabular-nums">
+                      <span className="inline-flex items-center gap-1.5">
+                        {row.hasActivePlan && (
+                          <span
+                            className="size-1.5 rounded-full bg-success"
+                            title="Has a plan this week"
+                          />
+                        )}
+                        {row.planAdherencePct !== null
+                          ? `${row.planAdherencePct}%`
+                          : "—"}
+                      </span>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={departments.length > 0 ? 8 : 7}
+                      colSpan={departments.length > 0 ? 9 : 8}
                       className="text-muted-foreground"
                     >
                       {atRiskOnly

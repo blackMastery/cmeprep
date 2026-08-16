@@ -551,6 +551,71 @@ export const orgExamDateSchema = z.object({
   sittingOn: sittingDateSchema.nullable(),
 });
 
+/* ── Study plans ────────────────────────────────────────────────── */
+
+export const PLAN_INTENSITIES = ["light", "standard", "intense"] as const;
+export const planIntensitySchema = z.enum(PLAN_INTENSITIES);
+
+/** Personal sitting date — same bounds as the org's (sittingDateSchema);
+ * null = clear it and fall back to the org date. Actions map "" → null. */
+export const planSittingSchema = z.object({
+  examId: uuid(),
+  sittingOn: sittingDateSchema.nullable(),
+});
+
+export const planIntensityUpdateSchema = z.object({
+  examId: uuid(),
+  intensity: planIntensitySchema,
+});
+
+/** POST /api/tests plan-goal launch: the server supplies the whole config
+ * from the frozen week row, like an assignment launch — the client sends
+ * only these ids. Goal ids are deterministic short strings ("mock",
+ * "focus:<subjectId>"), not uuids. */
+export const startPlanGoalSchema = z.object({
+  planWeekId: uuid(),
+  goalId: z.string().min(1).max(80),
+});
+
+/**
+ * study_plan_weeks.goals — the versioned frozen-goals doc. The ONE parser
+ * for that jsonb everywhere (lib/plan.ts, the launch route): a week whose
+ * doc fails this parse renders as a generic history entry and is excluded
+ * from adherence entirely, never a crash and never a fake 0%.
+ */
+export const planGoalSchema = z.discriminatedUnion("type", [
+  z.object({
+    id: z.string().min(1).max(80),
+    type: z.literal("total_questions"),
+    target: z.number().int().min(1),
+  }),
+  z.object({
+    id: z.string().min(1).max(80),
+    type: z.literal("focus_sessions"),
+    subjectId: uuid(),
+    /** Snapshotted so history renders correctly after subject renames. */
+    subjectName: z.string().min(1).max(80),
+    reason: z.enum(["coverage_gap", "weak_subject"]),
+    sessions: z.number().int().min(1).max(10),
+    questionsPerSession: z.number().int().min(5).max(100),
+  }),
+  z.object({
+    id: z.string().min(1).max(80),
+    type: z.literal("mock"),
+    diagnostic: z.boolean(),
+    numQuestions: z.number().int().min(5).max(100),
+    durationMin: z.number().int().min(5).max(240),
+  }),
+]);
+
+export const planGoalsDocSchema = z.object({
+  v: z.literal(1),
+  goals: z.array(planGoalSchema).min(1).max(12),
+});
+
+export type PlanGoal = z.infer<typeof planGoalSchema>;
+export type PlanGoalsDoc = z.infer<typeof planGoalsDocSchema>;
+
 /* ── Admin analytics dashboard ──────────────────────────────────── */
 
 /** Preset range tabs — must stay in sync with RANGE_PRESETS in
