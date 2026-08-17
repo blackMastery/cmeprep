@@ -22,9 +22,12 @@ import type {
 
 export type LifetimeStats = {
   stats: UserStats | null;
-  /** Exam vs tutor split of the same attempts; null when a mode has none. */
+  /** Per-mode split of the same attempts; null when a mode has none. Every
+   * mode that feeds the combined headline must appear here, or the split
+   * silently omits attempts the headline counted. */
   examStats: UserModeStats | null;
   tutorStats: UserModeStats | null;
+  osceStats: UserModeStats | null;
   streak: number;
 };
 
@@ -61,6 +64,7 @@ export async function getLifetimeStats(userId: string): Promise<LifetimeStats> {
     stats: (stats as UserStats | null) ?? null,
     examStats: byMode.find((m) => m.mode === "exam") ?? null,
     tutorStats: byMode.find((m) => m.mode === "tutor") ?? null,
+    osceStats: byMode.find((m) => m.mode === "osce") ?? null,
     streak: calculateStreak(
       (days ?? []).map((d) => d.day as string),
       new Date().toISOString().slice(0, 10)

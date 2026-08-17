@@ -18,6 +18,11 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
 - **Test engine** — new-test wizard, timed take screen (question palette,
   flag-for-review, autosave + resume, keyboard nav), server-side scoring,
   results, and review mode.
+- **OSCE stations** — open-ended questions graded by an AI judge
+  (OpenAI, `lib/openai.ts`) against an admin-authored model answer:
+  untimed sessions, per-station check-and-lock, binary verdicts feeding the
+  normal stats, paid-only with a 50-grades/day cap, admin grading log and
+  student "report this grade" flags. Requires `OPENAI_API_KEY`.
 - **Dashboard** — attempted / accuracy / streak, weak areas, past tests,
   trial usage with upgrade prompt.
 

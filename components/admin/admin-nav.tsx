@@ -9,6 +9,7 @@ import {
   ListChecks,
   Mail,
   Receipt,
+  Stethoscope,
   Users,
 } from "lucide-react";
 import {
@@ -20,6 +21,7 @@ import {
 const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin", label: "Overview", icon: Gauge },
   { href: "/admin/questions", label: "Questions", icon: ListChecks },
+  { href: "/admin/osce", label: "OSCE", icon: Stethoscope },
   { href: "/admin/exams", label: "Exams", icon: GraduationCap },
   { href: "/admin/courses", label: "Courses", icon: BookOpen },
   { href: "/admin/users", label: "Users", icon: Users },

@@ -33,6 +33,7 @@ const TYPE_LABEL: Record<string, string> = {
   mcq_single: "Single",
   mcq_multi: "Multi",
   image_based: "Image",
+  osce: "OSCE",
 };
 
 export function QuestionsTable({
@@ -224,6 +225,11 @@ function QuestionCard({
 
 /** Correct/total with a warning when the answer key can't be valid. */
 function OptionCount({ row }: { row: QuestionListRow }) {
+  // OSCE questions have no options — their key is the model answer, which
+  // the publish gate checks instead.
+  if (row.type === "osce") {
+    return <span className="text-muted-foreground">—</span>;
+  }
   const keyLooksWrong =
     row.type === "mcq_multi"
       ? row.correctCount < 2

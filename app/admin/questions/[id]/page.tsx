@@ -53,6 +53,7 @@ export default async function EditQuestionPage(
         subjects={subjects}
         question={record.question}
         options={record.visibleOptions}
+        modelAnswer={record.modelAnswer}
         usageCount={record.usageCount}
       />
     </div>

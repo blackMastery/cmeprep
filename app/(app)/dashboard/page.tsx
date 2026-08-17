@@ -46,7 +46,7 @@ export default async function DashboardPage() {
   // One shared lifetime-stats read (also used by /profile) plus three page
   // queries; RLS scopes everything to this user automatically.
   const [
-    { stats: userStats, examStats, tutorStats, streak },
+    { stats: userStats, examStats, tutorStats, osceStats, streak },
     { data: subjects },
     { data: tests },
     { data: subs },
@@ -78,6 +78,15 @@ export default async function DashboardPage() {
     continueLearning(user.id),
     getPlanCard(user),
   ]);
+
+  // Only modes the user has actually practised, in learning order.
+  const modeSplit = [
+    { label: "Exam", stats: examStats },
+    { label: "Tutor", stats: tutorStats },
+    { label: "OSCE", stats: osceStats },
+  ].flatMap((m) =>
+    m.stats ? [{ label: m.label, accuracy: m.stats.accuracy_pct }] : []
+  );
 
   const subscriptions = (subs ?? []) as SubscriptionScope[];
   const greetingName = firstName(user.profile.full_name);
@@ -196,11 +205,14 @@ export default async function DashboardPage() {
             userStats?.attempted ? `${Math.round(userStats.accuracy_pct)}%` : "—"
           }
           hint={
-            // Instant-feedback tutor accuracy isn't comparable to timed exam
-            // accuracy, so once both modes have data the split replaces the
-            // plain count. The headline number stays combined.
-            examStats && tutorStats
-              ? `Exam ${Math.round(examStats.accuracy_pct)}% · Tutor ${Math.round(tutorStats.accuracy_pct)}%`
+            // Instant-feedback accuracy (tutor, OSCE) isn't comparable to
+            // timed exam accuracy, so once more than one mode has data the
+            // split replaces the plain count. The headline stays combined —
+            // which is why EVERY mode with attempts must be listed here.
+            modeSplit.length > 1
+              ? modeSplit
+                  .map((m) => `${m.label} ${Math.round(m.accuracy)}%`)
+                  .join(" · ")
               : userStats?.attempted
                 ? `${userStats.correct} of ${userStats.attempted} correct`
                 : "Take a test to see this"

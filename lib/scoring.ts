@@ -118,6 +118,31 @@ export function scoreTutorTest(
 }
 
 /**
+ * OSCE scoring: verdicts were already decided by the AI grade route and live
+ * in the attempts rows — there is no option key to re-derive locally, so this
+ * only aggregates. Tutor denominator (correct/GRADED): a session may be
+ * finished with ungraded stations, which must not drag the score down.
+ * `questions` is empty by design — finalize must never write attempts rows
+ * for OSCE (an ungraded station has no verdict to record).
+ */
+export function scoreOsceOutcomes(
+  total: number,
+  outcomes: readonly { isCorrect: boolean }[]
+): TestScore {
+  const answered = outcomes.length;
+  const correct = outcomes.filter((o) => o.isCorrect).length;
+  return {
+    total,
+    correct,
+    answered,
+    unanswered: total - answered,
+    percentage:
+      answered === 0 ? 0 : Math.round((correct / answered) * 1000) / 10,
+    questions: [],
+  };
+}
+
+/**
  * Consecutive-day streak ending today (or yesterday — a day in progress
  * shouldn't reset a streak until it is actually missed).
  *

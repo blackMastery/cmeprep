@@ -669,6 +669,47 @@ describe("duplicate stems in-file", () => {
   });
 });
 
+describe("osce rows", () => {
+  const osceRow = (overrides: Record<string, unknown> = {}) =>
+    goodRow({
+      type: "osce",
+      optionA: "",
+      optionB: "",
+      correct: "",
+      modelAnswer:
+        "Stable angina — exertional pain relieved by rest; confirm with an exercise ECG.",
+      ...overrides,
+    });
+
+  it("imports a valid osce row: model answer, no options, no Correct", () => {
+    const a = run([osceRow()]);
+    expect(a.counts.valid).toBe(1);
+    expect(a.validRows[0].input.type).toBe("osce");
+    expect(a.validRows[0].input.options).toEqual([]);
+    expect(a.validRows[0].input.modelAnswer).toMatch(/stable angina/i);
+  });
+
+  it("rejects option cells on an osce row", () => {
+    const a = run([osceRow({ optionA: "Stable angina" })]);
+    expect(errorsOf(a, 2).join(" ")).toMatch(/model answer, not options/i);
+  });
+
+  it("rejects a filled Correct cell on an osce row", () => {
+    const a = run([osceRow({ correct: "A" })]);
+    expect(errorsOf(a, 2)[0]).toMatch(/Correct must be empty/i);
+  });
+
+  it("requires the model answer", () => {
+    const a = run([osceRow({ modelAnswer: "" })]);
+    expect(errorsOf(a, 2).join(" ")).toMatch(/model answer/i);
+  });
+
+  it("rejects a stray Model Answer on an MCQ row", () => {
+    const a = run([goodRow({ modelAnswer: "Does not belong here at all." })]);
+    expect(errorsOf(a, 2).join(" ")).toMatch(/only osce/i);
+  });
+});
+
 describe("template example rows", () => {
   const exampleAsRow = (i: number) =>
     Object.fromEntries(
@@ -676,12 +717,12 @@ describe("template example rows", () => {
     );
 
   it("skips untouched example rows with info severity", () => {
-    const a = run([exampleAsRow(0), exampleAsRow(1), goodRow()]);
-    expect(a.counts.skipped).toBe(2);
+    const a = run([exampleAsRow(0), exampleAsRow(1), exampleAsRow(2), goodRow()]);
+    expect(a.counts.skipped).toBe(3);
     expect(a.counts.valid).toBe(1);
     expect(
       a.lines.filter((l) => l.severity === "info" && /example row/i.test(l.message))
-    ).toHaveLength(2);
+    ).toHaveLength(3);
   });
 
   it("treats a MODIFIED example row as real data", () => {
@@ -752,17 +793,19 @@ describe("normalizeStem", () => {
 });
 
 describe("template columns vs parser columns", () => {
-  it("keeps Type and Difficulty out of the template but still parses them", () => {
+  it("ships Type (osce needs it) but keeps Difficulty template-free", () => {
     const templateKeys = COLUMNS.filter((c) => c.inTemplate !== false).map(
       (c) => c.key
     );
-    for (const key of ["type", "difficulty"]) {
-      // Absent from the generated file...
-      expect(templateKeys).not.toContain(key);
-      // ...but still a column the parser understands, so sheets built from an
-      // older template keep filing exactly where they used to.
-      expect(COLUMNS.map((c) => c.key)).toContain(key);
-    }
+    // Type joined the template when OSCE landed — "osce" has no column-free
+    // spelling, unlike the single default.
+    expect(templateKeys).toContain("type");
+    expect(templateKeys).toContain("modelAnswer");
+    // Absent from the generated file...
+    expect(templateKeys).not.toContain("difficulty");
+    // ...but still a column the parser understands, so sheets built from an
+    // older template keep filing exactly where they used to.
+    expect(COLUMNS.map((c) => c.key)).toContain("difficulty");
   });
 
   it("excludes Exam from the generated template — the exam is chosen on its page", () => {

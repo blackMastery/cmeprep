@@ -244,7 +244,9 @@ export type ReadinessReason =
 export type WeeklyModeBucket = {
   /** Monday of the ISO week (YYYY-MM-DD, America/Guyana). */
   weekStart: string;
-  mode: "exam" | "tutor";
+  /** OSCE buckets weigh like tutor in the blend — only timed exam-mode work
+   * gets EXAM_MODE_WEIGHT. */
+  mode: "exam" | "tutor" | "osce";
   attempts: number;
   correct: number;
 };
@@ -591,13 +593,15 @@ export type AssignmentStatus =
  * completion counts (listAssignmentProgress) so one rule decides.
  */
 export function qualifiesAsAssignmentCompletion(test: {
-  mode: "exam" | "tutor";
+  /** 'osce' can't launch from an assignment today; accepted (and held to the
+   * tutor bar) so the type matches any tests row without a cast. */
+  mode: "exam" | "tutor" | "osce";
   status: string;
   answered_questions: number | null;
   total_questions: number;
 }): boolean {
   if (test.status !== "submitted") return false;
-  if (test.mode !== "tutor") return true;
+  if (test.mode === "exam") return true;
   return (test.answered_questions ?? 0) >= test.total_questions;
 }
 

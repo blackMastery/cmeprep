@@ -27,12 +27,15 @@ export function QuestionEditor({
   subjects,
   question,
   options,
+  modelAnswer: initialModelAnswer = null,
   usageCount = 0,
   basePath = "/admin/questions",
 }: {
   subjects: SubjectOption[];
   question?: Question;
   options?: ExistingOption[];
+  /** OSCE answer key; null for MCQ questions and new drafts. */
+  modelAnswer?: string | null;
   usageCount?: number;
   /** The list URL Cancel returns to — /admin and /org/content share it. */
   basePath?: string;
@@ -92,21 +95,30 @@ export function QuestionEditor({
         ]
   );
 
+  const [modelAnswer, setModelAnswer] = useState(initialModelAnswer ?? "");
+
   const isMulti = type === "mcq_multi";
+  const isOsce = type === "osce";
   const correctCount = rows.filter((r) => r.isCorrect).length;
+
+  // What actually gets submitted: OSCE questions carry no options at all —
+  // saving a converted question retires every existing option.
+  const submittedRows = useMemo(() => (isOsce ? [] : rows), [isOsce, rows]);
 
   const keyWillChange = useMemo(() => {
     if (!options) return false;
     const before = new Set(
       options.filter((o) => !o.deleted_at && o.is_correct).map((o) => o.id)
     );
-    const after = new Set(rows.filter((r) => r.isCorrect && r.id).map((r) => r.id));
-    const newCorrect = rows.some((r) => r.isCorrect && !r.id);
+    const after = new Set(
+      submittedRows.filter((r) => r.isCorrect && r.id).map((r) => r.id)
+    );
+    const newCorrect = submittedRows.some((r) => r.isCorrect && !r.id);
     if (newCorrect) return true;
     if (before.size !== after.size) return true;
     for (const id of before) if (!after.has(id)) return true;
     return false;
-  }, [options, rows]);
+  }, [options, submittedRows]);
 
   const needsConfirm = keyWillChange && usageCount > 0;
 
@@ -144,7 +156,7 @@ export function QuestionEditor({
   }
 
   const optionsPayload = JSON.stringify(
-    rows.map((r) => ({
+    submittedRows.map((r) => ({
       ...(r.id ? { id: r.id } : {}),
       label: r.label,
       isCorrect: r.isCorrect,
@@ -209,6 +221,7 @@ export function QuestionEditor({
                 <option value="mcq_single">Single answer</option>
                 <option value="mcq_multi">Multi answer</option>
                 <option value="image_based">Image based</option>
+                <option value="osce">OSCE (open answer)</option>
               </AdminSelect>
 
               <AdminSelect
@@ -253,6 +266,33 @@ export function QuestionEditor({
           </CardContent>
         </Card>
 
+        {isOsce ? (
+          <Card className="[--card-spacing:--spacing(5)]">
+            <CardContent className="space-y-1.5">
+              <Label htmlFor="modelAnswer">Model answer</Label>
+              <Textarea
+                id="modelAnswer"
+                name="modelAnswer"
+                rows={6}
+                value={modelAnswer}
+                onChange={(e) => setModelAnswer(e.target.value)}
+                placeholder="The essential findings, diagnosis and management the student should give…"
+                aria-invalid={fieldError("modelAnswer") ? true : undefined}
+              />
+              <p
+                className={cn(
+                  "text-xs",
+                  fieldError("modelAnswer")
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+                )}
+              >
+                {fieldError("modelAnswer") ??
+                  "The AI grades each typed answer against this, and it is shown to the student once graded. Never visible before grading."}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
         <Card className="[--card-spacing:--spacing(5)]">
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -369,6 +409,7 @@ export function QuestionEditor({
             </Button>
           </CardContent>
         </Card>
+        )}
 
         <Card className="[--card-spacing:--spacing(5)]">
           <CardContent className="space-y-1.5">
@@ -447,8 +488,12 @@ export function QuestionEditor({
         <QuestionPreview
           stem={stem}
           imagePath={imagePath}
-          options={rows.map((r) => ({ label: r.label, isCorrect: r.isCorrect }))}
+          options={submittedRows.map((r) => ({
+            label: r.label,
+            isCorrect: r.isCorrect,
+          }))}
           multi={isMulti}
+          modelAnswer={isOsce ? modelAnswer : null}
         />
       </aside>
     </form>

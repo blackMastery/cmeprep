@@ -124,11 +124,32 @@ export async function saveQuestion(
     if (error || !created) return { error: "Could not create the question." };
 
     const { rows } = diffOptions(created.id, [], input.options);
-    const { error: optError } = await admin.from("question_options").insert(rows);
-    if (optError) {
-      return {
-        error: "The question was saved as a draft but its options failed. Re-save to retry.",
-      };
+    if (rows.length > 0) {
+      const { error: optError } = await admin
+        .from("question_options")
+        .insert(rows);
+      if (optError) {
+        return {
+          error: "The question was saved as a draft but its options failed. Re-save to retry.",
+        };
+      }
+    }
+
+    // OSCE's answer key. Must land before the publish flip below — a live
+    // station without a model answer is ungradeable.
+    if (input.type === "osce") {
+      const { error: maError } = await admin
+        .from("question_model_answers")
+        .upsert({
+          question_id: created.id,
+          model_answer: input.modelAnswer,
+          updated_at: now,
+        });
+      if (maError) {
+        return {
+          error: "The question was saved as a draft but its model answer failed. Re-save to retry.",
+        };
+      }
     }
 
     if (input.isPublished) {
@@ -224,6 +245,33 @@ export async function saveQuestion(
     }
   }
 
+  // The OSCE answer key rides inside the same publish fence as the options:
+  // written for osce, removed when a question is converted away so a stale
+  // key can't linger behind an MCQ row.
+  const modelAnswerChanged =
+    (input.type === "osce" ? input.modelAnswer : null) !==
+    current.modelAnswer;
+  if (input.type === "osce") {
+    const { error: maError } = await admin
+      .from("question_model_answers")
+      .upsert({
+        question_id: id.data,
+        model_answer: input.modelAnswer,
+        updated_at: now,
+      });
+    if (maError) {
+      return { error: "Could not save the model answer. The question is now a draft." };
+    }
+  } else if (current.modelAnswer !== null) {
+    const { error: maError } = await admin
+      .from("question_model_answers")
+      .delete()
+      .eq("question_id", id.data);
+    if (maError) {
+      return { error: "Could not update the question. It is now a draft." };
+    }
+  }
+
   const { error: updateError } = await admin
     .from("questions")
     .update({
@@ -248,6 +296,10 @@ export async function saveQuestion(
       retired: diff.retireIds.length,
       optionCount: diff.rows.length,
       published: input.isPublished,
+      // OSCE's analogue of a correctness change — surfaced in the log even
+      // though it needs no confirmation tick (there is no scored key to
+      // contradict; past verdicts stand either way).
+      ...(modelAnswerChanged ? { modelAnswerChanged: true } : {}),
     },
     scopeOrgId(scope)
   );
@@ -303,6 +355,7 @@ export async function togglePublish(
       image_path: current.question.image_path,
       optionCount: live.length,
       correctCount: live.filter((o) => o.is_correct).length,
+      hasModelAnswer: current.modelAnswer !== null,
     });
     if (blocker) return { error: blocker };
   }
@@ -421,18 +474,26 @@ export async function bulkSetPublished(
   // Two reads for the whole batch instead of getQuestionForEdit per id, which
   // would be two round-trips each. Deleted questions are excluded here rather
   // than reported — a deleted row is not a fixable publish failure.
-  const [{ data: questions }, { data: options }] = await Promise.all([
-    admin
-      .from("questions")
-      .select("id, stem, type, image_path")
-      .in("id", ids)
-      .is("deleted_at", null),
-    admin
-      .from("question_options")
-      .select("question_id, is_correct")
-      .is("deleted_at", null)
-      .in("question_id", ids),
-  ]);
+  const [{ data: questions }, { data: options }, { data: modelAnswers }] =
+    await Promise.all([
+      admin
+        .from("questions")
+        .select("id, stem, type, image_path")
+        .in("id", ids)
+        .is("deleted_at", null),
+      admin
+        .from("question_options")
+        .select("question_id, is_correct")
+        .is("deleted_at", null)
+        .in("question_id", ids),
+      admin
+        .from("question_model_answers")
+        .select("question_id")
+        .in("question_id", ids),
+    ]);
+  const hasModelAnswer = new Set(
+    (modelAnswers ?? []).map((m) => m.question_id)
+  );
 
   const optionCount = new Map<string, number>();
   const correctCount = new Map<string, number>();
@@ -452,6 +513,7 @@ export async function bulkSetPublished(
       image_path: q.image_path,
       optionCount: optionCount.get(q.id) ?? 0,
       correctCount: correctCount.get(q.id) ?? 0,
+      hasModelAnswer: hasModelAnswer.has(q.id),
     });
     if (reason) skipped.push({ id: q.id, stem: q.stem, reason });
     else publishable.push(q.id);

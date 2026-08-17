@@ -169,6 +169,8 @@ export type QuestionForEdit = {
   options: ExistingOption[];
   /** Live options only — retired ones stay in the DB but leave the editor. */
   visibleOptions: ExistingOption[];
+  /** OSCE answer key (question_model_answers); null for MCQ types. */
+  modelAnswer: string | null;
   usageCount: number;
 };
 
@@ -185,17 +187,23 @@ export async function getQuestionForEdit(
 
   if (!question) return null;
 
-  const [{ data: options }, { count }] = await Promise.all([
-    admin
-      .from("question_options")
-      .select("*")
-      .eq("question_id", id)
-      .order("position"),
-    admin
-      .from("test_questions")
-      .select("question_id", { count: "exact", head: true })
-      .eq("question_id", id),
-  ]);
+  const [{ data: options }, { count }, { data: modelAnswerRow }] =
+    await Promise.all([
+      admin
+        .from("question_options")
+        .select("*")
+        .eq("question_id", id)
+        .order("position"),
+      admin
+        .from("test_questions")
+        .select("question_id", { count: "exact", head: true })
+        .eq("question_id", id),
+      admin
+        .from("question_model_answers")
+        .select("model_answer")
+        .eq("question_id", id)
+        .maybeSingle(),
+    ]);
 
   const all = ((options ?? []) as QuestionOption[]).map((o) => ({
     id: o.id,
@@ -209,6 +217,7 @@ export async function getQuestionForEdit(
     question: question as Question,
     options: all,
     visibleOptions: all.filter((o) => !o.deleted_at),
+    modelAnswer: modelAnswerRow?.model_answer ?? null,
     usageCount: count ?? 0,
   };
 }

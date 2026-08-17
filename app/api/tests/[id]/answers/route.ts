@@ -44,13 +44,13 @@ export async function PATCH(
   // Only accept answers for questions that actually belong to this test.
   const [{ data: links }, revealedRes] = await Promise.all([
     admin.from("test_questions").select("question_id").eq("test_id", id),
-    // Tutor mode only — exam rows can never be revealed, so exam autosaves
+    // Tutor/OSCE only — exam rows can never be revealed, so exam autosaves
     // (the hottest write path) skip the extra query. Best-effort filter: the
     // rare reveal landing between this read and the upsert can still clobber
     // the staged selection, but never revealed_at (not in `rows`), and both
     // resume (getTakeState) and finalize treat the attempts row as the
     // graded truth for revealed questions, so the stale write is inert.
-    test.mode === "tutor"
+    test.mode !== "exam"
       ? admin
           .from("test_answers")
           .select("question_id")
@@ -67,6 +67,10 @@ export async function PATCH(
       test_id: id,
       question_id: a.questionId,
       selected_option_ids: a.selectedOptionIds,
+      // Keyed off the MODE, not per-row presence: PostgREST bulk upserts
+      // need uniform keys across rows, and only OSCE sessions stage text —
+      // an MCQ batch must not null out columns it never carries.
+      ...(test.mode === "osce" ? { answer_text: a.answerText ?? null } : {}),
       flagged: a.flagged ?? false,
       time_spent_sec: a.timeSpentSec ?? 0,
       updated_at: new Date().toISOString(),

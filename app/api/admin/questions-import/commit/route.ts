@@ -384,18 +384,50 @@ export async function POST(request: Request) {
       diffOptions(questionRows[index].id, [], row.input.options).rows
     );
 
-    const { error: optionsError } = await admin
-      .from("question_options")
-      .insert(optionRows);
+    // An all-OSCE chunk has no option rows at all.
+    if (optionRows.length > 0) {
+      const { error: optionsError } = await admin
+        .from("question_options")
+        .insert(optionRows);
 
-    if (optionsError) {
-      const leftover = await compensate();
-      return fail(
-        500,
-        leftover
-          ? `Import failed while inserting options. ${leftover}`
-          : "Import failed while inserting options — nothing was kept."
-      );
+      if (optionsError) {
+        const leftover = await compensate();
+        return fail(
+          500,
+          leftover
+            ? `Import failed while inserting options. ${leftover}`
+            : "Import failed while inserting options — nothing was kept."
+        );
+      }
+    }
+
+    // OSCE answer keys. Compensation needs nothing extra: deleting the
+    // questions cascades to question_model_answers.
+    const modelAnswerRows = chunk.flatMap((row, index) =>
+      row.input.type === "osce"
+        ? [
+            {
+              question_id: questionRows[index].id,
+              model_answer: row.input.modelAnswer,
+              updated_at: now,
+            },
+          ]
+        : []
+    );
+    if (modelAnswerRows.length > 0) {
+      const { error: modelAnswersError } = await admin
+        .from("question_model_answers")
+        .insert(modelAnswerRows);
+
+      if (modelAnswersError) {
+        const leftover = await compensate();
+        return fail(
+          500,
+          leftover
+            ? `Import failed while inserting model answers. ${leftover}`
+            : "Import failed while inserting model answers — nothing was kept."
+        );
+      }
     }
   }
 

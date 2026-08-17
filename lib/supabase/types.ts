@@ -7,11 +7,12 @@
  */
 
 export type UserRole = "trial" | "student" | "admin";
-export type QuestionType = "mcq_single" | "mcq_multi" | "image_based";
+export type QuestionType = "mcq_single" | "mcq_multi" | "image_based" | "osce";
 export type Difficulty = "easy" | "medium" | "hard";
 export type TestStatus = "in_progress" | "submitted" | "abandoned";
-/** text + check constraint in Postgres, NOT a pg enum (payments precedent). */
-export type TestMode = "exam" | "tutor";
+/** text + check constraint in Postgres, NOT a pg enum (payments precedent).
+ * 'osce' sessions are untimed like tutor (expires_at CHECK-constrained null). */
+export type TestMode = "exam" | "tutor" | "osce";
 export type SubStatus = "active" | "expired" | "cancelled";
 
 export type TestConfig = {
@@ -26,8 +27,10 @@ export type TestConfig = {
    * Assignment-prescription input ONLY (org_assignments.config): the launch
    * route reads it as the org's default mode and never copies it onto the
    * test row — tests.mode (the column) is the single source of truth there.
+   * Narrower than TestMode: assignments can't prescribe OSCE sessions
+   * (assignmentModeSchema pins this).
    */
-  mode?: TestMode;
+  mode?: "exam" | "tutor";
 };
 
 type Timestamps = { created_at: string };
@@ -99,6 +102,14 @@ export type QuestionOptionPublic = {
   position: number;
 };
 
+/** OSCE answer key. Service-role only (question rows are client-readable, so
+ * this can NOT live as a column on questions without leaking mid-test). */
+export type QuestionModelAnswer = {
+  question_id: string;
+  model_answer: string;
+  updated_at: string;
+};
+
 export type Test = Timestamps & {
   id: string;
   user_id: string;
@@ -131,10 +142,12 @@ export type TestAnswer = {
   test_id: string;
   question_id: string;
   selected_option_ids: string[];
+  /** OSCE only: the staged free-text answer. Null on MCQ rows. */
+  answer_text: string | null;
   flagged: boolean;
   time_spent_sec: number;
-  /** Tutor only: set once by the reveal endpoint, never cleared. A revealed
-   * answer is locked — the answers PATCH skips these rows. */
+  /** Tutor/OSCE only: set once by the reveal/grade endpoint, never cleared.
+   * A revealed answer is locked — the answers PATCH skips these rows. */
   revealed_at: string | null;
   updated_at: string;
 };
@@ -145,6 +158,9 @@ export type Attempt = {
   user_id: string;
   question_id: string;
   selected_option_ids: string[];
+  /** OSCE only: the graded free-text answer, immutable like the verdict.
+   * Review reads this (never test_answers). Null on MCQ rows. */
+  answer_text: string | null;
   is_correct: boolean;
   time_spent_sec: number | null;
   answered_at: string;
@@ -247,10 +263,16 @@ export type ExamSubjectCounts = {
   exam_id: string;
   subject_id: string;
   subject_name: string;
+  /** All published questions, OSCE included — the coverage denominator. */
   question_count: number;
+  /** Excludes OSCE — what an exam/tutor launch can actually deal. Plan
+   * generation and mock rosters MUST size against this one. */
+  mcq_question_count: number;
 };
 
-/** Published, non-deleted questions per subject — the buyer-facing count. */
+/** Published, non-deleted, non-OSCE questions per subject — the buyer-facing
+ * count of the MCQ bank (OSCE stations count separately, see
+ * subject_osce_question_counts). */
 export type SubjectQuestionCount = {
   subject_id: string;
   question_count: number;
@@ -750,6 +772,48 @@ export type AnalyticsState = {
   updated_at: string;
 };
 
+/* ── OSCE grading (20260822000002) ─────────────────────────── */
+
+/** One OpenAI judge call, including failures (verdict null + error set).
+ * Service-role only. Doubles as the daily-cap counter (verdict-not-null rows
+ * per Guyana day) and holds the raw AI output students never see. */
+export type OsceGradingEvent = {
+  id: string;
+  user_id: string;
+  /** SET NULL on test deletion — spend history outlives the test. */
+  test_id: string | null;
+  question_id: string;
+  answer_text: string;
+  /** Null = the call failed; see error. Failed calls don't burn cap. */
+  verdict: "correct" | "incorrect" | null;
+  model: string;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  duration_ms: number;
+  error: string | null;
+  raw_response: Record<string, unknown> | null;
+  created_at: string;
+};
+
+/** "Report this grade" flag — admin triage signal, no regrade mechanics. */
+export type OsceGradeReport = {
+  id: string;
+  user_id: string;
+  test_id: string;
+  question_id: string;
+  grading_event_id: string | null;
+  note: string | null;
+  created_at: string;
+  handled_at: string | null;
+  handled_by: string | null;
+};
+
+/** Published OSCE stations per subject — gates the wizard's OSCE mode. */
+export type SubjectOsceQuestionCount = {
+  subject_id: string;
+  question_count: number;
+};
+
 /** Contact form submission. Service-role read/write only — never client-read. */
 export type ContactMessage = Timestamps & {
   id: string;
@@ -787,6 +851,9 @@ export type Database = {
       subjects: Table<Subject>;
       questions: Table<Question>;
       question_options: Table<QuestionOption>;
+      question_model_answers: Table<QuestionModelAnswer>;
+      osce_grading_events: Table<OsceGradingEvent>;
+      osce_grade_reports: Table<OsceGradeReport>;
       tests: Table<Test>;
       test_questions: Table<TestQuestion>;
       test_answers: Table<TestAnswer>;
@@ -841,6 +908,7 @@ export type Database = {
       user_question_latest_outcome: View<UserQuestionLatestOutcome>;
       user_emails: View<UserEmail>;
       subject_question_counts: View<SubjectQuestionCount>;
+      subject_osce_question_counts: View<SubjectOsceQuestionCount>;
     };
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };

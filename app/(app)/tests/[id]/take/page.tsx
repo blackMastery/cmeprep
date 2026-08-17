@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { finalizeIfExpired, getTakeState, getTestForUser } from "@/lib/tests";
 import { TestRunner } from "@/components/test/test-runner";
 import { TutorRunner } from "@/components/test/tutor-runner";
+import { OsceRunner } from "@/components/test/osce-runner";
 
 export const metadata: Metadata = { title: "Test in progress" };
 
@@ -28,13 +29,13 @@ export default async function TakeTestPage(
   const state = await getTakeState(id, user.id);
   if (!state) notFound();
 
-  if (state.test.mode !== "tutor") {
+  if (state.test.mode === "exam") {
     return <TestRunner state={state} />;
   }
 
-  // Tutor sessions surface bookmark + note editing at reveal time, so the
-  // runner needs the learner's existing rows up front (RLS-scoped, same
-  // pattern as the review page).
+  // Tutor and OSCE sessions surface bookmark + note editing at reveal time,
+  // so the runner needs the learner's existing rows up front (RLS-scoped,
+  // same pattern as the review page).
   const questionIds = state.questions.map((q) => q.questionId);
   const idFilter = questionIds.length > 0 ? questionIds : [""];
   const supabase = await createClient();
@@ -54,11 +55,15 @@ export default async function TakeTestPage(
   const notesByQuestion: Record<string, string> = {};
   for (const n of noteRows ?? []) notesByQuestion[n.question_id] = n.body;
 
-  return (
-    <TutorRunner
-      state={state}
-      initialBookmarkedIds={(bookmarkRows ?? []).map((b) => b.question_id)}
-      notesByQuestion={notesByQuestion}
-    />
+  const runnerProps = {
+    state,
+    initialBookmarkedIds: (bookmarkRows ?? []).map((b) => b.question_id),
+    notesByQuestion,
+  };
+
+  return state.test.mode === "osce" ? (
+    <OsceRunner {...runnerProps} />
+  ) : (
+    <TutorRunner {...runnerProps} />
   );
 }

@@ -3,6 +3,7 @@ import {
   calculateStreak,
   correctOptionsInTest,
   isSelectionCorrect,
+  scoreOsceOutcomes,
   scoreTest,
   scoreTutorTest,
   shuffle,
@@ -175,6 +176,32 @@ describe("scoreTutorTest", () => {
       ["q3", ["b"]],
     ]);
     expect(scoreTutorTest(questions, answers).percentage).toBe(66.7);
+  });
+});
+
+describe("scoreOsceOutcomes", () => {
+  it("uses the tutor denominator: correct over GRADED, not total", () => {
+    const result = scoreOsceOutcomes(5, [
+      { isCorrect: true },
+      { isCorrect: true },
+      { isCorrect: false },
+    ]);
+    expect(result.total).toBe(5);
+    expect(result.correct).toBe(2);
+    expect(result.answered).toBe(3);
+    expect(result.unanswered).toBe(2);
+    expect(result.percentage).toBe(66.7);
+  });
+
+  it("scores 0 with nothing graded, never NaN", () => {
+    const result = scoreOsceOutcomes(4, []);
+    expect(result.percentage).toBe(0);
+    expect(result.answered).toBe(0);
+    expect(result.unanswered).toBe(4);
+  });
+
+  it("returns no per-question rows — finalize must never write OSCE attempts", () => {
+    expect(scoreOsceOutcomes(2, [{ isCorrect: true }]).questions).toEqual([]);
   });
 });
 

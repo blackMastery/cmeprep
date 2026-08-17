@@ -7,6 +7,7 @@ function candidate(overrides: Partial<PublishCandidate> = {}): PublishCandidate 
     image_path: null,
     optionCount: 4,
     correctCount: 1,
+    hasModelAnswer: false,
     ...overrides,
   };
 }
@@ -80,5 +81,48 @@ describe("publishBlocker", () => {
         candidate({ type: "image_based", image_path: null, optionCount: 1 })
       )
     ).toBe("Add at least two options before publishing.");
+  });
+
+  describe("osce", () => {
+    it("clears an OSCE question with a model answer and no options", () => {
+      expect(
+        publishBlocker(
+          candidate({
+            type: "osce",
+            optionCount: 0,
+            correctCount: 0,
+            hasModelAnswer: true,
+          })
+        )
+      ).toBeNull();
+    });
+
+    it("blocks an OSCE question without a model answer", () => {
+      expect(
+        publishBlocker(
+          candidate({
+            type: "osce",
+            optionCount: 0,
+            correctCount: 0,
+            hasModelAnswer: false,
+          })
+        )
+      ).toBe("OSCE questions need a model answer before publishing.");
+    });
+
+    // Leftover options from a converted MCQ must not block publishing —
+    // the OSCE key is the model answer, nothing else.
+    it("ignores option counts entirely for OSCE", () => {
+      expect(
+        publishBlocker(
+          candidate({
+            type: "osce",
+            optionCount: 4,
+            correctCount: 2,
+            hasModelAnswer: true,
+          })
+        )
+      ).toBeNull();
+    });
   });
 });

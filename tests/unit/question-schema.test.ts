@@ -184,6 +184,54 @@ describe("questionSchema", () => {
       expect(r.data.options[1].id).toBeUndefined();
     }
   });
+
+  describe("osce", () => {
+    const osce = (overrides: Record<string, unknown> = {}) =>
+      question({
+        type: "osce",
+        options: [],
+        modelAnswer:
+          "Opioid overdose — support airway, give titrated naloxone.",
+        ...overrides,
+      });
+
+    it("accepts a model answer with no options", () => {
+      expect(questionSchema.safeParse(osce()).success).toBe(true);
+    });
+
+    it("rejects options on an OSCE question", () => {
+      const r = questionSchema.safeParse(
+        osce({ options: [{ label: "A", isCorrect: true }] })
+      );
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0].message).toMatch(/model answer, not options/i);
+    });
+
+    it("requires a model answer of at least 10 characters", () => {
+      expect(
+        questionSchema.safeParse(osce({ modelAnswer: "" })).success
+      ).toBe(false);
+      const r = questionSchema.safeParse(osce({ modelAnswer: "too short" }));
+      expect(r.success).toBe(false);
+      expect(r.error?.issues.some((i) => i.path.includes("modelAnswer"))).toBe(
+        true
+      );
+    });
+
+    it("rejects a stray model answer on an MCQ question", () => {
+      const r = questionSchema.safeParse(
+        question({ modelAnswer: "This does not belong on an MCQ." })
+      );
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0].message).toMatch(/only osce/i);
+    });
+
+    it("defaults modelAnswer to empty when absent (legacy forms)", () => {
+      const r = questionSchema.safeParse(question());
+      expect(r.success).toBe(true);
+      if (r.success) expect(r.data.modelAnswer).toBe("");
+    });
+  });
 });
 
 describe("parseQuestionForm", () => {

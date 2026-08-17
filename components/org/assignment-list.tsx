@@ -22,8 +22,10 @@ export type AssignmentListItem = {
   latestTestId: string | null;
   latestScore: number | null;
   latestTotal: number | null;
-  /** Mode the qualifying completion was actually done in. */
-  completedMode: "exam" | "tutor" | null;
+  /** Mode the qualifying completion was actually done in. Typed as the full
+   * tests.mode union to match the source row; assignments themselves can
+   * only be done as exam or tutor. */
+  completedMode: "exam" | "tutor" | "osce" | null;
 };
 
 const STATUS_LABEL: Record<AssignmentStatus, string> = {

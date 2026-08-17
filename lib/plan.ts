@@ -256,7 +256,10 @@ export async function getOrCreateCurrentWeek(
   const subjects: PlanSubjectStat[] = (roster ?? []).map((s) => ({
     subjectId: s.subject_id,
     subjectName: s.subject_name,
-    questionCount: s.question_count,
+    // MCQ-only: plan sessions launch as exam/tutor, which deal no OSCE
+    // stations — sizing goals against the inclusive count would freeze in
+    // focus sessions that can never reach their completion threshold.
+    questionCount: s.mcq_question_count,
     attempts: accuracyBySubject.get(s.subject_id)?.attempts ?? 0,
     accuracyPct: accuracyBySubject.get(s.subject_id)?.accuracyPct ?? null,
   }));

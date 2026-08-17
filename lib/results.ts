@@ -14,6 +14,10 @@ export type ReviewQuestion = {
   subjectName: string;
   options: { id: string; label: string; isCorrect: boolean }[];
   selectedOptionIds: string[];
+  /** OSCE only: the graded free-text answer (from attempts). */
+  answerText: string | null;
+  /** OSCE only: the admin-authored answer key. */
+  modelAnswer: string | null;
   isCorrect: boolean;
   answered: boolean;
   /**
@@ -127,10 +131,26 @@ export async function getTestResults(
         .in("question_id", questionIds.length > 0 ? questionIds : [""]),
       admin
         .from("attempts")
-        .select("question_id, selected_option_ids, is_correct")
+        .select("question_id, selected_option_ids, answer_text, is_correct")
         .eq("test_id", test.id)
         .eq("user_id", userId),
     ]);
+
+  // Model answers exist only for OSCE questions; skip the query entirely on
+  // the overwhelmingly common all-MCQ paper.
+  const osceQuestionIds = ((questions ?? []) as unknown as QuestionRow[])
+    .filter((q) => q.type === "osce")
+    .map((q) => q.id);
+  const { data: modelAnswers } =
+    osceQuestionIds.length > 0
+      ? await admin
+          .from("question_model_answers")
+          .select("question_id, model_answer")
+          .in("question_id", osceQuestionIds)
+      : { data: null };
+  const modelAnswerById = new Map(
+    (modelAnswers ?? []).map((m) => [m.question_id, m.model_answer])
+  );
 
   // The admin client bypasses RLS, so the org wall must be applied HERE:
   // questions from a private bank are readable in review only while the
@@ -173,8 +193,13 @@ export async function getTestResults(
                 : [];
             }),
         selectedOptionIds: selected,
+        answerText: withheld ? null : (attempt?.answer_text ?? null),
+        modelAnswer: withheld ? null : (modelAnswerById.get(q.id) ?? null),
         isCorrect: attempt?.is_correct ?? false,
-        answered: selected.length > 0,
+        // OSCE: an attempts row exists exactly when the station was graded —
+        // selected_option_ids is always empty there, so length would paint
+        // every graded station "Not answered".
+        answered: q.type === "osce" ? attempt !== undefined : selected.length > 0,
         withheld,
       },
     ];
@@ -183,11 +208,11 @@ export async function getTestResults(
   // Per-subject accuracy for the results bars.
   //
   // The denominator must match the headline score's, or the two contradict
-  // each other. Exam mode scores correct/TOTAL — a blank is wrong. Tutor mode
-  // scores correct/ANSWERED, so a skipped question must not drag a subject
-  // down, and a subject with nothing answered has no reading at all rather
-  // than a fabricated 0%.
-  const tutorScoring = test.mode === "tutor";
+  // each other. Exam mode scores correct/TOTAL — a blank is wrong. Tutor and
+  // OSCE modes score correct/ANSWERED (answered = graded, for OSCE), so a
+  // skipped question must not drag a subject down, and a subject with
+  // nothing answered has no reading at all rather than a fabricated 0%.
+  const tutorScoring = test.mode !== "exam";
   const bySubject = new Map<string, SubjectBreakdown>();
   for (const q of reviewQuestions) {
     if (tutorScoring && !q.answered) continue;

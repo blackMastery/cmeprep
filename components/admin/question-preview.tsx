@@ -21,11 +21,14 @@ export function QuestionPreview({
   imagePath,
   options,
   multi,
+  modelAnswer = null,
 }: {
   stem: string;
   imagePath: string | null;
   options: { label: string; isCorrect: boolean }[];
   multi: boolean;
+  /** Non-null = OSCE: render the free-text answer box instead of options. */
+  modelAnswer?: string | null;
 }) {
   const [showKey, setShowKey] = useState(false);
   const imageUrl = questionImageUrl(imagePath);
@@ -69,21 +72,43 @@ export function QuestionPreview({
             </p>
           )}
 
-          <div className="mt-3 space-y-2">
-            {options.map((opt, i) => (
-              <AnswerOption
-                key={i}
-                id={`preview-${i}`}
-                groupName="preview"
-                label={opt.label || `Option ${LETTERS[i] ?? i + 1}`}
-                letter={LETTERS[i] ?? String(i + 1)}
-                multi={multi}
-                selected={false}
-                state={showKey && opt.isCorrect ? "missed" : "idle"}
-                disabled
-              />
-            ))}
-          </div>
+          {modelAnswer !== null ? (
+            <div className="mt-3 space-y-2">
+              <div className="rounded-lg border border-input bg-card px-3 py-2.5 text-sm text-muted-foreground">
+                Type your answer…
+              </div>
+              {showKey && (
+                <div className="rounded-lg border-l-2 border-teal bg-teal/5 px-3 py-2.5">
+                  <p className="mb-1 text-xs font-semibold tracking-wide text-teal uppercase">
+                    Model answer
+                  </p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                    {modelAnswer.trim() || (
+                      <span className="text-muted-foreground">
+                        The model answer will appear here…
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {options.map((opt, i) => (
+                <AnswerOption
+                  key={i}
+                  id={`preview-${i}`}
+                  groupName="preview"
+                  label={opt.label || `Option ${LETTERS[i] ?? i + 1}`}
+                  letter={LETTERS[i] ?? String(i + 1)}
+                  multi={multi}
+                  selected={false}
+                  state={showKey && opt.isCorrect ? "missed" : "idle"}
+                  disabled
+                />
+              ))}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

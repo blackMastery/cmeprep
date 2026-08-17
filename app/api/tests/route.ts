@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import {
+  assignmentModeSchema,
   createTestSchema,
   planGoalsDocSchema,
   startPlanGoalSchema,
-  testModeSchema,
   uuid,
 } from "@/lib/validation";
 import { examAccessFrom } from "@/lib/entitlements";
@@ -21,11 +21,13 @@ import { shuffle } from "@/lib/scoring";
 import type { OrgAssignment, StudyPlanWeek, TestConfig } from "@/lib/supabase/types";
 
 /**
- * POST /api/tests — create a test: a timed exam or an untimed tutor session.
+ * POST /api/tests — create a test: a timed exam, an untimed tutor session,
+ * or an untimed OSCE station session (free-text, AI-graded, paid-only).
  *
  * Server-authoritative: picks the questions, freezes the option order, sets
- * expires_at (exam mode only — tutor sessions never expire), and consumes a
- * trial credit atomically. The response contains no correctness data.
+ * expires_at (exam mode only — tutor/OSCE sessions never expire), and
+ * consumes a trial credit atomically. The response contains no correctness
+ * data.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -92,6 +94,8 @@ export async function POST(request: Request) {
 
   // The member may launch an assignment in the other mode ("do this mock as
   // practice") — completions still count, labeled with the mode actually used.
+  // Pinned to exam/tutor: an assignment prescribes MCQ questions, which an
+  // OSCE session could never grade.
   let modeOverride: "exam" | "tutor" | null = null;
   if (
     assignment &&
@@ -99,7 +103,7 @@ export async function POST(request: Request) {
     body !== null &&
     "mode" in body
   ) {
-    const override = testModeSchema.safeParse(
+    const override = assignmentModeSchema.safeParse(
       (body as Record<string, unknown>).mode
     );
     if (!override.success) {
@@ -154,15 +158,19 @@ export async function POST(request: Request) {
     if (!goal) {
       return NextResponse.json({ error: "Unknown plan goal" }, { status: 404 });
     }
-    // Mocks span every subject of the exam that has published questions.
+    // Mocks span every subject of the exam that has published questions —
+    // MCQ-only, since plan sessions launch as exam/tutor and the candidates
+    // query below excludes OSCE stations.
     const { data: roster } = await admin
       .from("exam_subject_counts")
-      .select("subject_id, question_count")
+      .select("subject_id, mcq_question_count")
       .eq("exam_id", week.exam_id);
     const prescription = prescriptionForGoal(
       goal,
       week.exam_id,
-      (roster ?? []).filter((s) => s.question_count > 0).map((s) => s.subject_id)
+      (roster ?? [])
+        .filter((s) => s.mcq_question_count > 0)
+        .map((s) => s.subject_id)
     );
     if (prescription === "not_launchable") {
       // total_questions is a target, not a session — the UI links it to the
@@ -273,6 +281,22 @@ export async function POST(request: Request) {
     id: exam.id,
     orgId: exam.org_id,
   });
+
+  // ── OSCE is paid-only: every graded station is a real OpenAI call, so the
+  // trial quota doesn't cover it. `consumesTrial` is exactly "this access
+  // rides the trial" — org-covered trial-role members pass (the org paid).
+  // Known seam: a just-paid user whose role hasn't synced from 'trial' yet is
+  // briefly blocked here.
+  if (mode === "osce" && consumesTrial) {
+    return NextResponse.json(
+      {
+        error: "osce_requires_subscription",
+        message: "OSCE stations are part of the paid plan. Upgrade to practise them.",
+      },
+      { status: 403 }
+    );
+  }
+
   if (consumesTrial) {
     const { data: claimed, error: claimError } = await admin
       .from("profiles")
@@ -301,13 +325,19 @@ export async function POST(request: Request) {
     }
   }
 
-  // ── Select candidate questions
+  // ── Select candidate questions. The type filter is load-bearing BOTH
+  // ways: an OSCE session grades only free-text stations, and an MCQ test
+  // that picked up an option-less OSCE question would deal an unanswerable
+  // paper — publishing one OSCE question must never corrupt MCQ tests.
   let query = admin
     .from("questions")
     .select("id, subject_id")
     .eq("is_published", true)
     .is("deleted_at", null)
     .in("subject_id", subjectIds);
+
+  query =
+    mode === "osce" ? query.eq("type", "osce") : query.neq("type", "osce");
 
   if (difficulty !== "mixed") {
     query = query.eq("difficulty", difficulty);
@@ -386,8 +416,8 @@ export async function POST(request: Request) {
     exam_id: examId,
   };
 
-  // Tutor sessions are untimed and resumable indefinitely (CHECK-constrained
-  // to a null deadline).
+  // Tutor/OSCE sessions are untimed and resumable indefinitely
+  // (CHECK-constrained to a null deadline).
   const expiresAt =
     mode === "exam"
       ? new Date(Date.now() + durationMin! * 60_000).toISOString()

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   correctOptionsInTest,
   isSelectionCorrect,
+  scoreOsceOutcomes,
   scoreTest,
   scoreTutorTest,
 } from "@/lib/scoring";
@@ -17,11 +18,15 @@ import type {
 /** Network grace so a submit fired at 00:00 isn't rejected in flight. */
 export const SUBMIT_GRACE_SEC = 30;
 
-/** Per-question feedback served ONLY for revealed questions of a tutor test. */
+/** Per-question feedback served ONLY for revealed questions of a tutor or
+ * OSCE test. */
 export type TakeReveal = {
   isCorrect: boolean;
+  /** Empty for OSCE stations — their answer key is modelAnswer. */
   correctOptionIds: string[];
   explanation: string;
+  /** OSCE only: the admin-authored answer key, served once graded. */
+  modelAnswer?: string;
 };
 
 export type TakeQuestion = {
@@ -35,10 +40,12 @@ export type TakeQuestion = {
   /** Options in the order frozen for this test. Never includes correctness. */
   options: { id: string; label: string }[];
   selectedOptionIds: string[];
+  /** OSCE only: staged (or graded) free text. Null on MCQ questions. */
+  answerText: string | null;
   flagged: boolean;
-  /** Tutor only: set once the reveal endpoint graded and locked the answer.
-   * MUST stay null for exam-mode tests so a client can never render
-   * correctness mid-exam even by accident. */
+  /** Tutor/OSCE only: set once the reveal/grade endpoint graded and locked
+   * the answer. MUST stay null for exam-mode tests so a client can never
+   * render correctness mid-exam even by accident. */
   reveal: TakeReveal | null;
 };
 
@@ -111,7 +118,9 @@ export async function getTakeState(
         .in("question_id", questionIds),
       admin
         .from("test_answers")
-        .select("question_id, selected_option_ids, flagged, revealed_at")
+        .select(
+          "question_id, selected_option_ids, answer_text, flagged, revealed_at"
+        )
         .eq("test_id", testId),
     ]);
 
@@ -125,7 +134,11 @@ export async function getTakeState(
     (answers ?? []).map((a) => [a.question_id, a])
   );
 
-  const revealByQuestion = await loadRevealData(admin, test, links, answers ?? []);
+  // Each loader is gated on its own mode, so at most one does any work.
+  const [revealByQuestion, osceRevealByQuestion] = await Promise.all([
+    loadRevealData(admin, test, links, answers ?? []),
+    loadOsceRevealData(admin, test, answers ?? []),
+  ]);
 
   const take: TakeQuestion[] = links.flatMap((link) => {
     const q = questionById.get(link.question_id);
@@ -133,6 +146,7 @@ export async function getTakeState(
 
     const answer = answerByQuestion.get(link.question_id);
     const reveal = revealByQuestion.get(link.question_id);
+    const osceReveal = osceRevealByQuestion.get(link.question_id);
 
     return [
       {
@@ -152,6 +166,7 @@ export async function getTakeState(
         // selection, but it can never touch the attempt.
         selectedOptionIds:
           reveal?.selectedOptionIds ?? answer?.selected_option_ids ?? [],
+        answerText: osceReveal?.answerText ?? answer?.answer_text ?? null,
         flagged: answer?.flagged ?? false,
         reveal: reveal
           ? {
@@ -159,7 +174,7 @@ export async function getTakeState(
               correctOptionIds: reveal.correctOptionIds,
               explanation: reveal.explanation,
             }
-          : null,
+          : (osceReveal?.reveal ?? null),
       },
     ];
   });
@@ -261,6 +276,71 @@ async function loadRevealData(
   return revealed;
 }
 
+/**
+ * The OSCE sibling of loadRevealData: graded stations of an OSCE session,
+ * served from their attempts rows (verdict + graded text) plus the model
+ * answer. The mode gate on the first line is a security boundary — exam
+ * tests must always get an empty map, and only a GRADED station may ever
+ * see its model answer. A locked row with no attempts row (a crash window
+ * the grade route's attempts-first ordering makes near-impossible) is served
+ * ungraded so the client simply re-grades — there is no local way to heal an
+ * AI verdict.
+ */
+async function loadOsceRevealData(
+  admin: ReturnType<typeof createAdminClient>,
+  test: Test,
+  answers: { question_id: string; revealed_at: string | null }[]
+): Promise<Map<string, { reveal: TakeReveal; answerText: string | null }>> {
+  const revealed = new Map<
+    string,
+    { reveal: TakeReveal; answerText: string | null }
+  >();
+  if (test.mode !== "osce") return revealed;
+
+  const revealedIds = answers
+    .filter((a) => a.revealed_at !== null)
+    .map((a) => a.question_id);
+  if (revealedIds.length === 0) return revealed;
+
+  const [{ data: attempts }, { data: questions }, { data: modelAnswers }] =
+    await Promise.all([
+      admin
+        .from("attempts")
+        .select("question_id, is_correct, answer_text")
+        .eq("test_id", test.id)
+        .in("question_id", revealedIds),
+      admin
+        .from("questions")
+        .select("id, explanation")
+        .in("id", revealedIds),
+      admin
+        .from("question_model_answers")
+        .select("question_id, model_answer")
+        .in("question_id", revealedIds),
+    ]);
+
+  const explanationById = new Map(
+    (questions ?? []).map((q) => [q.id, q.explanation as string])
+  );
+  const modelAnswerById = new Map(
+    (modelAnswers ?? []).map((m) => [m.question_id, m.model_answer])
+  );
+
+  for (const attempt of attempts ?? []) {
+    revealed.set(attempt.question_id, {
+      reveal: {
+        isCorrect: attempt.is_correct,
+        correctOptionIds: [],
+        explanation: explanationById.get(attempt.question_id) ?? "",
+        modelAnswer: modelAnswerById.get(attempt.question_id) ?? "",
+      },
+      answerText: attempt.answer_text,
+    });
+  }
+
+  return revealed;
+}
+
 export function isExpired(test: Test, graceSec = 0): boolean {
   // Tutor sessions (expires_at null, CHECK-constrained) never expire — this
   // is what keeps finalizeIfExpired a no-op for them on every read path.
@@ -285,6 +365,8 @@ export async function finalizeTest(
   if (test.status !== "in_progress") return test;
 
   const tutor = test.mode === "tutor";
+  const osce = test.mode === "osce";
+  const revealedOnly = tutor || osce;
 
   const [{ data: links }, { data: allStaged }, { data: revealAttempts }] =
     await Promise.all([
@@ -297,20 +379,20 @@ export async function finalizeTest(
         .from("test_answers")
         .select("question_id, selected_option_ids, time_spent_sec, revealed_at")
         .eq("test_id", testId),
-      tutor
+      revealedOnly
         ? admin
             .from("attempts")
-            .select("question_id, selected_option_ids")
+            .select("question_id, selected_option_ids, is_correct")
             .eq("test_id", testId)
         : Promise.resolve({ data: null }),
     ]);
 
-  // Tutor: only REVEALED answers exist as far as scoring is concerned. An
-  // unrevealed staged row is an in-flight multi-select the user never
-  // committed — it must not be graded, and (unlike exam mode) no attempts
-  // row may be written for it or for blanks: phantom wrong answers would
-  // poison accuracy, weak areas and streaks.
-  const staged = tutor
+  // Tutor/OSCE: only REVEALED answers exist as far as scoring is concerned.
+  // An unrevealed staged row is an in-flight selection (or un-checked typed
+  // text) the user never committed — it must not be graded, and (unlike exam
+  // mode) no attempts row may be written for it or for blanks: phantom wrong
+  // answers would poison accuracy, weak areas and streaks.
+  const staged = revealedOnly
     ? (allStaged ?? []).filter((a) => a.revealed_at !== null)
     : (allStaged ?? []);
 
@@ -364,9 +446,19 @@ export async function finalizeTest(
 
   // Tutor score is correct/answered — blanks are allowed at Finish and must
   // not count against the user (completion is tracked separately).
-  const result = tutor
-    ? scoreTutorTest(scoreQuestions, answers)
-    : scoreTest(scoreQuestions, answers);
+  // OSCE: verdicts already live in the attempts rows written by the grade
+  // route — every attempts row IS a graded station (they are written before
+  // the lock). Nothing can be re-derived locally (that would take an OpenAI
+  // call), so finalize only aggregates; scoreOsceOutcomes returns an empty
+  // questions list precisely so no attempts writes happen below.
+  const result = osce
+    ? scoreOsceOutcomes(
+        questionIds.length,
+        (revealAttempts ?? []).map((a) => ({ isCorrect: a.is_correct }))
+      )
+    : tutor
+      ? scoreTutorTest(scoreQuestions, answers)
+      : scoreTest(scoreQuestions, answers);
 
   const attemptRows = result.questions
     // Tutor: attempts for revealed questions only (see `staged` above). The

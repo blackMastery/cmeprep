@@ -133,6 +133,7 @@ export function QuestionFilters({
         <option value="mcq_single">Single answer</option>
         <option value="mcq_multi">Multi answer</option>
         <option value="image_based">Image based</option>
+        <option value="osce">OSCE</option>
       </select>
 
       <select

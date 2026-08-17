@@ -68,6 +68,7 @@ export default async function ReviewPage(
         initialWrongOnly={filter === "wrong"}
         initialBookmarkedIds={(bookmarkRows ?? []).map((b) => b.question_id)}
         notesByQuestion={notesByQuestion}
+        testId={id}
       />
     </div>
   );

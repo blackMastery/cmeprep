@@ -115,10 +115,12 @@ export const COLUMNS: readonly ColumnDef[] = [
     key: "type",
     header: "Type",
     required: false,
-    inTemplate: false,
-    note: "Optional. single or multi (default single). Image questions must be created in the editor.",
+    // In the template since OSCE landed: "osce" has no column-free default,
+    // so admins need somewhere to say it. Old sheets without the column still
+    // parse exactly as before (default single).
+    note: "Optional. single, multi or osce (default single). Image questions must be created in the editor.",
     width: 10,
-    dropdown: ["single", "multi"],
+    dropdown: ["single", "multi", "osce"],
   },
   {
     key: "difficulty",
@@ -142,6 +144,14 @@ export const COLUMNS: readonly ColumnDef[] = [
     header: "Explanation",
     required: true,
     note: "Required. Shown in review after submitting, at least 10 characters.",
+    width: 56,
+    wrap: true,
+  },
+  {
+    key: "modelAnswer",
+    header: "Model Answer",
+    required: false,
+    note: 'Required when Type is "osce" — the answer key the AI grades typed answers against, at least 10 characters. Must be empty for other types.',
     width: 56,
     wrap: true,
   },
@@ -206,6 +216,17 @@ export const EXAMPLE_ROWS: readonly Record<string, string>[] = [
     optionB: "Positive TSH-receptor antibodies",
     optionC: "A single hot thyroid nodule",
     correct: "A,B",
+  },
+  {
+    specialty: "General",
+    subject: "Medicine",
+    type: "osce",
+    difficulty: "medium",
+    stem: "EXAMPLE - A 24-year-old woman is brought in drowsy with pinpoint pupils and a respiratory rate of 6. State the most likely diagnosis and your immediate management.",
+    explanation:
+      "EXAMPLE - Opioid toxicity is managed with airway support and titrated naloxone. Delete this row before importing your own questions.",
+    modelAnswer:
+      "EXAMPLE - Opioid overdose. Immediate management: support airway and breathing (bag-valve-mask ventilation), give IV/IM naloxone 400 micrograms titrated to response, monitor for re-sedation as naloxone wears off.",
   },
 ];
 
@@ -428,11 +449,15 @@ function buildHeaderMap(header: unknown[]): {
 
 // ── Row parsing ─────────────────────────────────────────────
 
-const TYPE_ALIASES: Record<string, "mcq_single" | "mcq_multi" | "image"> = {
+const TYPE_ALIASES: Record<
+  string,
+  "mcq_single" | "mcq_multi" | "osce" | "image"
+> = {
   single: "mcq_single",
   mcq_single: "mcq_single",
   multi: "mcq_multi",
   mcq_multi: "mcq_multi",
+  osce: "osce",
   image: "image",
   image_based: "image",
   "image based": "image",
@@ -642,7 +667,7 @@ export function parseMatrix(
     }
 
     // Type
-    let type: "mcq_single" | "mcq_multi" = "mcq_single";
+    let type: "mcq_single" | "mcq_multi" | "osce" = "mcq_single";
     const rawType = normalizeKey(fields.get("type") ?? "");
     if (rawType !== "") {
       const alias = TYPE_ALIASES[rawType];
@@ -650,11 +675,11 @@ export function parseMatrix(
         // An image is orthogonal to the answer shape now: put the picture in
         // the Image column and leave Type saying how many answers are right.
         rowErrors.push(
-          'Type "image" is no longer used — leave Type blank or use single/multi, and put the picture in the Image column.'
+          'Type "image" is no longer used — leave Type blank or use single/multi/osce, and put the picture in the Image column.'
         );
       } else if (!alias) {
         rowErrors.push(
-          `Type "${fields.get("type")}" isn't recognised — use single or multi.`
+          `Type "${fields.get("type")}" isn't recognised — use single, multi or osce.`
         );
       } else {
         type = alias;
@@ -714,10 +739,17 @@ export function parseMatrix(
       if (label !== "") optionByLetter.set(letter, label);
     }
 
-    // Correct letters
+    // Correct letters. OSCE rows have no options and no letter key — their
+    // answer key is the Model Answer column, so Correct must stay empty.
     const correctRaw = fields.get("correct") ?? "";
     const correctLetters = new Set<OptionLetter>();
-    if (correctRaw === "") {
+    if (type === "osce") {
+      if (correctRaw !== "") {
+        rowErrors.push(
+          "Correct must be empty for osce rows — the Model Answer column is the answer key."
+        );
+      }
+    } else if (correctRaw === "") {
       rowErrors.push('Correct is required — the letter(s) of the correct option(s), e.g. "A" or "A,C".');
     } else {
       const tokens = correctRaw
@@ -845,6 +877,10 @@ export function parseMatrix(
       imagePath: null,
       isPublished: false,
       options: collected.map(({ label, isCorrect }) => ({ label, isCorrect })),
+      // questionSchema enforces the pairing: required (min 10 chars) for
+      // osce, must be empty otherwise ("Only OSCE questions take a model
+      // answer" surfaces as the row error on a stray value).
+      modelAnswer: fields.get("modelAnswer") ?? "",
     };
 
     // Full schema validation — the same rules the editor enforces.

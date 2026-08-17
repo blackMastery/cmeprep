@@ -63,6 +63,7 @@ export default async function OrgEditQuestionPage(
         subjects={subjects}
         question={record.question}
         options={record.visibleOptions}
+        modelAnswer={record.modelAnswer}
         usageCount={record.usageCount}
         basePath="/org/content/questions"
       />

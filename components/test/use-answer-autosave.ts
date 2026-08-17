@@ -6,13 +6,20 @@ import type { SaveState } from "@/components/test/autosave-indicator";
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
-export type LocalAnswer = { selected: string[]; flagged: boolean };
+export type LocalAnswer = {
+  selected: string[];
+  /** OSCE free text. The OSCE runner seeds this for EVERY question (so the
+   * payload rows stay uniform); MCQ runners leave it undefined and it never
+   * enters their payloads. */
+  text?: string;
+  flagged: boolean;
+};
 
 /**
- * The staged-answer machinery shared by the exam and tutor runners: local
- * answer state, the debounced PATCH autosave, and the pagehide beacon flush.
- * Extracted from TestRunner verbatim — behavior must not drift, both runners
- * depend on its exact save semantics.
+ * The staged-answer machinery shared by the exam, tutor and OSCE runners:
+ * local answer state, the debounced PATCH autosave, and the pagehide beacon
+ * flush. Extracted from TestRunner verbatim — behavior must not drift, all
+ * runners depend on its exact save semantics.
  */
 export function useAnswerAutosave(testId: string, questions: TakeQuestion[]) {
   const [answers, setAnswers] = useState<Map<string, LocalAnswer>>(() => {
@@ -20,6 +27,7 @@ export function useAnswerAutosave(testId: string, questions: TakeQuestion[]) {
     for (const q of questions) {
       initial.set(q.questionId, {
         selected: q.selectedOptionIds,
+        ...(q.type === "osce" ? { text: q.answerText ?? "" } : {}),
         flagged: q.flagged,
       });
     }
@@ -83,6 +91,7 @@ export function useAnswerAutosave(testId: string, questions: TakeQuestion[]) {
           {
             questionId,
             selectedOptionIds: answer.selected,
+            ...(answer.text !== undefined ? { answerText: answer.text } : {}),
             flagged: answer.flagged,
             timeSpentSec: timeSpent.current.get(questionId) ?? 0,
           },

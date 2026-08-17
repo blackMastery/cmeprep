@@ -167,9 +167,11 @@ export async function getBookmarksPage(
       subjectName: q?.subjects?.name ?? "",
       note: noteByQuestion.get(b.question_id) ?? null,
       lastAttempt: attempt,
+      // OSCE questions have no options — an attempt alone unlocks their
+      // explanation (the model answer stays server-side, deliberately).
       detail:
-        q && attempt && options && options.length > 0
-          ? { options, explanation: q.explanation }
+        q && attempt && (q.type === "osce" || (options && options.length > 0))
+          ? { options: options ?? [], explanation: q.explanation }
           : null,
     };
   });

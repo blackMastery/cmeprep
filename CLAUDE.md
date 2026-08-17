@@ -96,14 +96,21 @@ rather than restate (e.g. entitlements defers to `isEffectivelyActive`).
 `question_options_public` (no `is_correct`). Only `lib/tests.ts`,
 `lib/results.ts` and the tutor reveal route
 (`app/api/tests/[id]/reveal/route.ts`) read correctness, and results/review
-refuse to serve it while a test is `in_progress`. The ONE sanctioned mid-test
-exception is **tutor mode** (SPEC §16): the reveal route grades and locks one
-answer at a time, and `getTakeState` re-serves reveal data for
-already-revealed questions of a tutor test — both are gated on
-`mode === 'tutor'`, and those gates are the security boundary. Exam-mode
-tests must never be served correctness while in progress. `lib/scoring.ts`
-must not be imported by a Client Component. Multi-correct scoring is
-all-or-nothing in v1.
+refuse to serve it while a test is `in_progress`. The TWO sanctioned mid-test
+exceptions are **tutor mode** (SPEC §16) — the reveal route grades and locks
+one answer at a time, and `getTakeState` re-serves reveal data for
+already-revealed questions, both gated on `mode === 'tutor'` — and **OSCE
+mode**: the grade route (`app/api/tests/[id]/grade/route.ts`) sends the typed
+answer to OpenAI (`lib/openai.ts` + pure rules in `lib/osce-grading-core.ts`),
+records the binary verdict as a normal attempts row, locks the station, and
+only then serves the model answer; its `mode === 'osce'` gate is the same
+kind of security boundary. OSCE model answers live in
+`question_model_answers` — a fully revoked table, NEVER a column on
+`questions` (question rows are client-readable). Test creation filters
+candidates by type both ways so OSCE stations never enter MCQ papers and
+vice versa. Exam-mode tests must never be served correctness while in
+progress. `lib/scoring.ts` must not be imported by a Client Component.
+Multi-correct scoring is all-or-nothing in v1.
 
 ### Timing
 

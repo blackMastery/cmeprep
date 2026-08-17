@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
+import { toast } from "sonner";
 import type { ReviewQuestion } from "@/lib/results";
 import { cn } from "@/lib/utils";
 import { questionImageUrl } from "@/lib/storage";
@@ -20,11 +21,14 @@ export function ReviewList({
   initialWrongOnly,
   initialBookmarkedIds = [],
   notesByQuestion = {},
+  testId,
 }: {
   questions: ReviewQuestion[];
   initialWrongOnly: boolean;
   initialBookmarkedIds?: string[];
   notesByQuestion?: Record<string, string>;
+  /** Enables "Report this grade" on OSCE stations (posts to this test). */
+  testId?: string;
 }) {
   const [wrongOnly, setWrongOnly] = useState(initialWrongOnly);
 
@@ -67,6 +71,7 @@ export function ReviewList({
                 question={q}
                 initialBookmarked={initialBookmarkedIds.includes(q.questionId)}
                 note={notesByQuestion[q.questionId] ?? null}
+                testId={testId}
               />
             </li>
           ))}
@@ -80,10 +85,12 @@ function ReviewCard({
   question,
   initialBookmarked,
   note,
+  testId,
 }: {
   question: ReviewQuestion;
   initialBookmarked: boolean;
   note: string | null;
+  testId?: string;
 }) {
   // Private-bank content after leaving the org: the score survives, the
   // organisation's material does not (SPEC §4). Render the gap, never a 404.
@@ -164,29 +171,60 @@ function ReviewCard({
           <QuestionImage src={questionImageUrl(question.imagePath)!} />
         )}
 
-        <div className="space-y-2.5">
-          {question.options.map((opt, i) => {
-            const selected = question.selectedOptionIds.includes(opt.id);
-            let state: AnswerState = "idle";
-            if (selected && opt.isCorrect) state = "correct";
-            else if (selected && !opt.isCorrect) state = "incorrect";
-            else if (!selected && opt.isCorrect) state = "missed";
-
-            return (
-              <AnswerOption
-                key={opt.id}
-                id={opt.id}
-                groupName={`review-${question.questionId}`}
-                label={opt.label}
-                letter={LETTERS[i] ?? String(i + 1)}
-                multi={question.type === "mcq_multi"}
-                selected={selected}
-                state={state}
-                disabled
+        {question.type === "osce" ? (
+          <div className="space-y-3">
+            {question.answered && (
+              <div className="rounded-xl border border-border bg-card px-4 py-3.5">
+                <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  Your answer
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+                  {question.answerText ?? ""}
+                </p>
+              </div>
+            )}
+            {question.modelAnswer && (
+              <div className="rounded-xl border-l-2 border-teal bg-teal/5 px-4 py-3.5">
+                <p className="mb-1 text-xs font-semibold tracking-wide text-teal uppercase">
+                  Model answer
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+                  {question.modelAnswer}
+                </p>
+              </div>
+            )}
+            {question.answered && testId && (
+              <ReportGradeButton
+                testId={testId}
+                questionId={question.questionId}
               />
-            );
-          })}
-        </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {question.options.map((opt, i) => {
+              const selected = question.selectedOptionIds.includes(opt.id);
+              let state: AnswerState = "idle";
+              if (selected && opt.isCorrect) state = "correct";
+              else if (selected && !opt.isCorrect) state = "incorrect";
+              else if (!selected && opt.isCorrect) state = "missed";
+
+              return (
+                <AnswerOption
+                  key={opt.id}
+                  id={opt.id}
+                  groupName={`review-${question.questionId}`}
+                  label={opt.label}
+                  letter={LETTERS[i] ?? String(i + 1)}
+                  multi={question.type === "mcq_multi"}
+                  selected={selected}
+                  state={state}
+                  disabled
+                />
+              );
+            })}
+          </div>
+        )}
 
         <ExplanationStrip explanation={question.explanation} />
 
@@ -196,6 +234,46 @@ function ReviewCard({
         />
       </CardContent>
     </Card>
+  );
+}
+
+/** "This AI grade looks wrong" — pure triage signal; duplicates are answered
+ * as success server-side, so optimistic state is safe. */
+function ReportGradeButton({
+  testId,
+  questionId,
+}: {
+  testId: string;
+  questionId: string;
+}) {
+  const [reported, setReported] = useState(false);
+
+  async function report() {
+    if (reported) return;
+    setReported(true);
+    try {
+      const res = await fetch(`/api/tests/${testId}/report-grade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      toast.success("Thanks — we'll review this grade.");
+    } catch {
+      setReported(false);
+      toast.error("Could not send the report. Try again.");
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void report()}
+      disabled={reported}
+      className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:no-underline disabled:opacity-70"
+    >
+      {reported ? "Grade reported ✓" : "Report this grade"}
+    </button>
   );
 }
 

@@ -36,9 +36,11 @@ export default async function ResultsPage(
   // exams" was both untrue and an upsell for access they already have.
   const access = await getExamAccess(user);
 
-  const tutor = test.mode === "tutor";
+  // Tutor and OSCE share the untimed correct/answered contract.
+  const tutor = test.mode !== "exam";
+  const osce = test.mode === "osce";
   const percentage = Math.round(Number(test.score ?? 0));
-  // Tutor score is correct/answered, so "wrong" must use the same base —
+  // Tutor/OSCE score is correct/answered, so "wrong" must use the same base —
   // skipped questions were never graded.
   const wrongCount = tutor
     ? results.answered - results.correct
@@ -49,7 +51,7 @@ export default async function ResultsPage(
       {/* Hero score */}
       <div className="text-center">
         <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-          {tutor ? "Tutor session score" : "Your score"}
+          {osce ? "OSCE session score" : tutor ? "Tutor session score" : "Your score"}
         </p>
         <p className="mt-2 font-display text-7xl font-semibold tracking-tight text-primary tabular-nums sm:text-8xl">
           {percentage}
@@ -63,7 +65,8 @@ export default async function ResultsPage(
             </span>{" "}
             of {results.answered} answered correct
             {" · "}
-            {results.answered} of {results.total} questions checked
+            {results.answered} of {results.total}{" "}
+            {osce ? "stations graded" : "questions checked"}
             {results.answered < results.total && (
               <> · {results.total - results.answered} skipped</>
             )}

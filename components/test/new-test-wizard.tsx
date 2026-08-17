@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,7 +10,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { LockedExamRow } from "@/components/test/locked-exam-row";
 
-type WizardSubject = { id: string; name: string };
+type WizardSubject = {
+  id: string;
+  name: string;
+  /** Published OSCE stations in this subject (0 hides it in OSCE mode). */
+  osceQuestionCount: number;
+};
 type WizardSpecialty = { id: string; name: string; subjects: WizardSubject[] };
 export type WizardExam = {
   id: string;
@@ -19,9 +25,14 @@ export type WizardExam = {
   questionCount: number;
   /** Not covered by this student's subscription — shown, never hidden. */
   locked: boolean;
+  /** OSCE is paid-only; presentation of the /api/tests gate. */
+  osceLocked: boolean;
+  osceQuestionCount: number;
 };
 
 const COUNTS = [10, 20, 40, 60];
+/** Free-text stations take minutes each — smaller sessions than MCQ. */
+const OSCE_COUNTS = [5, 10, 20];
 const DIFFICULTIES = [
   { value: "mixed", label: "Mixed" },
   { value: "easy", label: "Easy" },
@@ -41,6 +52,12 @@ const MODES = [
     label: "Exam mode",
     description:
       "Simulate the real thing — timed, no feedback until you submit, scored at the end.",
+  },
+  {
+    value: "osce",
+    label: "OSCE stations",
+    description:
+      "Type your answer to open questions — graded instantly against a model answer. Untimed, paid plans only.",
   },
 ] as const;
 
@@ -90,11 +107,27 @@ export function NewTestWizard({
     [exams, examId]
   );
 
-  /** Subjects of the chosen exam, grouped by specialty for the headings. */
+  const osceMode = mode === "osce";
+
+  /** An unlocked exam can still be a dead end for OSCE mode: paid-only, or
+   * simply no stations published yet. */
+  function examBlockedForOsce(exam: WizardExam) {
+    return exam.osceLocked || exam.osceQuestionCount === 0;
+  }
+
+  /** Subjects of the chosen exam, grouped by specialty for the headings.
+   * OSCE mode only offers subjects that actually have stations. */
   const specialtyGroups = useMemo(
     () =>
-      (selectedExam?.specialties ?? []).filter((sp) => sp.subjects.length > 0),
-    [selectedExam]
+      (selectedExam?.specialties ?? [])
+        .map((sp) => ({
+          ...sp,
+          subjects: osceMode
+            ? sp.subjects.filter((s) => s.osceQuestionCount > 0)
+            : sp.subjects,
+        }))
+        .filter((sp) => sp.subjects.length > 0),
+    [selectedExam, osceMode]
   );
   const examSubjects = useMemo(
     () => specialtyGroups.flatMap((sp) => sp.subjects),
@@ -103,6 +136,37 @@ export function NewTestWizard({
 
   function toggle(list: string[], id: string) {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  }
+
+  function chooseMode(next: Mode) {
+    setMode(next);
+
+    // Each mode offers its own session sizes (OSCE stations take minutes
+    // each). Carrying a count across leaves the Format step with no chip
+    // highlighted — in BOTH directions, which is why this runs before the
+    // early return below.
+    const counts: readonly number[] = next === "osce" ? OSCE_COUNTS : COUNTS;
+    if (!counts.includes(numQuestions)) {
+      const fallback = next === "osce" ? 10 : 20;
+      setNumQuestions(fallback);
+      setDurationMin(Math.max(5, Math.round(fallback * 1.5)));
+    }
+
+    if (next !== "osce") return;
+    // Prior selections may be invalid in OSCE mode (paid-only exam, subjects
+    // without stations).
+    if (selectedExam && examBlockedForOsce(selectedExam)) {
+      setExamId(null);
+      setSubjectIds([]);
+      return;
+    }
+    const withStations = new Set(
+      (selectedExam?.specialties ?? [])
+        .flatMap((sp) => sp.subjects)
+        .filter((s) => s.osceQuestionCount > 0)
+        .map((s) => s.id)
+    );
+    setSubjectIds((prev) => prev.filter((id) => withStations.has(id)));
   }
 
   async function start() {
@@ -142,7 +206,10 @@ export function NewTestWizard({
     setSubjectIds([]);
   }
 
-  const examReady = selectedExam !== null && !selectedExam.locked;
+  const examReady =
+    selectedExam !== null &&
+    !selectedExam.locked &&
+    (!osceMode || !examBlockedForOsce(selectedExam));
 
   const canAdvance =
     currentStep === "Mode"
@@ -206,7 +273,7 @@ export function NewTestWizard({
                     key={m.value}
                     type="button"
                     aria-pressed={mode === m.value}
-                    onClick={() => setMode(m.value)}
+                    onClick={() => chooseMode(m.value)}
                     className={cn(
                       "flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-colors",
                       "focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
@@ -250,7 +317,7 @@ export function NewTestWizard({
                   which fit on a pill. */}
               <div className="grid gap-2.5">
                 {exams.map((e) =>
-                  e.locked ? (
+                  e.locked || (osceMode && e.osceLocked) ? (
                     <LockedExamRow
                       key={e.id}
                       name={e.name}
@@ -262,6 +329,24 @@ export function NewTestWizard({
                           : null
                       }
                     />
+                  ) : osceMode && e.osceQuestionCount === 0 ? (
+                    <div
+                      key={e.id}
+                      className="flex items-center gap-3 rounded-xl border border-border px-4 py-3.5 opacity-60"
+                    >
+                      <span
+                        className="flex size-5 shrink-0 rounded-full border border-input"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium wrap-break-word">
+                          {e.name}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          No OSCE stations yet
+                        </span>
+                      </span>
+                    </div>
                   ) : (
                     <button
                       key={e.id}
@@ -294,10 +379,19 @@ export function NewTestWizard({
                           {e.name}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {e.subjectCount} subject
-                          {e.subjectCount === 1 ? "" : "s"} ·{" "}
-                          {e.questionCount.toLocaleString()} question
-                          {e.questionCount === 1 ? "" : "s"}
+                          {osceMode ? (
+                            <>
+                              {e.osceQuestionCount.toLocaleString()} OSCE station
+                              {e.osceQuestionCount === 1 ? "" : "s"}
+                            </>
+                          ) : (
+                            <>
+                              {e.subjectCount} subject
+                              {e.subjectCount === 1 ? "" : "s"} ·{" "}
+                              {e.questionCount.toLocaleString()} question
+                              {e.questionCount === 1 ? "" : "s"}
+                            </>
+                          )}
                         </span>
                       </span>
                     </button>
@@ -324,7 +418,11 @@ export function NewTestWizard({
                         {sp.subjects.map((s) => (
                           <Chip
                             key={s.id}
-                            label={s.name}
+                            label={
+                              osceMode
+                                ? `${s.name} (${s.osceQuestionCount})`
+                                : s.name
+                            }
                             selected={subjectIds.includes(s.id)}
                             onClick={() =>
                               setSubjectIds(toggle(subjectIds, s.id))
@@ -340,7 +438,9 @@ export function NewTestWizard({
                   {examSubjects.map((s) => (
                     <Chip
                       key={s.id}
-                      label={s.name}
+                      label={
+                        osceMode ? `${s.name} (${s.osceQuestionCount})` : s.name
+                      }
                       selected={subjectIds.includes(s.id)}
                       onClick={() => setSubjectIds(toggle(subjectIds, s.id))}
                     />
@@ -350,7 +450,9 @@ export function NewTestWizard({
 
               {examSubjects.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No subjects have been published yet
+                  {osceMode
+                    ? "No OSCE stations have been published yet"
+                    : "No subjects have been published yet"}
                   {selectedExam ? ` for ${selectedExam.name}` : ""}.
                 </p>
               )}
@@ -361,10 +463,10 @@ export function NewTestWizard({
             <div className="space-y-6">
               <fieldset>
                 <legend className="mb-3 font-display text-lg">
-                  How many questions?
+                  {osceMode ? "How many stations?" : "How many questions?"}
                 </legend>
                 <div className="flex flex-wrap gap-2">
-                  {COUNTS.map((n) => (
+                  {(osceMode ? OSCE_COUNTS : COUNTS).map((n) => (
                     <Chip
                       key={n}
                       label={String(n)}
@@ -414,13 +516,40 @@ export function NewTestWizard({
 
               <dl className="grid grid-cols-3 gap-3 text-sm">
                 <Summary label="Subjects" value={String(subjectIds.length)} />
-                <Summary label="Questions" value={String(numQuestions)} />
+                <Summary
+                  label={osceMode ? "Stations" : "Questions"}
+                  value={String(numQuestions)}
+                />
                 <Summary
                   label="Time"
                   value={mode === "exam" ? `${durationMin} min` : "Untimed"}
                 />
               </dl>
             </div>
+          )}
+
+          {/* Why the Start button is dead. The Exam step explains this with a
+              locked/greyed row, but it does not exist when the catalogue has
+              a single exam — without this the wizard would just refuse to
+              start and say nothing. */}
+          {osceMode && selectedExam && examBlockedForOsce(selectedExam) && (
+            <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
+              {selectedExam.osceLocked ? (
+                <>
+                  OSCE stations are part of the paid plan.{" "}
+                  {upsellPlanId && (
+                    <Link
+                      href={`/checkout/${upsellPlanId}?exam=${selectedExam.id}`}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Get access
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <>No OSCE stations have been published for {selectedExam.name} yet.</>
+              )}
+            </p>
           )}
 
           {error && (
@@ -467,6 +596,8 @@ export function NewTestWizard({
                   </>
                 ) : mode === "tutor" ? (
                   "Start practising"
+                ) : osceMode ? (
+                  "Start stations"
                 ) : (
                   "Start test"
                 )}

@@ -64,9 +64,9 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {test.total_questions}
-                    {test.mode === "tutor" && (
+                    {test.mode !== "exam" && (
                       <Badge variant="secondary" className="ml-2">
-                        Tutor
+                        {test.mode === "osce" ? "OSCE" : "Tutor"}
                       </Badge>
                     )}
                   </TableCell>
@@ -81,12 +81,14 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                         )}
                       >
                         {score}%
-                        {/* Tutor scores are % of answered; show the base. */}
-                        {test.mode === "tutor" &&
+                        {/* Tutor/OSCE scores are % of answered; show the base
+                            so a 100% off two graded stations can't read as a
+                            perfect full paper. */}
+                        {test.mode !== "exam" &&
                           test.answered_questions != null && (
                             <span className="ml-1.5 font-normal text-muted-foreground">
                               · {test.answered_questions}/{test.total_questions}{" "}
-                              answered
+                              {test.mode === "osce" ? "graded" : "answered"}
                             </span>
                           )}
                       </span>

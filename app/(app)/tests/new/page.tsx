@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireUser, hasTrialsRemaining } from "@/lib/auth";
 import { listActivePlans, paidPlans } from "@/lib/plans";
 import { listExamCatalogTree } from "@/lib/catalog";
+import { createClient } from "@/lib/supabase/server";
 import { getExamAccess } from "@/lib/entitlements";
 import {
   canAccessExam,
@@ -33,11 +34,20 @@ function upsellPlan(plans: Plan[]): Plan | null {
 export default async function NewTestPage() {
   const user = await requireUser();
 
-  const [tree, access, plans] = await Promise.all([
+  const supabase = await createClient();
+  const [tree, access, plans, { data: osceCounts }] = await Promise.all([
     listExamCatalogTree(),
     getExamAccess(user),
     listActivePlans(),
+    // Published OSCE stations per subject — the wizard only offers OSCE mode
+    // where stations actually exist. RLS-safe view, so the user client is fine.
+    supabase
+      .from("subject_osce_question_counts")
+      .select("subject_id, question_count"),
   ]);
+  const osceCountBySubject = new Map(
+    (osceCounts ?? []).map((r) => [r.subject_id, r.question_count])
+  );
 
   // The full-page trial wall only makes sense when EVERYTHING would be
   // metered: a member whose org covers any exam (or just the bank) still has
@@ -60,27 +70,40 @@ export default async function NewTestPage() {
   // unless this user's access names one, so nobody is offered an exam they
   // can no longer buy. An exhausted-quota member sees metered exams locked
   // rather than dead-ending at the API.
-  const exams = visibleExamsFor(tree, access).map((exam) => ({
-    id: exam.id,
-    name: exam.name,
-    subjectCount: exam.subjectCount,
-    questionCount: exam.questionCount,
-    locked:
-      !canAccessExam(access, { id: exam.id, orgId: exam.orgId }) ||
-      (quotaExhausted &&
-        consumesTrialCredit(user.profile.role, access, {
-          id: exam.id,
-          orgId: exam.orgId,
-        })),
-    specialties: exam.specialties.map((specialty) => ({
+  const exams = visibleExamsFor(tree, access).map((exam) => {
+    const specialties = exam.specialties.map((specialty) => ({
       id: specialty.id,
       name: specialty.name,
       subjects: specialty.subjects.map((subject) => ({
         id: subject.id,
         name: subject.name,
+        osceQuestionCount: osceCountBySubject.get(subject.id) ?? 0,
       })),
-    })),
-  }));
+    }));
+    return {
+      id: exam.id,
+      name: exam.name,
+      subjectCount: exam.subjectCount,
+      questionCount: exam.questionCount,
+      locked:
+        !canAccessExam(access, { id: exam.id, orgId: exam.orgId }) ||
+        (quotaExhausted &&
+          consumesTrialCredit(user.profile.role, access, {
+            id: exam.id,
+            orgId: exam.orgId,
+          })),
+      // OSCE is paid-only (every grade is an AI call): honest presentation of
+      // the /api/tests gate, which enforces with the same predicate.
+      osceLocked: consumesTrialCredit(user.profile.role, access, {
+        id: exam.id,
+        orgId: exam.orgId,
+      }),
+      osceQuestionCount: specialties
+        .flatMap((sp) => sp.subjects)
+        .reduce((sum, s) => sum + s.osceQuestionCount, 0),
+      specialties,
+    };
+  });
 
   if (exams.length > 0 && exams.every((exam) => exam.locked)) {
     return (

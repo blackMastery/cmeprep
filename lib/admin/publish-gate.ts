@@ -20,10 +20,20 @@ export type PublishCandidate = {
   optionCount: number;
   /** Visible options marked correct. */
   correctCount: number;
+  /** A question_model_answers row exists — OSCE's answer key. */
+  hasModelAnswer: boolean;
 };
 
 /** Human-readable reason this question must not go live, or null if it may. */
 export function publishBlocker(q: PublishCandidate): string | null {
+  // OSCE's answer key is the model answer, not options — a published station
+  // without one is ungradeable (the grade route 500s on it).
+  if (q.type === "osce") {
+    if (!q.hasModelAnswer)
+      return "OSCE questions need a model answer before publishing.";
+    return null;
+  }
+
   const needsMulti = q.type === "mcq_multi";
 
   if (q.optionCount < 2) return "Add at least two options before publishing.";

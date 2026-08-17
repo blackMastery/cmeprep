@@ -21,12 +21,26 @@ export default async function OrgContentPage() {
   const publishedBySubject = new Map<string, number>();
   if (subjectIds.length > 0) {
     const admin = createAdminClient();
-    const { data } = await admin
-      .from("subject_question_counts")
-      .select("subject_id, question_count")
-      .in("subject_id", subjectIds);
-    for (const row of data ?? []) {
-      publishedBySubject.set(row.subject_id, row.question_count);
+    // Both views, summed: subject_question_counts deliberately excludes OSCE
+    // (the wizard's exam/tutor modes cannot deal stations), but a bank's
+    // "published" total must count everything it holds — otherwise a bank of
+    // 50 published stations reads "50 questions · 0 published", which is
+    // exactly the confusion these two numbers exist to prevent.
+    const [{ data: mcq }, { data: osce }] = await Promise.all([
+      admin
+        .from("subject_question_counts")
+        .select("subject_id, question_count")
+        .in("subject_id", subjectIds),
+      admin
+        .from("subject_osce_question_counts")
+        .select("subject_id, question_count")
+        .in("subject_id", subjectIds),
+    ]);
+    for (const row of [...(mcq ?? []), ...(osce ?? [])]) {
+      publishedBySubject.set(
+        row.subject_id,
+        (publishedBySubject.get(row.subject_id) ?? 0) + row.question_count
+      );
     }
   }
 

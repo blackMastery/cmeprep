@@ -77,9 +77,9 @@ export function PastTests({ tests }: { tests: Test[] }) {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {test.total_questions}
-                    {test.mode === "tutor" && (
+                    {test.mode !== "exam" && (
                       <Badge variant="secondary" className="ml-2">
-                        Tutor
+                        {test.mode === "osce" ? "OSCE" : "Tutor"}
                       </Badge>
                     )}
                   </TableCell>

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { OSCE_MAX_ANSWER_CHARS } from "@/lib/osce-grading-core";
+
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
 // Use z.guid(), not z.uuid(). Zod's z.uuid() enforces the RFC 9562 version
@@ -8,8 +10,13 @@ export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 // (fixed-value seed ids, UUIDv7, etc). Match the database's definition.
 export const uuid = () => z.guid();
 
-export const TEST_MODES = ["exam", "tutor"] as const;
+export const TEST_MODES = ["exam", "tutor", "osce"] as const;
 export const testModeSchema = z.enum(TEST_MODES);
+
+/** Assignments prescribe MCQ tests only — an org can't launch a member into
+ * an AI-graded OSCE session (per-answer OpenAI cost, no assignment UI for it). */
+export const ASSIGNMENT_MODES = ["exam", "tutor"] as const;
+export const assignmentModeSchema = z.enum(ASSIGNMENT_MODES);
 
 export const createTestSchema = z
   .object({
@@ -49,6 +56,8 @@ export const revealAnswerSchema = z.object({
 export const saveAnswerSchema = z.object({
   questionId: uuid(),
   selectedOptionIds: z.array(uuid()).max(10),
+  /** OSCE staging only; MCQ runners never send it. */
+  answerText: z.string().max(OSCE_MAX_ANSWER_CHARS).optional(),
   flagged: z.boolean().optional(),
   timeSpentSec: z.number().int().min(0).max(86_400).optional(),
 });
@@ -58,12 +67,31 @@ export const saveAnswersSchema = z.object({
   answers: z.array(saveAnswerSchema).min(1).max(100),
 });
 
+/**
+ * POST /api/tests/[id]/grade — OSCE's "commit this answer" call. Like the
+ * tutor reveal, it carries the answer itself so grading never depends on the
+ * autosave PATCH having landed first. The minimum-length rule lives in
+ * validateAnswerText (osce-grading-core) so route and UI share one message.
+ */
+export const gradeAnswerSchema = z.object({
+  questionId: uuid(),
+  answerText: z.string().min(1, "Type an answer").max(OSCE_MAX_ANSWER_CHARS),
+  timeSpentSec: z.number().int().min(0).max(86_400).optional(),
+});
+
+/** POST /api/tests/[id]/report-grade — "this AI grade looks wrong". */
+export const reportGradeSchema = z.object({
+  questionId: uuid(),
+  note: z.string().trim().max(1000, "Keep the note under 1000 characters").optional(),
+});
+
 // ── Admin content schemas ───────────────────────────────────
 
 export const QUESTION_TYPES = [
   "mcq_single",
   "mcq_multi",
   "image_based",
+  "osce",
 ] as const;
 
 export const questionOptionSchema = z.object({
@@ -82,17 +110,51 @@ export const questionSchema = z
     explanation: z.string().trim().min(10, "Explain the answer"),
     imagePath: z.string().trim().min(1).max(3000).nullable().default(null),
     isPublished: z.boolean().default(false),
+    // The two-option floor is per-type (superRefine): OSCE questions carry
+    // NO options at all — their answer key is modelAnswer.
     options: z
       .array(questionOptionSchema)
-      .min(2, "Add at least two options")
       .max(8, "Eight options is the maximum"),
+    /** OSCE only: the answer key the AI judge grades against. */
+    modelAnswer: z
+      .string()
+      .trim()
+      .max(10_000, "Keep the model answer under 10,000 characters")
+      .default(""),
   })
   .superRefine((v, ctx) => {
     const correct = v.options.filter((o) => o.isCorrect).length;
 
-    // `image_based` is a single-answer question that happens to carry an
-    // image — the renderer keys "multi" off `type === "mcq_multi"` only.
-    if (v.type === "mcq_multi") {
+    if (v.type === "osce") {
+      if (v.options.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["options"],
+          message: "OSCE questions take a model answer, not options",
+        });
+      }
+      if (v.modelAnswer.length < 10) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["modelAnswer"],
+          message: "Write the model answer",
+        });
+      }
+    } else if (v.modelAnswer.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["modelAnswer"],
+        message: "Only OSCE questions take a model answer",
+      });
+    } else if (v.options.length < 2) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Add at least two options",
+      });
+    } else if (v.type === "mcq_multi") {
+      // `image_based` is a single-answer question that happens to carry an
+      // image — the renderer keys "multi" off `type === "mcq_multi"` only.
       if (correct < 2) {
         ctx.addIssue({
           code: "custom",
@@ -188,6 +250,7 @@ export function parseQuestionForm(fd: FormData): unknown {
     imagePath: imagePath.length > 0 ? imagePath : null,
     isPublished: fd.get("isPublished") === "on" || fd.get("isPublished") === "true",
     options,
+    modelAnswer: String(fd.get("modelAnswer") ?? ""),
   };
 }
 
@@ -384,7 +447,7 @@ export const orgAssignmentSchema = z
     subjectIds: z.array(uuid()).min(1, "Choose at least one subject"),
     difficulty: z.enum([...DIFFICULTIES, "mixed"]).default("mixed"),
     numQuestions: z.coerce.number().int().min(5).max(100),
-    mode: testModeSchema.default("exam"),
+    mode: assignmentModeSchema.default("exam"),
     // Required for exam mode, absent for tutor (untimed). NOTE z.coerce turns
     // "" into 0 — the action must map "" → undefined BEFORE parsing, per the
     // trialsLimitSchema convention above.
