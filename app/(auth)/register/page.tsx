@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OG_IMAGE } from "@/lib/site";
 import { AuthCard } from "@/components/auth/auth-card";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default function RegisterPage() {
       }
     >
       <RegisterForm />
+      <OAuthButtons />
     </AuthCard>
   );
 }

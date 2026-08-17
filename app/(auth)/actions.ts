@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
   emailSchema,
   fullNameSchema,
+  OAUTH_NEXT_COOKIE,
+  oauthProviderSchema,
   passwordSchema,
   safeRedirectPath,
 } from "@/lib/validation";
@@ -190,6 +192,49 @@ export async function updatePassword(
 
   revalidatePath("/", "layout");
   redirect("/dashboard");
+}
+
+/**
+ * Start an OAuth sign-in (Google / LinkedIn) from a plain form post.
+ *
+ * Runs server-side so the PKCE code-verifier cookie is written by the same
+ * client that later exchanges the code in /auth/callback — @supabase/ssr
+ * applies verifier cookies immediately rather than waiting for an auth event.
+ * Errors round-trip via /login?error= (the callback route uses the same
+ * channel), so no useActionState here.
+ */
+export async function signInWithProvider(formData: FormData): Promise<void> {
+  const parsed = oauthProviderSchema.safeParse(formData.get("provider"));
+  if (!parsed.success) redirect("/login");
+
+  // The destination rides a cookie, not a ?next= on the callback URL — see
+  // OAUTH_NEXT_COOKIE. Always set it so a stale value from an abandoned
+  // attempt can't redirect this one.
+  const next = safeRedirectPath(formData.get("next"));
+  (await cookies()).set(OAUTH_NEXT_COOKIE, next, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 300,
+    path: "/auth/callback",
+  });
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: parsed.data,
+    options: {
+      redirectTo: `${await siteUrl()}/auth/callback`,
+      skipBrowserRedirect: true,
+    },
+  });
+
+  if (error || !data?.url) {
+    redirect(
+      `/login?error=${encodeURIComponent(
+        "Could not connect to the sign-in provider. Please try again."
+      )}`
+    );
+  }
+  redirect(data.url);
 }
 
 export async function logout() {

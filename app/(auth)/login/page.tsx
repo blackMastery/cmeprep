@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthCard } from "@/components/auth/auth-card";
 import { LoginForm } from "@/components/auth/login-form";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
 
 export const metadata: Metadata = {
   title: "Log in",
@@ -31,6 +32,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
         next={typeof next === "string" ? next : undefined}
         initialError={typeof error === "string" ? error : undefined}
       />
+      <OAuthButtons next={typeof next === "string" ? next : undefined} />
     </AuthCard>
   );
 }

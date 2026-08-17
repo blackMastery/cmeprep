@@ -4,6 +4,7 @@ import {
   createTestSchema,
   emailSchema,
   fullNameSchema,
+  oauthProviderSchema,
   orgAssignmentSchema,
   orgDepartmentNameSchema,
   orgExamDateSchema,
@@ -361,6 +362,19 @@ describe("fullNameSchema", () => {
     );
     expect(fullNameSchema.safeParse("A").success).toBe(false);
     expect(fullNameSchema.safeParse("x".repeat(121)).success).toBe(false);
+  });
+});
+
+describe("oauthProviderSchema", () => {
+  it("accepts the enabled providers", () => {
+    expect(oauthProviderSchema.parse("google")).toBe("google");
+    expect(oauthProviderSchema.parse("linkedin_oidc")).toBe("linkedin_oidc");
+  });
+
+  it("rejects anything else — the action trusts this whitelist", () => {
+    for (const bad of ["github", "linkedin", "", null, undefined]) {
+      expect(oauthProviderSchema.safeParse(bad).success).toBe(false);
+    }
   });
 });
 

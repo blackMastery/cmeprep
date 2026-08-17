@@ -289,6 +289,20 @@ export const emailSchema = z
   .toLowerCase()
   .email("Enter a valid email address");
 
+/** Social sign-in providers enabled in Supabase. LinkedIn must be the OIDC
+ *  variant — Supabase removed the legacy `linkedin` provider in Jan 2024. */
+export const OAUTH_PROVIDERS = ["google", "linkedin_oidc"] as const;
+export const oauthProviderSchema = z.enum(OAUTH_PROVIDERS);
+
+/**
+ * Carries the post-login destination across the OAuth round-trip. Supabase
+ * matches `redirect_to` against its allow-list INCLUDING the query string,
+ * and `next` is dynamic (/checkout/<uuid>, …), so it can't ride the callback
+ * URL — an unlisted target silently falls back to site_url, stranding the
+ * auth code on the homepage.
+ */
+export const OAUTH_NEXT_COOKIE = "oauth_next";
+
 /* ── Contact form ───────────────────────────────────────────────── */
 
 export const CONTACT_SUBJECTS = [
