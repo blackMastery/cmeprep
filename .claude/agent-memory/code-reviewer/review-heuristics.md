@@ -30,8 +30,19 @@ URL is byte-identical to an allow-list entry for every reachable input.
 
 **OFFSET paging must order by a unique key.** Precedent: lib/orgs.ts pages with
 `.order("id")` / `.order("user_id")` (unique per row). New paging loops that
-order by a non-unique column (e.g. `test_id` on a per-(test,subject) view) can
-skip/duplicate rows across `.range()` pages.
+order by a non-unique column (e.g. `test_id` on a per-(test,subject) view, or
+`created_at` in lib/admin/osce.ts listGradingEvents) can skip/duplicate rows
+across `.range()` pages. Recurred in the OSCE review (2026-08-17).
+
+**Count views count ALL published question types.** `exam_subject_counts` and
+`subject_question_counts` have no `type` filter, but launch paths now filter
+by type (`.eq/.neq("type","osce")` in POST /api/tests). Any feature that
+prescribes a session size from a count view and then launches through a
+type-filtered draw can prescribe more than the draw can deliver — this is how
+the generation-clamp bug class re-fired when OSCE landed (plan-core
+questionsPerSession clamped to an OSCE-inflated bank). When a new question
+type or launch filter appears, re-audit every count-view consumer
+(plan.ts, stats.ts, orgs.ts readiness, catalog.ts wizard counts).
 
 **Norms that are NOT findings here (don't false-positive):**
 - Destructuring `{ data }` and ignoring `error` is the pervasive local style for
@@ -51,3 +62,15 @@ skip/duplicate rows across `.range()` pages.
 - attempts are unique on (test_id, question_id) — max attempts a test can put
   into a subject = distinct questions from that subject in the paper. Load-
   bearing for any per-session threshold math.
+- OSCE security posture (20260822000002): `question_model_answers` is a
+  hard-revoked service-role-only table (NOT a questions column); the grade
+  route's `mode === 'osce'` + link + `type === 'osce'` gates and
+  loadOsceRevealData's mode gate are the sanctioned mid-test correctness
+  boundary, same standing as the tutor reveal route. Attempts-first-then-lock
+  ordering in the grade route is deliberate (a locked station must always
+  have a verdict; the reverse crash window costs only a re-grade).
+- Pure `-core` modules (analytics-core, orgs-core, osce-grading-core) are
+  deliberately client-importable — a runner importing constants from them is
+  fine, not a server-boundary finding. analytics-core contains a literal NUL
+  byte (revenue keyId join separator), so git shows it as binary; use
+  `git diff --text` on it.
