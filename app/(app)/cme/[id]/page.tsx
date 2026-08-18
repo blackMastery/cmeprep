@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { getCourseTree } from "@/lib/courses";
+import { mintCertificateQuietly } from "@/lib/certificates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Markdown } from "@/components/markdown";
 import { Syllabus } from "@/components/course/syllabus";
+import { CertificateCard } from "@/components/course/certificate-card";
 
 export const metadata: Metadata = { title: "CME course" };
 
@@ -24,6 +26,15 @@ export default async function CourseOverviewPage({
   if (!tree) notFound();
 
   const { course, completion, continueLessonId } = tree;
+
+  // The second mint path, alongside the two progress actions. It exists for
+  // learners who reached 100% before certificates shipped (no backfill
+  // migration — they get one on their next visit) and for anyone who
+  // completed a course before setting a certificate name. Cheap: mint returns
+  // the existing row before touching the course tree.
+  const certificate = completion.done
+    ? await mintCertificateQuietly(user, course.id)
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
@@ -50,14 +61,11 @@ export default async function CourseOverviewPage({
         )}
       </header>
 
-      <Card className="mb-6 [--card-spacing:--spacing(5)]">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4">
-          {completion.done ? (
-            <p className="flex items-center gap-2 font-medium text-primary">
-              <CheckCircle2 className="size-5" aria-hidden />
-              Course completed — nice work.
-            </p>
-          ) : (
+      {completion.done ? (
+        <CertificateCard certificate={certificate} />
+      ) : (
+        <Card className="mb-6 [--card-spacing:--spacing(5)]">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-48 flex-1 space-y-1">
               <Progress
                 value={completion.pct}
@@ -69,17 +77,19 @@ export default async function CourseOverviewPage({
                 lessons complete · {completion.pct}%
               </p>
             </div>
-          )}
-          {continueLessonId && (
-            <Button asChild>
-              <Link href={`/cme/${course.id}/lessons/${continueLessonId}`}>
-                {completion.completedLessons === 0 ? "Start course" : "Continue"}
-                <ArrowRight data-icon="inline-end" />
-              </Link>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+            {continueLessonId && (
+              <Button asChild>
+                <Link href={`/cme/${course.id}/lessons/${continueLessonId}`}>
+                  {completion.completedLessons === 0
+                    ? "Start course"
+                    : "Continue"}
+                  <ArrowRight data-icon="inline-end" />
+                </Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Syllabus tree={tree} />
     </div>

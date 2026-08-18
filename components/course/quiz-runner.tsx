@@ -8,6 +8,7 @@ import type { CourseQuizAttempt } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Markdown } from "@/components/markdown";
+import { useCredentialNameGate } from "@/components/course/credential-name-gate";
 import { cn } from "@/lib/utils";
 
 type AttemptRow = Pick<
@@ -28,6 +29,7 @@ export function QuizRunner({
   passPct,
   alreadyPassed,
   attempts,
+  needsCredentialName,
 }: {
   courseId: string;
   lessonId: string;
@@ -35,11 +37,14 @@ export function QuizRunner({
   passPct: number;
   alreadyPassed: boolean;
   attempts: AttemptRow[];
+  /** True until the learner has set profiles.credential_name. */
+  needsCredentialName: boolean;
 }) {
   const [state, action, pending] = useActionState<QuizSubmitState, FormData>(
     submitQuiz,
     null
   );
+  const gate = useCredentialNameGate(needsCredentialName);
   const [picks, setPicks] = useState<Record<string, string>>({});
   // "Retake" hides the last feedback without being able to reset the action
   // state itself — a new submission replaces the reference and shows again.
@@ -89,7 +94,7 @@ export function QuizRunner({
         </p>
       )}
 
-      <form action={action} className="space-y-4">
+      <form action={action} {...gate.formProps} className="space-y-4">
         <input type="hidden" name="courseId" value={courseId} />
         <input type="hidden" name="lessonId" value={lessonId} />
         <input type="hidden" name="answers" value={JSON.stringify(answers)} />
@@ -144,6 +149,7 @@ export function QuizRunner({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="submit"
+            onClick={gate.guard}
             disabled={pending || answers.length < questions.length}
             aria-busy={pending}
           >
@@ -153,6 +159,7 @@ export function QuizRunner({
             {answers.length}/{questions.length} answered · pass mark {passPct}%
           </p>
         </div>
+        {gate.dialog}
       </form>
 
       <AttemptHistory attempts={attempts} />

@@ -38,6 +38,9 @@ type Timestamps = { created_at: string };
 export type Profile = Timestamps & {
   id: string;
   full_name: string | null;
+  /** Professional name printed on CME certificates. Deliberately separate
+   * from full_name, which feeds greetings through lib/names.ts firstName(). */
+  credential_name: string | null;
   role: UserRole;
   trials_used: number;
   trials_limit: number;
@@ -586,6 +589,27 @@ export type CourseQuizAttempt = {
   created_at: string;
 };
 
+/* ── CME certificates (20260823000001) ───────────────────── */
+
+/**
+ * Issued once per (user, course) and never mutated. course_title/lesson_count
+ * are snapshots so a rename, unpublish or soft-delete cannot retract or alter
+ * an issued certificate; the learner's NAME is NOT here — it is read live
+ * from profiles.credential_name so corrections propagate.
+ */
+export type CourseCertificate = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  /** Opaque public handle, CME-XXXXX-XXXXX. Never the row id. */
+  code: string;
+  course_title: string;
+  /** Evidentiary snapshot; never printed on the certificate face. */
+  lesson_count: number;
+  issued_at: string;
+  created_at: string;
+};
+
 /* ── Study plans (20260820000001) ─────────────────────────── */
 
 /** text + check constraint in Postgres, NOT a pg enum (payments precedent). */
@@ -883,6 +907,7 @@ export type Database = {
       course_question_options: Table<CourseQuestionOption>;
       course_lesson_progress: Table<CourseLessonProgress>;
       course_quiz_attempts: Table<CourseQuizAttempt>;
+      course_certificates: Table<CourseCertificate>;
       analytics_daily_revenue: Table<AnalyticsDailyRevenue>;
       analytics_daily_refunds: Table<AnalyticsDailyRefund>;
       analytics_refund_marks: Table<AnalyticsRefundMark>;

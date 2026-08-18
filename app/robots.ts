@@ -27,6 +27,9 @@ export default function robots(): MetadataRoute.Robots {
         "/banned",
         "/reset-password",
         "/verify-email",
+        // Certificate verification results carry a person's name. They are
+        // for whoever was handed the code, not for a search index.
+        "/verify",
       ],
     },
     sitemap: absoluteUrl("/sitemap.xml"),

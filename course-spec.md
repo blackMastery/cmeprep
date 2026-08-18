@@ -26,7 +26,7 @@ decisions below were confirmed with the product owner on 2026-08-16.
 | Publishing | `draft` / `published`; published courses are edited in place (no versioning/snapshots) |
 | Text authoring | Markdown textarea + live preview; rendered sanitized (no raw HTML pass-through) |
 | Org features | None in v1 — no assignment, no manager visibility |
-| Completion reward | Completed state + progress surfacing on dashboard; no certificate |
+| Completion reward | Completed state + progress surfacing on dashboard; certificate of completion (see §10) |
 | Discovery | "Courses" app-nav item with a catalog page + dashboard "continue learning" card |
 
 ## 2. Data model
@@ -296,7 +296,9 @@ signed URL, no quiz questions).
 - Video transcoding/adaptive streaming, watch-percentage tracking.
 - Selling courses, entitlement gating, exam/taxonomy attachment.
 - Org assignment, manager visibility, due dates, readiness integration.
-- Certificates or CME credit claims.
+- CME credit claims, credit hours or accreditation metadata. (A completion
+  certificate SHIPPED after v1 — see §10 — and deliberately claims nothing
+  beyond completion.)
 - Course versioning/snapshots, multi-block composite lessons.
 - Multi-select questions, shuffling, timed quizzes, attempt limits.
 - Comments, ratings, search/filtering of the catalog.
@@ -316,3 +318,53 @@ signed URL, no quiz questions).
 6. Dashboard card + nav item; empty states; `npx next typegen` after route
    additions.
 7. Lint, typecheck, vitest — the whole gate (no CI/e2e).
+
+## 10. Certificates of completion (shipped after v1)
+
+Finishing a course issues a downloadable, publicly verifiable PDF
+**Certificate of Completion**. It asserts completion and nothing else: no
+credit hours, no accrediting body, no study time, and a printed disclaimer
+saying so. cmeprep is not an accredited provider.
+
+**Why a row and not a derived value.** `courseCompletion()` is computed on
+read, so an admin adding one lesson silently drops every past completer below
+100%. `course_certificates` is therefore written once and never mutated, with
+`unique (user_id, course_id)` as both the idempotency guard and the race
+guard between the two minting paths.
+
+**Snapshot vs live.** `course_title` and `lesson_count` are frozen at issue so
+a rename, unpublish or soft-delete cannot alter or retract an issued
+certificate. The holder's NAME is deliberately *not* snapshotted — it is read
+live from `profiles.credential_name` so a learner correcting a typo fixes
+every certificate they hold, verification codes unchanged.
+
+**Eligibility** (`certificateEligibility` in `lib/certificates-core.ts`): at
+least one lesson, every lesson complete, and every quiz lesson passed. The
+quiz check is redundant today — `completeContentLesson()` refuses quiz lessons
+and `submitCourseQuiz()` writes progress only on a pass — and is kept because
+that invariant lives in another module.
+
+**Minting** happens in both learner write paths (mark complete, quiz pass) and
+again lazily on the course overview page. The lazy path is what gives a
+certificate to learners who completed courses before this shipped (there is no
+backfill migration) and to anyone who reached 100% before setting a name.
+
+**The name** is collected on a learner's first progress write, not at signup
+and not at download — so browsing stays frictionless while a name always
+exists by the time a course can be finished. A certificate is never minted
+without one.
+
+**Verification** is a public `/verify/[code]` page. Protection is the code:
+50 bits over an unambiguous alphabet, never the row id, so the keyspace cannot
+be walked. The page reveals only what is already printed on the document —
+holder, course, date — and answers unknown, malformed and non-existent codes
+identically. Noindex plus a robots disallow.
+
+**Rendering** is `pdf-lib` with the PDF standard-14 fonts (Times + Helvetica),
+regenerated per download from the immutable row. No font files, no fontkit, no
+stored bytes: the brand faces come from `next/font/google` and exist as no
+file in this repo, and a request-time font fetch that fails silently would
+produce a broken document (the same reasoning as `lib/og-image.tsx`).
+
+Still out of scope: credit hours, org co-branding, stored PDF bytes, template
+versioning, admin revocation, completion emails.

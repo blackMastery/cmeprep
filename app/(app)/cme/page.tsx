@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, CheckCircle2 } from "lucide-react";
+import { Award, BookOpen, CheckCircle2 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { listCourseCards } from "@/lib/courses";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
@@ -15,17 +16,26 @@ export default async function CoursesPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
-      <header className="mb-8">
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Continuing Medical Education
-        </p>
-        <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">
-          CME
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Structured CME courses — lessons with quizzes that unlock as you go,
-          free with your account.
-        </p>
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Continuing Medical Education
+          </p>
+          <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">
+            CME
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Structured CME courses — lessons with quizzes that unlock as you
+            go, free with your account. Finish one for a certificate of
+            completion.
+          </p>
+        </div>
+        <Button variant="outline" asChild>
+          <Link href="/cme/certificates">
+            <Award data-icon="inline-start" />
+            Certificates
+          </Link>
+        </Button>
       </header>
 
       {cards.length === 0 ? (

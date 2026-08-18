@@ -614,6 +614,20 @@ export const fullNameSchema = z
   .max(120, "That name is too long");
 
 /**
+ * The name printed on CME certificates. Separate from fullNameSchema because
+ * it is a different thing: full_name feeds greetings (lib/names.ts strips the
+ * honorific for "Hi, Jane"), while this is the professional name a learner
+ * wants on a credential — honorifics and post-nominals included. Capped at 80
+ * to match the column CHECK; the certificate shrinks type to fit, but a name
+ * longer than this cannot be set at all.
+ */
+export const credentialNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Enter the name for your certificate")
+  .max(80, "That name is too long for a certificate");
+
+/**
  * An org's exam sitting date (<input type="date"> value). Bounded to three
  * years out — a typo'd year would otherwise frame readiness against a
  * sitting a decade away.

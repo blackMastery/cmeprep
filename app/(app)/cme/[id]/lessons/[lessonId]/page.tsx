@@ -49,7 +49,14 @@ export default async function LessonPage({
             </h1>
           </header>
 
-          {locked ? <LockedNotice /> : <LessonContent view={view} />}
+          {locked ? (
+            <LockedNotice />
+          ) : (
+            <LessonContent
+              view={view}
+              needsCredentialName={!user.profile.credential_name}
+            />
+          )}
 
           <PrevNext view={view} />
         </main>
@@ -73,7 +80,13 @@ function LockedNotice() {
   );
 }
 
-function LessonContent({ view }: { view: LessonView }) {
+function LessonContent({
+  view,
+  needsCredentialName,
+}: {
+  view: LessonView;
+  needsCredentialName: boolean;
+}) {
   const { tree, lesson, fileUrl } = view;
 
   return (
@@ -140,6 +153,7 @@ function LessonContent({ view }: { view: LessonView }) {
             passPct={lesson.pass_pct ?? DEFAULT_PASS_PCT}
             alreadyPassed={view.completed}
             attempts={view.attempts}
+            needsCredentialName={needsCredentialName}
           />
         </>
       ) : (
@@ -147,6 +161,7 @@ function LessonContent({ view }: { view: LessonView }) {
           courseId={tree.course.id}
           lessonId={lesson.id}
           completed={view.completed}
+          needsCredentialName={needsCredentialName}
         />
       )}
     </div>

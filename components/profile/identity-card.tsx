@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import {
+  updateCredentialName,
   updateProfileName,
   type ProfileState,
 } from "@/app/(app)/profile/actions";
@@ -26,6 +27,10 @@ export function IdentityCard({
 }) {
   const [state, formAction] = useActionState<ProfileState, FormData>(
     updateProfileName,
+    null
+  );
+  const [certState, certAction] = useActionState<ProfileState, FormData>(
+    updateCredentialName,
     null
   );
 
@@ -66,6 +71,19 @@ export function IdentityCard({
             hint="Shown in your dashboard greeting."
           />
           <SubmitButton>Save name</SubmitButton>
+        </form>
+
+        <form action={certAction} className="space-y-4 border-t border-border pt-5">
+          <FormMessage error={certState?.error} success={certState?.success} />
+          <Field
+            label="Certificate name"
+            name="credentialName"
+            autoComplete="name"
+            defaultValue={profile.credential_name ?? ""}
+            placeholder="Dr. Jane Doe, MBBS"
+            hint="Printed on your CME certificates. Changing it updates every certificate you hold — the verification codes stay the same."
+          />
+          <SubmitButton>Save certificate name</SubmitButton>
         </form>
       </CardContent>
     </Card>
