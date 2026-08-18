@@ -8,9 +8,10 @@ import type { OAUTH_PROVIDERS } from "@/lib/validation";
 type Provider = (typeof OAUTH_PROVIDERS)[number];
 
 /**
- * "Continue with Google / LinkedIn" buttons plus the "or" divider above them.
- * Each provider is its own form so useFormStatus scopes the pending state to
- * the button that was actually clicked.
+ * Social sign-in buttons plus the "or" divider above them. Each provider is
+ * its own form so useFormStatus scopes the pending state to the button that
+ * was actually clicked — which is why this stays a list of forms rather than
+ * one form with a provider argument, even at a single provider.
  */
 export function OAuthButtons({ next }: { next?: string }) {
   return (
@@ -27,17 +28,6 @@ export function OAuthButtons({ next }: { next?: string }) {
         <ProviderForm provider="google" next={next} label="Continue with Google">
           <GoogleIcon />
         </ProviderForm>
-        {/* LinkedIn is wired end-to-end (provider config, callback, icon) but
-            hidden until the LinkedIn developer app is approved. Re-enable by
-            uncommenting — nothing else needs to change.
-        <ProviderForm
-          provider="linkedin_oidc"
-          next={next}
-          label="Continue with LinkedIn"
-        >
-          <LinkedInIcon />
-        </ProviderForm>
-        */}
       </div>
     </div>
   );
@@ -112,15 +102,3 @@ function GoogleIcon() {
   );
 }
 
-// Kept for the commented-out LinkedIn button above.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function LinkedInIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4 shrink-0" aria-hidden="true">
-      <path
-        fill="#0A66C2"
-        d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05a3.74 3.74 0 0 1 3.37-1.85c3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13Zm1.78 13.02H3.55V9h3.57v11.45ZM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0Z"
-      />
-    </svg>
-  );
-}

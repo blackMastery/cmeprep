@@ -285,14 +285,23 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Password reset. The custom template exists to swap Supabase's default
-# {{ .ConfirmationURL }} (PKCE `?code=`, only valid in the browser that asked
-# for the reset) for a {{ .TokenHash }} link, which works on any device.
-# The hosted project needs this same template pasted into
-# Authentication → Email Templates → Reset Password.
-[auth.email.template.recovery]
-subject = "Reset your cmeprep.me password"
-content_path = "./supabase/templates/recovery.html"
+# Password reset template — DISABLED, and the whole block must stay commented:
+# `config push` sends a template whenever subject OR content_path is set, and
+# the hosted project rejects both with
+#   400 "Email template modification is not available for free tier projects
+#        using the default email provider"
+# which fails the ENTIRE auth section, not just the template.
+#
+# The template swapped Supabase's default {{ .ConfirmationURL }} (PKCE `?code=`,
+# only valid in the browser that asked for the reset) for a {{ .TokenHash }}
+# link that works on any device. Production cannot have that on the free tier,
+# so leaving this on locally only hid the difference: cross-device reset worked
+# in dev and silently failed in prod. The HTML is kept at
+# supabase/templates/recovery.html — restore this block once the project has
+# custom SMTP or a paid plan (see README, "Social sign-in").
+# [auth.email.template.recovery]
+# subject = "Reset your cmeprep.me password"
+# content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -395,10 +404,17 @@ secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 # nonce the local stack didn't issue).
 skip_nonce_check = true
 
+# LinkedIn sign-in is removed for now: the developer app was never approved, so
+# the credentials exist in no environment and interpolating them emitted a WARN
+# on every CLI run — and a `config push` would have sent BLANK credentials to
+# the hosted project. Disabled rather than deleted so the pushed state is
+# explicit. To restore: uncomment the two credential lines, flip enabled, and
+# put 'linkedin_oidc' back in OAUTH_PROVIDERS (lib/validation.ts) — the button
+# and icon are in git history at components/auth/oauth-buttons.tsx.
 [auth.external.linkedin_oidc]
-enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_SECRET)"
+enabled = false
+# client_id = "env(SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID)"
+# secret = "env(SUPABASE_AUTH_EXTERNAL_LINKEDIN_OIDC_SECRET)"
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
@@ -474,6 +490,32 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]
 enabled = true
+
+# ── Hosted project overrides ────────────────────────────────
+# Everything above this line is tuned for the LOCAL stack. `supabase config
+# push` sends the remote-applicable sections of this file to the linked
+# project, so without these overrides it would set the production Site URL to
+# http://localhost:3000 — breaking every confirmation, reset and OAuth
+# redirect, because Supabase falls back to site_url for any target that is not
+# allow-listed. This block is deep-merged over the base config whenever the
+# CLI targets ref fldozhiapwphgxetzmwg, and only then.
+#
+# Local-only sections (ports, [studio], [local_smtp], [db.pooler], [analytics],
+# [edge_runtime], [experimental]) are never sent, so they need no override.
+[remotes.prod]
+project_id = "fldozhiapwphgxetzmwg"
+
+[remotes.prod.auth]
+site_url = "https://www.cmeprep.me"
+# Production drops the localhost entries: this list is a redirect allow-list,
+# and an attacker-supplied ?next= pointing at localhost is only ever noise in
+# prod. /auth/confirm stays listed explicitly for the same reason as above.
+additional_redirect_urls = [
+  "https://www.cmeprep.me",
+  "https://www.cmeprep.me/auth/confirm",
+  "https://www.cmeprep.me/auth/confirm?next=/reset-password",
+  "https://www.cmeprep.me/auth/callback",
+]
 # Directory under `supabase/` where declarative files are written.
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.

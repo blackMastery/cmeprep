@@ -48,8 +48,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
  * requireUser() bounces to /login, proxy.ts sees the valid session and
  * bounces back — an infinite redirect loop the user cannot escape. Returning
  * null here would keep that loop, so heal instead. The name fallback chain
- * mirrors handle_new_user() in the migrations ('name' is where Google and
- * LinkedIn OIDC put the display name).
+ * mirrors handle_new_user() in the migrations ('name' is where Google — and
+ * OIDC providers generally — put the display name).
  */
 async function healMissingProfile(user: User): Promise<Profile | null> {
   const meta = user.user_metadata;

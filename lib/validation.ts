@@ -352,9 +352,13 @@ export const emailSchema = z
   .toLowerCase()
   .email("Enter a valid email address");
 
-/** Social sign-in providers enabled in Supabase. LinkedIn must be the OIDC
- *  variant — Supabase removed the legacy `linkedin` provider in Jan 2024. */
-export const OAUTH_PROVIDERS = ["google", "linkedin_oidc"] as const;
+/** Social sign-in providers enabled in Supabase. Adding one here is not
+ *  enough — it must also be enabled in config.toml AND in the hosted
+ *  project, or the redirect fails at Supabase rather than in this schema.
+ *  (LinkedIn was removed pending developer-app approval; if it returns it
+ *  must be the `linkedin_oidc` variant — Supabase dropped the legacy
+ *  `linkedin` provider in Jan 2024.) */
+export const OAUTH_PROVIDERS = ["google"] as const;
 export const oauthProviderSchema = z.enum(OAUTH_PROVIDERS);
 
 /**

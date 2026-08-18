@@ -368,11 +368,13 @@ describe("fullNameSchema", () => {
 describe("oauthProviderSchema", () => {
   it("accepts the enabled providers", () => {
     expect(oauthProviderSchema.parse("google")).toBe("google");
-    expect(oauthProviderSchema.parse("linkedin_oidc")).toBe("linkedin_oidc");
   });
 
   it("rejects anything else — the action trusts this whitelist", () => {
-    for (const bad of ["github", "linkedin", "", null, undefined]) {
+    // linkedin_oidc belongs here while LinkedIn is disabled in config.toml:
+    // accepting a provider the project does not have enabled just moves the
+    // failure from this schema to an opaque redirect error at Supabase.
+    for (const bad of ["github", "linkedin", "linkedin_oidc", "", null, undefined]) {
       expect(oauthProviderSchema.safeParse(bad).success).toBe(false);
     }
   });

@@ -14,7 +14,7 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   with a sample answered question, problem / timed exams / examinations /
   outcomes sections, 3-tier pricing, CTA band, footer.
 - **Auth** — register, email verification, login, forgot/reset password,
-  banned-user gate, Google + LinkedIn sign-in.
+  banned-user gate, Google sign-in.
 - **Test engine** — new-test wizard, timed take screen (question palette,
   flag-for-review, autosave + resume, keyboard nav), server-side scoring,
   results, and review mode.
@@ -57,30 +57,30 @@ npm run dev
 Verification and password-reset emails land in Mailpit at
 http://127.0.0.1:54324 during local development.
 
-### Social sign-in (Google / LinkedIn)
+### Social sign-in (Google)
 
-The buttons on `/login` and `/register` need OAuth credentials; without them
-the providers answer with an error that surfaces on `/login?error=`.
+The button on `/login` and `/register` needs OAuth credentials; without them
+the provider answers with an error that surfaces on `/login?error=`.
 
 1. **Google** — [console.cloud.google.com](https://console.cloud.google.com):
    configure the OAuth consent screen, then *APIs & Services → Credentials →
    Create credentials → OAuth client ID → Web application*. Authorized
    redirect URIs: `http://127.0.0.1:54321/auth/v1/callback` (local stack) and
    `https://<project-ref>.supabase.co/auth/v1/callback` (hosted).
-2. **LinkedIn** — [developer.linkedin.com](https://developer.linkedin.com):
-   create an app attached to a verified Company Page, request the product
-   **"Sign In with LinkedIn using OpenID Connect"** (the legacy product does
-   not work — Supabase's provider is `linkedin_oidc`), and add the same two
-   redirect URLs under *Auth → Authorized redirect URLs*.
-3. **Local stack** — put the four values from `.env.example`
+2. **Local stack** — put the two values from `.env.example`
    (`SUPABASE_AUTH_EXTERNAL_…`) in a repo-root `.env` (gitignored; the
    Supabase CLI does not read `.env.local`), then restart with
    `npx supabase stop && npx supabase start`.
-4. **Hosted project** — in the Supabase dashboard enable **Google** and
-   **LinkedIn (OIDC)** under *Authentication → Sign In / Providers* with the
-   same credentials, and add `https://www.cmeprep.me/auth/callback` to
-   *Authentication → URL Configuration* — unlisted redirect targets silently
-   fall back to the Site URL.
+3. **Hosted project** — in the Supabase dashboard enable **Google** under
+   *Authentication → Sign In / Providers* with the same credentials, and add
+   `https://www.cmeprep.me/auth/callback` to *Authentication → URL
+   Configuration* — unlisted redirect targets silently fall back to the Site
+   URL. (`supabase config push` now manages that allow-list; see
+   `[remotes.prod]` in `supabase/config.toml`.)
+
+LinkedIn is disabled for now — the developer app was never approved. Adding a
+provider back means all three of: `[auth.external.…]` in `supabase/config.toml`,
+`OAUTH_PROVIDERS` in `lib/validation.ts`, and the hosted dashboard.
 
 Notes: an OAuth identity with the same **verified** email as an existing
 account is linked into that account (Supabase default), so one user can hold

@@ -5,7 +5,7 @@ import { OAUTH_NEXT_COOKIE, safeRedirectPath } from "@/lib/validation";
 const FAILED = "Could not complete sign-in. Please try again.";
 
 /**
- * Landing point for OAuth sign-in (Google / LinkedIn), separate from
+ * Landing point for OAuth sign-in, separate from
  * /auth/confirm: providers report aborts as `?error=` params that route
  * doesn't handle, and its "link has expired" copy is email-flow wording.
  *

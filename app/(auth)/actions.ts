@@ -195,7 +195,7 @@ export async function updatePassword(
 }
 
 /**
- * Start an OAuth sign-in (Google / LinkedIn) from a plain form post.
+ * Start an OAuth sign-in from a plain form post.
  *
  * Runs server-side so the PKCE code-verifier cookie is written by the same
  * client that later exchanges the code in /auth/callback — @supabase/ssr
