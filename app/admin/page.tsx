@@ -95,7 +95,7 @@ export default async function AdminOverviewPage(props: PageProps<"/admin">) {
     { icon: Users, label: "Users", value: counts.users, href: "/admin/users" },
     { icon: CreditCard, label: "Plans", value: counts.plans, href: "/admin/plans" },
     { icon: Mail, label: "Open messages", value: openMessages, href: "/admin/messages" },
-    { icon: BookOpen, label: "Courses", value: null, href: "/admin/courses" },
+    { icon: BookOpen, label: "CME courses", value: null, href: "/admin/courses" },
   ];
 
   return (

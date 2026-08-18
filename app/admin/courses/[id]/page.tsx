@@ -6,7 +6,7 @@ import { getCourseBuilder, signedCourseFileUrl } from "@/lib/admin/courses";
 import { Button } from "@/components/ui/button";
 import { CourseBuilder } from "@/components/admin/course-builder";
 
-export const metadata: Metadata = { title: "Course builder" };
+export const metadata: Metadata = { title: "CME course builder" };
 
 export default async function AdminCourseBuilderPage({
   params,
@@ -27,7 +27,7 @@ export default async function AdminCourseBuilderPage({
         <Button variant="ghost" size="sm" asChild className="mb-3 -ml-2">
           <Link href="/admin/courses">
             <ArrowLeft data-icon="inline-start" />
-            All courses
+            All CME courses
           </Link>
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -37,7 +37,7 @@ export default async function AdminCourseBuilderPage({
           {/* Admins preview through the real learner pages — the courses RLS
               lets an admin session read drafts. */}
           <Button variant="outline-muted" size="sm" asChild>
-            <Link href={`/courses/${builder.course.id}`}>
+            <Link href={`/cme/${builder.course.id}`}>
               <Eye data-icon="inline-start" />
               Preview as learner
             </Link>

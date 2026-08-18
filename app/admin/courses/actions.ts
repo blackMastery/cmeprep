@@ -40,9 +40,9 @@ import type { AdminState } from "@/app/admin/subjects/actions";
 function revalidateCourses() {
   revalidatePath("/admin/courses");
   revalidatePath("/admin/courses/[id]", "page");
-  revalidatePath("/courses");
-  revalidatePath("/courses/[id]", "page");
-  revalidatePath("/courses/[id]/lessons/[lessonId]", "page");
+  revalidatePath("/cme");
+  revalidatePath("/cme/[id]", "page");
+  revalidatePath("/cme/[id]/lessons/[lessonId]", "page");
   revalidatePath("/dashboard");
 }
 

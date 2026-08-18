@@ -5,7 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import {
   markLessonComplete,
   type LessonActionState,
-} from "@/app/(app)/courses/actions";
+} from "@/app/(app)/cme/actions";
 import { Button } from "@/components/ui/button";
 
 /** The explicit completion affordance for content lessons (spec §5). */

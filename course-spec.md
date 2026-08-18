@@ -185,13 +185,13 @@ Follow the `-core` / server split:
 
 ### Routes
 
-- `/courses` — catalog: published courses as cards (cover, title, description,
+- `/cme` — catalog: published courses as cards (cover, title, description,
   progress bar or "Completed" badge). Empty state if none published.
-- `/courses/[id]` — course overview: description + syllabus (modules with
+- `/cme/[id]` — course overview: description + syllabus (modules with
   lessons, per-lesson completion checkmarks, locked modules shown with a lock
   and "Pass the Module N quiz to unlock"). Continue button jumps to the first
   incomplete lesson in the furthest unlocked module.
-- `/courses/[id]/lessons/[lessonId]` — the lesson player page:
+- `/cme/[id]/lessons/[lessonId]` — the lesson player page:
   - Persistent syllabus sidebar (collapsible on mobile) for navigation.
   - Content area by kind:
     - `video`: `<video controls>` with signed src; poster from cover.

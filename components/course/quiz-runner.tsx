@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { CheckCircle2, RotateCcw, XCircle } from "lucide-react";
-import { submitQuiz, type QuizSubmitState } from "@/app/(app)/courses/actions";
+import { submitQuiz, type QuizSubmitState } from "@/app/(app)/cme/actions";
 import type { QuizFeedback, QuizQuestionView } from "@/lib/courses";
 import type { CourseQuizAttempt } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";

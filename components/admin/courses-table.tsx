@@ -37,7 +37,7 @@ export function CoursesTable({
     <div className="space-y-6">
       <Card className="[--card-spacing:--spacing(5)]">
         <CardContent className="space-y-3">
-          <h2 className="font-display text-lg">New course</h2>
+          <h2 className="font-display text-lg">New CME course</h2>
           <FormMessage error={createState?.error} />
           <form action={createAction} className="flex flex-wrap gap-2">
             <Input
@@ -52,7 +52,8 @@ export function CoursesTable({
             </AdminSubmit>
           </form>
           <p className="text-xs text-muted-foreground">
-            Courses start as drafts — build modules and lessons, then publish.
+            CME courses start as drafts — build modules and lessons, then
+            publish.
           </p>
         </CardContent>
       </Card>
@@ -70,7 +71,7 @@ export function CoursesTable({
       {items.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No courses yet. Create the first draft above.
+            No CME courses yet. Create the first draft above.
           </CardContent>
         </Card>
       ) : (

@@ -9,8 +9,8 @@ import { Progress } from "@/components/ui/progress";
  * when the learner has never started a course (spec §5). */
 export function ContinueLearningCard({ data }: { data: CardData }) {
   const resumeHref = data.continueLessonId
-    ? `/courses/${data.courseId}/lessons/${data.continueLessonId}`
-    : `/courses/${data.courseId}`;
+    ? `/cme/${data.courseId}/lessons/${data.continueLessonId}`
+    : `/cme/${data.courseId}`;
 
   return (
     <Card className="[--card-spacing:--spacing(5)]">

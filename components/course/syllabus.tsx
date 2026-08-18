@@ -78,7 +78,7 @@ export function Syllabus({
                       row
                     ) : (
                       <Link
-                        href={`/courses/${tree.course.id}/lessons/${lesson.id}`}
+                        href={`/cme/${tree.course.id}/lessons/${lesson.id}`}
                         aria-current={current ? "page" : undefined}
                         className="block rounded-md hover:bg-secondary/60"
                       >

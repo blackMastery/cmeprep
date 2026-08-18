@@ -29,7 +29,7 @@ export default async function LessonPage({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-10">
       <Button variant="ghost" size="sm" asChild className="mb-4 -ml-2">
-        <Link href={`/courses/${tree.course.id}`}>
+        <Link href={`/cme/${tree.course.id}`}>
           <ArrowLeft data-icon="inline-start" />
           {tree.course.title}
         </Link>
@@ -171,7 +171,7 @@ function PrevNext({ view }: { view: LessonView }) {
     <div className="mt-8 flex items-center justify-between gap-3 border-t pt-4">
       {prevLessonId ? (
         <Button variant="outline-muted" size="sm" asChild>
-          <Link href={`/courses/${tree.course.id}/lessons/${prevLessonId}`}>
+          <Link href={`/cme/${tree.course.id}/lessons/${prevLessonId}`}>
             <ArrowLeft data-icon="inline-start" />
             Previous
           </Link>
@@ -181,7 +181,7 @@ function PrevNext({ view }: { view: LessonView }) {
       )}
       {nextLessonId && (
         <Button variant="outline-muted" size="sm" asChild>
-          <Link href={`/courses/${tree.course.id}/lessons/${nextLessonId}`}>
+          <Link href={`/cme/${tree.course.id}/lessons/${nextLessonId}`}>
             Next
             <ArrowRight data-icon="inline-end" />
           </Link>

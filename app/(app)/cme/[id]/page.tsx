@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Markdown } from "@/components/markdown";
 import { Syllabus } from "@/components/course/syllabus";
 
-export const metadata: Metadata = { title: "Course" };
+export const metadata: Metadata = { title: "CME course" };
 
 export default async function CourseOverviewPage({
   params,
@@ -28,9 +28,9 @@ export default async function CourseOverviewPage({
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
       <Button variant="ghost" size="sm" asChild className="mb-3 -ml-2">
-        <Link href="/courses">
+        <Link href="/cme">
           <ArrowLeft data-icon="inline-start" />
-          All courses
+          All CME courses
         </Link>
       </Button>
 
@@ -72,7 +72,7 @@ export default async function CourseOverviewPage({
           )}
           {continueLessonId && (
             <Button asChild>
-              <Link href={`/courses/${course.id}/lessons/${continueLessonId}`}>
+              <Link href={`/cme/${course.id}/lessons/${continueLessonId}`}>
                 {completion.completedLessons === 0 ? "Start course" : "Continue"}
                 <ArrowRight data-icon="inline-end" />
               </Link>

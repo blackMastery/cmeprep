@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { listCoursesForAdmin } from "@/lib/admin/courses";
 import { CoursesTable } from "@/components/admin/courses-table";
 
-export const metadata: Metadata = { title: "Courses" };
+export const metadata: Metadata = { title: "CME" };
 
 export default async function AdminCoursesPage({
   searchParams,
@@ -16,11 +16,14 @@ export default async function AdminCoursesPage({
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
       <header className="mb-8">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Courses
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          Continuing Medical Education
+        </p>
+        <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">
+          CME
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Structured learning content — modules of video, text, PDF and image
+          Structured CME content — modules of video, text, PDF and image
           lessons with quizzes that gate progression. Free for every signed-in
           user.
         </p>

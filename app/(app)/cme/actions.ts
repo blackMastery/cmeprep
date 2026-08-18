@@ -18,11 +18,11 @@ import { courseQuizSubmitSchema, uuid } from "@/lib/validation";
 export type LessonActionState = { error?: string } | null;
 
 function revalidateLearnerCourse(courseId: string) {
-  revalidatePath("/courses");
-  revalidatePath(`/courses/${courseId}`);
+  revalidatePath("/cme");
+  revalidatePath(`/cme/${courseId}`);
   // "page" type takes the ROUTE PATTERN — a half-interpolated string like
-  // `/courses/${id}/lessons/[lessonId]` matches nothing.
-  revalidatePath("/courses/[id]/lessons/[lessonId]", "page");
+  // `/cme/${id}/lessons/[lessonId]` matches nothing.
+  revalidatePath("/cme/[id]/lessons/[lessonId]", "page");
   revalidatePath("/dashboard");
 }
 

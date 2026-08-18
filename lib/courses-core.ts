@@ -5,7 +5,7 @@ import type { CourseLessonKind, CourseQuizAnswer } from "@/lib/supabase/types";
  * Pure course rules (course-spec.md) — unlock computation, completion math,
  * quiz grading, upload caps and publish validation. The sibling lib/courses.ts
  * / lib/admin/courses.ts do the DB work; every rule here is stated once and
- * unit-tested in tests/unit/courses-core.test.ts.
+ * unit-tested in tests/unit/cme-core.test.ts.
  *
  * All inputs are assumed pre-filtered to NON-DELETED rows in stored order —
  * the server modules query with `deleted_at is null` + `order by position`.

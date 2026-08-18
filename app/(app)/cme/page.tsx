@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
-export const metadata: Metadata = { title: "Courses" };
+export const metadata: Metadata = { title: "CME" };
 
 export default async function CoursesPage() {
   const user = await requireUser();
@@ -16,12 +16,15 @@ export default async function CoursesPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
       <header className="mb-8">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Courses
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          Continuing Medical Education
+        </p>
+        <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">
+          CME
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Structured lessons with quizzes that unlock as you go — free with
-          your account.
+          Structured CME courses — lessons with quizzes that unlock as you go,
+          free with your account.
         </p>
       </header>
 
@@ -30,7 +33,7 @@ export default async function CoursesPage() {
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
             <BookOpen className="size-8 text-muted-foreground" aria-hidden />
             <p className="text-sm text-muted-foreground">
-              No courses have been published yet — check back soon.
+              No CME courses have been published yet — check back soon.
             </p>
           </CardContent>
         </Card>
@@ -59,7 +62,7 @@ export default async function CoursesPage() {
                 <CardContent className="space-y-3">
                   <h2 className="font-display text-lg leading-snug">
                     <Link
-                      href={`/courses/${course.id}`}
+                      href={`/cme/${course.id}`}
                       className="after:absolute after:inset-0"
                     >
                       {course.title}

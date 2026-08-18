@@ -16,6 +16,16 @@ const isLocalSupabase = ["127.0.0.1", "localhost", "::1"].includes(
 );
 
 const nextConfig: NextConfig = {
+  // The learner course section was rebranded to CME and moved from /courses
+  // to /cme. Permanent redirects keep old bookmarks, dashboard links shared
+  // between learners and anything already indexed working.
+  async redirects() {
+    return [
+      { source: "/courses", destination: "/cme", permanent: true },
+      { source: "/courses/:path*", destination: "/cme/:path*", permanent: true },
+    ];
+  },
+
   images: {
     // Next 16 refuses to optimize images that resolve to a private IP — an
     // SSRF guard. Local Supabase serves Storage from 127.0.0.1:54321, so the
