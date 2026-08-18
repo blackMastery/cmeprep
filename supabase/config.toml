@@ -141,6 +141,13 @@ public = false
 file_size_limit = "500MiB"
 allowed_mime_types = ["video/mp4", "image/jpeg", "image/png", "image/webp", "application/pdf"]
 
+# Figures and diagrams extracted from the study materials by the AI tutor's
+# ingest pipeline. Mirrored by migrations/..._file_assets.sql.
+[storage.buckets."study-images"]
+public = true
+file_size_limit = "10MiB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/webp"]
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true
