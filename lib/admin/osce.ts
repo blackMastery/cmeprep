@@ -137,14 +137,20 @@ type ReportJoinRow = {
 export async function listGradeReports(): Promise<GradeReportRow[]> {
   const admin = createAdminClient();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from("osce_grade_reports")
     .select(
-      "id, created_at, question_id, note, handled_at, profiles(full_name), questions(stem), osce_grading_events(verdict, answer_text)"
+      // The profiles embed MUST name its foreign key: this table has two
+      // (user_id and handled_by), and a bare `profiles(...)` is ambiguous —
+      // PostgREST rejects the whole request with PGRST201, which rendered as
+      // a permanently empty queue because the error was discarded.
+      "id, created_at, question_id, note, handled_at, profiles!osce_grade_reports_user_id_fkey(full_name), questions(stem), osce_grading_events(verdict, answer_text)"
     )
     .order("handled_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: false })
     .limit(200);
+
+  if (error) throw new Error(`could not read grade reports: ${error.message}`);
 
   return ((data ?? []) as unknown as ReportJoinRow[]).map((r) => ({
     id: r.id,
