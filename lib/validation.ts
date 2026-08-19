@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { OSCE_MAX_ANSWER_CHARS } from "@/lib/osce-grading-core";
+import { TUTOR_MAX_QUESTION_CHARS } from "@/lib/tutor-core";
 
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -726,3 +727,17 @@ export const adminRollupSchema = z.object({
 
 /** A rollup civil day (YYYY-MM-DD) from a query param. */
 export const analyticsDaySchema = z.iso.date();
+
+/** AI tutor — one question to the study chat. The length ceiling matches the
+ * tutor service's own ChatRequest, so an over-long question is a 400 here
+ * rather than a 422 from a service the student never sees. */
+export const tutorAskSchema = z.object({
+  question: z.string().min(1).max(TUTOR_MAX_QUESTION_CHARS),
+});
+
+/** "Report this answer". messageId is the chat_messages row the tutor service
+ * persisted and returned on the done frame. */
+export const tutorReportSchema = z.object({
+  messageId: uuid(),
+  note: z.string().trim().max(1000).optional(),
+});

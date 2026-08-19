@@ -23,6 +23,15 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   untimed sessions, per-station check-and-lock, binary verdicts feeding the
   normal stats, paid-only with a 50-grades/day cap, admin grading log and
   student "report this grade" flags. Requires `OPENAI_API_KEY`.
+- **AI tutor** — a study chat at `/tutor`, grounded strictly in the client's
+  ingested course materials: it cites the passages it used and refuses rather
+  than guessing when a topic isn't covered. The retrieval and generation live
+  in a separate FastAPI/LangGraph service (the `cmeprep-ai-tutor` repo, on
+  Render); `app/api/tutor/chat` proxies its SSE stream and is the only place
+  entitlement and the message caps are enforced. Trial users get
+  `TUTOR_TRIAL_ALLOWANCE` questions in total, subscribers `TUTOR_DAILY_CAP`
+  per day. Requires `TUTOR_API_URL` + `TUTOR_SHARED_SECRET`.
+
 - **Dashboard** — attempted / accuracy / streak, weak areas, past tests,
   trial usage with upgrade prompt.
 

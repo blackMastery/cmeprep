@@ -851,6 +851,98 @@ export type ContactMessage = Timestamps & {
   handled_by: string | null;
 };
 
+/* ── Tutor agent ──────────────────────────────────────────────
+ * Written by the FastAPI tutor service over a direct Postgres connection, not
+ * by this app. All five are deny-all for anon/authenticated: reads go through
+ * createAdminClient() in route handlers and server components, scoped to the
+ * caller's own user_id. */
+
+/** Google Drive sync ledger — one row per ingested file. */
+export type SyncedFile = {
+  id: string;
+  name: string;
+  mime_type: string;
+  modified_time: string | null;
+  md5_checksum: string | null;
+  /** Drive URL. Never sent to the browser — students have no Drive access. */
+  web_view_link: string | null;
+  status: "synced" | "skipped" | "error";
+  error: string | null;
+  last_synced_at: string;
+  created_at: string;
+};
+
+/** The retrieval index. `embedding` is pgvector and is deliberately omitted —
+ * PostgREST would serialise 1536 floats into every row. */
+export type Chunk = {
+  id: string;
+  file_id: string;
+  file_name: string;
+  page: number | null;
+  section: string | null;
+  content: string;
+  asset_id: string | null;
+  kind: "text" | "figure" | "table";
+  created_at: string;
+};
+
+/** Append-only audit trail of every tutor exchange, and the cap counter.
+ * Never deleted — "New conversation" moves tutor_threads instead. */
+export type ChatMessage = {
+  id: string;
+  user_id: string | null;
+  role: "user" | "assistant";
+  content: string;
+  /** Chunks retrieved for this answer; empty on a refusal. Null on user rows. */
+  chunk_ids: string[] | null;
+  /** "provider/model" that answered. Null on user rows. */
+  model: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  created_at: string;
+};
+
+/** One stored image (figure crop or rendered page) from the materials. */
+export type FileAsset = {
+  id: string;
+  file_id: string;
+  content_hash: string;
+  page: number | null;
+  kind: "figure" | "page";
+  storage_path: string;
+  public_url: string;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+};
+
+/** Content-addressed vision-description cache. Never garbage-collected. */
+export type AssetDescription = {
+  content_hash: string;
+  description: string;
+  model: string | null;
+  created_at: string;
+};
+
+/** Conversation boundary. History renders from conversation_started_at
+ * forward; "New conversation" moves it and clears the checkpointer thread. */
+export type TutorThread = {
+  user_id: string;
+  conversation_started_at: string;
+  updated_at: string;
+};
+
+/** "Report this answer" — quality signal and liability paper trail. */
+export type TutorAnswerReport = {
+  id: string;
+  user_id: string;
+  message_id: string;
+  note: string | null;
+  created_at: string;
+  handled_at: string | null;
+  handled_by: string | null;
+};
+
 /** auth.users bridge (public.user_emails view) — service-role read only. */
 export type UserEmail = {
   id: string;
@@ -878,6 +970,13 @@ export type Database = {
       question_model_answers: Table<QuestionModelAnswer>;
       osce_grading_events: Table<OsceGradingEvent>;
       osce_grade_reports: Table<OsceGradeReport>;
+      synced_files: Table<SyncedFile>;
+      chunks: Table<Chunk>;
+      chat_messages: Table<ChatMessage>;
+      file_assets: Table<FileAsset>;
+      asset_descriptions: Table<AssetDescription>;
+      tutor_threads: Table<TutorThread>;
+      tutor_answer_reports: Table<TutorAnswerReport>;
       tests: Table<Test>;
       test_questions: Table<TestQuestion>;
       test_answers: Table<TestAnswer>;
@@ -964,6 +1063,12 @@ export type Database = {
           p_new_booked_cents: number;
         };
         Returns: undefined;
+      };
+      /** Moves the AI tutor's conversation boundary, stamped by the DATABASE
+       * clock — it is compared against chat_messages.created_at. */
+      tutor_reset_thread: {
+        Args: { p_user: string };
+        Returns: string;
       };
     };
     Enums: {

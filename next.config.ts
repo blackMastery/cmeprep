@@ -53,6 +53,14 @@ const nextConfig: NextConfig = {
         port: supabase.port,
         pathname: "/storage/v1/object/public/org-branding/**",
       },
+      {
+        // Figures, diagrams and rendered pages cropped from the study
+        // materials, cited by the AI tutor.
+        protocol: supabase.protocol.replace(":", "") as "http" | "https",
+        hostname: supabase.hostname,
+        port: supabase.port,
+        pathname: "/storage/v1/object/public/study-images/**",
+      },
     ],
   },
 };
