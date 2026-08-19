@@ -9,7 +9,7 @@ import {
   History,
   LayoutDashboard,
   ListTodo,
-  MessagesSquare,
+  // MessagesSquare, // unused while the AI tutor nav link is commented out
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -25,7 +25,7 @@ const NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tests/new", label: "New test", icon: FilePlus2 },
   { href: "/plan", label: "Study plan", icon: ListTodo },
-  { href: "/tutor", label: "AI tutor", icon: MessagesSquare },
+  // { href: "/tutor", label: "AI tutor", icon: MessagesSquare },
   { href: "/tests", label: "History", icon: History },
   { href: "/cme", label: "CME", icon: BookOpen },
   { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },
