@@ -74,3 +74,52 @@ type or launch filter appears, re-audit every count-view consumer
   fine, not a server-boundary finding. analytics-core contains a literal NUL
   byte (revenue keyId join separator), so git shows it as binary; use
   `git diff --text` on it.
+
+---
+
+Added from the AI-tutor review (2026-08-18).
+
+**PostgREST embed ambiguity is a recurring, silent Critical here.** Report-queue
+tables in this codebase carry TWO FKs to `profiles` (`user_id` + `handled_by`),
+so `.select("…, profiles(full_name)")` returns PGRST201 "Could not embed because
+more than one relationship was found" — never rows. Combined with the local
+"ignore `error`" style, the admin page renders its empty state forever and looks
+like "no reports yet". Confirmed live for BOTH `osce_grade_reports`
+(lib/admin/osce.ts, pre-existing) and `tutor_answer_reports` (lib/admin/tutor.ts).
+Fix shape: `profiles!<table>_user_id_fkey(full_name)`.
+**How to apply:** whenever a diff embeds a table that has >1 FK to the same
+target, demand the `!constraint_name` hint. This is the one case where ignoring
+`error` IS a finding — the read fails 100% of the time, not soft.
+
+**How to actually verify a PostgREST query without writing app code:** the local
+stack is usually already up. `npx supabase status` prints SERVICE_ROLE_KEY; then
+`curl -s "http://127.0.0.1:54321/rest/v1/<table>?select=…" -H "apikey: $SR"
+-H "Authorization: Bearer $SR"`. Faster and more certain than reasoning about
+embed resolution. (No `psql` on this machine — use the REST API or `supabase db`.)
+
+**`access.kind === "none"` does NOT mean "no access".** entitlements-core.ts
+says so in a comment addressed to consumers: a paying org-seat member with no
+personal subscription rows is `{kind:"none", org:{…}}`. Any new gate that
+branches on `kind === "none"` alone locks out every org seat. Likewise
+`reason === "trial"` is derived from `role === 'trial'` ALONE and is checked
+before live subscriptions, so it can coexist with a paid subscription during the
+role-sync window.
+**How to apply:** in any new feature gate built on ExamAccess, check the `org`
+rider explicitly and don't treat `reason` as proof of non-payment.
+
+**Strip-on-parse stream transforms leak on the paths where parsing fails.**
+The tutor SSE proxy rewrites `data:` frames to drop Google Drive URLs, and
+forwards anything that fails `JSON.parse` verbatim — including the residual
+partial frame in `flush()`. A truncated upstream therefore ships the raw
+citation JSON (Drive link included) to the browser. Verified with a throwaway
+vitest against `stripLinks`.
+**How to apply:** for any transform whose job is redaction, the failure mode
+must be DROP, never passthrough; and check the flush/teardown path separately
+from the steady-state path.
+
+**Two-repo feature: `../cmeprep-ai-tutor` is the FastAPI tutor service.** Its
+`supabase/` is retired — schema lives in cmeprep's migrations. Both halves gate
+on `TUTOR_SHARED_SECRET` and both default it to empty/absent, so the pair fails
+OPEN if the Render env var is unset.
+**How to apply:** when reviewing either repo, read the counterpart's env
+defaults; a "second factor" that both sides skip when blank is not a factor.
