@@ -6,10 +6,13 @@ import { isIP } from "node:net";
 import type { Workbook, Worksheet } from "exceljs";
 import {
   columnOfCellRef,
+  mapAnchoredImages,
   mapInCellImages,
+  resolveDrawingPath,
   resolveSheetPath,
   rowOfCellRef,
   sniffImageType,
+  type AnchoredImageRef,
   type SniffedImageType,
 } from "@/lib/admin/import-images-core";
 import { MAX_IMAGE_BYTES } from "@/lib/storage";
@@ -130,6 +133,22 @@ export async function extractRowImages(
     );
   }
 
+  // exceljs models a drawing only when it is written exactly the way Excel
+  // writes it; other generators produce parts it refuses to parse, and
+  // workbookToMatrix strips those so the cell values still load. Either way
+  // getImages() comes back empty, so read the anchors out of the zip instead.
+  if (anchored.length === 0) {
+    try {
+      for (const [ref, bytes] of await readAnchoredImages(buffer, worksheet.name)) {
+        place(ref.row, ref.column, describe(bytes));
+      }
+    } catch (error) {
+      // Same reasoning as the in-cell reader below: never fail an import over
+      // pictures. The counts above still tell the admin what was ignored.
+      console.error("anchored_image_read_failed", error);
+    }
+  }
+
   // ── Place in Cell ─────────────────────────────────────────
   try {
     const inCell = await readInCellImages(buffer, worksheet.name);
@@ -218,6 +237,58 @@ async function readInCellImages(
   }
 
   return result;
+}
+
+/**
+ * Read "Place over Cells" pictures straight out of the zip.
+ *
+ * The fallback for workbooks exceljs cannot model: sheet → drawing rel →
+ * drawing part → media, all from the ORIGINAL upload, so it works whether or
+ * not the drawings survived into the loaded workbook.
+ */
+async function readAnchoredImages(
+  buffer: ArrayBuffer,
+  sheetName: string
+): Promise<[AnchoredImageRef, Uint8Array][]> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(buffer);
+
+  const read = async (path: string): Promise<string | null> => {
+    const entry = zip.file(path);
+    return entry ? entry.async("string") : null;
+  };
+
+  const workbookXml = await read("xl/workbook.xml");
+  const workbookRelsXml = await read("xl/_rels/workbook.xml.rels");
+  if (!workbookXml || !workbookRelsXml) return [];
+
+  const sheetPath = resolveSheetPath(workbookXml, workbookRelsXml, sheetName);
+  if (!sheetPath) return [];
+
+  const sheetXml = await read(sheetPath);
+  const sheetRelsXml = await read(relsPathFor(sheetPath));
+  if (!sheetXml || !sheetRelsXml) return [];
+
+  const drawingPath = resolveDrawingPath(sheetPath, sheetXml, sheetRelsXml);
+  if (!drawingPath) return [];
+
+  const drawingXml = await read(drawingPath);
+  const drawingRelsXml = await read(relsPathFor(drawingPath));
+  if (!drawingXml || !drawingRelsXml) return [];
+
+  const found: [AnchoredImageRef, Uint8Array][] = [];
+  for (const ref of mapAnchoredImages(drawingPath, drawingXml, drawingRelsXml)) {
+    const entry = zip.file(ref.mediaPath);
+    if (!entry) continue;
+    found.push([ref, await entry.async("uint8array")]);
+  }
+  return found;
+}
+
+/** "xl/worksheets/sheet1.xml" → "xl/worksheets/_rels/sheet1.xml.rels". */
+function relsPathFor(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return `${path.slice(0, cut + 1)}_rels/${path.slice(cut + 1)}.rels`;
 }
 
 // ── URL images ──────────────────────────────────────────────

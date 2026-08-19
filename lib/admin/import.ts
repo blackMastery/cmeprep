@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+
+import type { Workbook } from "exceljs";
 import {
   COLUMNS,
   EXAMPLE_ROWS,
@@ -75,9 +77,20 @@ export type WorkbookMatrix = {
  * model for them at all. Images are read from the ORIGINAL buffer with JSZip
  * (lib/admin/import-images.ts), so removing them here costs nothing.
  *
+ * Drawings (`drawings: true`, the last resort): exceljs only accepts a
+ * drawing whose root tag carries Excel's own `xdr:` prefix, and it dereferences
+ * a sheet's drawing relationship without checking the part parsed — so a
+ * differently-namespaced or missing drawing throws
+ * "Cannot read properties of undefined (reading 'anchors')" from deep inside
+ * the loader. Anchored pictures are read from the original buffer too, so
+ * dropping the parts costs the same nothing.
+ *
  * Only cell values matter on this path, so nothing is lost either way.
  */
-async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+async function stripUnsupportedParts(
+  buffer: ArrayBuffer,
+  { drawings = false }: { drawings?: boolean } = {}
+): Promise<ArrayBuffer> {
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(buffer);
 
@@ -86,7 +99,8 @@ async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayBuffer> 
       /^xl\/comments?[/\d]/i.test(path) ||
       /\.vml$/i.test(path) ||
       /^xl\/richData\//i.test(path) ||
-      /^xl\/metadata\.xml$/i.test(path)
+      /^xl\/metadata\.xml$/i.test(path) ||
+      (drawings && /^xl\/drawings\//i.test(path))
     ) {
       zip.remove(path);
     }
@@ -102,7 +116,8 @@ async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayBuffer> 
     const cleaned = xml.replace(/<Relationship\b[^>]*\/>/g, (rel) =>
       /(comments|vmlDrawing|richValueRel|rdRichValue|rdRichValueStructure|sheetMetadata)"/i.test(
         rel
-      )
+      ) ||
+      (drawings && /\/drawing"/i.test(rel))
         ? ""
         : rel
     );
@@ -115,9 +130,27 @@ async function stripUnsupportedParts(buffer: ArrayBuffer): Promise<ArrayBuffer> 
     zip.file(
       "[Content_Types].xml",
       xml.replace(/<Override\b[^>]*\/>/g, (override) =>
-        /comment|vml|richvalue|rdrichvalue|metadata/i.test(override) ? "" : override
+        /comment|vml|richvalue|rdrichvalue|metadata/i.test(override) ||
+        (drawings && /\/drawings\//i.test(override))
+          ? ""
+          : override
       )
     );
+  }
+
+  if (drawings) {
+    // The relationship is gone, but the `<drawing r:id="…"/>` element that
+    // referenced it would still send exceljs looking for a part that no
+    // longer exists.
+    for (const path of Object.keys(zip.files)) {
+      if (!/^xl\/worksheets\/[^/]+\.xml$/i.test(path)) continue;
+      const xml = await zip.files[path].async("string");
+      const cleaned = xml.replace(
+        /<(\w+:)?drawing\b[^>]*?(\/>|>[\s\S]*?<\/(\w+:)?drawing>)/g,
+        ""
+      );
+      if (cleaned !== xml) zip.file(path, cleaned);
+    }
   }
 
   const rebuilt = await zip.generateAsync({ type: "uint8array" });
@@ -137,23 +170,41 @@ export async function workbookToMatrix(
   | { ok: false; error: string }
 > {
   const ExcelJS = (await import("exceljs")).default;
-  let workbook = new ExcelJS.Workbook();
 
-  try {
-    await workbook.xlsx.load(buffer);
-  } catch (firstError) {
+  // Tried in order, each giving up more of what exceljs chokes on. Every
+  // attempt starts from the untouched upload: the strips are independent, and
+  // a workbook only reaches the last one if the milder ones failed.
+  const attempts: { as: string; bytes: () => Promise<ArrayBuffer> }[] = [
+    { as: "as uploaded", bytes: async () => buffer },
+    { as: "without comments and rich data", bytes: () => stripUnsupportedParts(buffer) },
+    {
+      as: "without drawings",
+      bytes: () => stripUnsupportedParts(buffer, { drawings: true }),
+    },
+  ];
+
+  let workbook: Workbook | undefined;
+  const failures: Record<string, unknown> = {};
+
+  for (const attempt of attempts) {
+    const candidate = new ExcelJS.Workbook();
     try {
-      workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await stripUnsupportedParts(buffer));
-    } catch (secondError) {
-      // Genuinely unreadable — legacy .xls, a renamed .csv, a corrupt zip.
-      // Both causes are logged: the message below cannot describe them all.
-      console.error("workbook_load_failed", { firstError, secondError });
-      return {
-        ok: false,
-        error: "That file could not be read as an .xlsx workbook. Save it as .xlsx and try again.",
-      };
+      await candidate.xlsx.load(await attempt.bytes());
+      workbook = candidate;
+      break;
+    } catch (error) {
+      failures[attempt.as] = error;
     }
+  }
+
+  if (!workbook) {
+    // Genuinely unreadable — legacy .xls, a renamed .csv, a corrupt zip.
+    // Every cause is logged: the message below cannot describe them all.
+    console.error("workbook_load_failed", failures);
+    return {
+      ok: false,
+      error: "That file could not be read as an .xlsx workbook. Save it as .xlsx and try again.",
+    };
   }
 
   // Prefer the sheet the template ships with; else the first visible sheet

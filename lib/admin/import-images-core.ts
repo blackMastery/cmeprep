@@ -270,6 +270,86 @@ function valueMetadataToRichValue(metadataXml: string): number[] {
   });
 }
 
+// ── Anchored images ("Place over Cells"), read without exceljs ──
+
+/** One picture in a drawing part: where it sits, and the media it points at. */
+export type AnchoredImageRef = {
+  /** 1-based, matching exceljs and the spreadsheet's own row numbers. */
+  row: number;
+  /** 1-based column index. */
+  column: number;
+  /** Zip-rooted path, e.g. "xl/media/image1.png". */
+  mediaPath: string;
+};
+
+/**
+ * The drawing part a worksheet points at, e.g. "xl/drawings/drawing1.xml".
+ *
+ * Namespace prefixes are matched loosely on purpose: `xdr:`, `a:` and no
+ * prefix at all are all legal, and exceljs's refusal to accept anything but
+ * `xdr:` is exactly the bug this path exists to work around.
+ */
+export function resolveDrawingPath(
+  sheetPath: string,
+  sheetXml: string,
+  sheetRelsXml: string
+): string | null {
+  // `<drawing r:id="…"/>`, but not `<legacyDrawing>` (VML notes) or
+  // `<drawingHF>` (header/footer art), neither of which holds cell pictures.
+  const relId = /<(?:\w+:)?drawing\b[^>]*?\s\w+:id="([^"]*)"/.exec(sheetXml)?.[1];
+  if (!relId) return null;
+
+  const target = relationshipTargets(sheetRelsXml).get(relId);
+  if (!target) return null;
+
+  return resolveRelativePath(directoryOf(sheetPath), target);
+}
+
+/**
+ * Every picture anchor in a drawing part, resolved to its media file.
+ *
+ * Anchors are 0-based in both axes; the returned row/column are not.
+ * `absoluteAnchor` pictures are skipped — they are positioned in EMUs with no
+ * cell to attribute them to.
+ */
+export function mapAnchoredImages(
+  drawingPath: string,
+  drawingXml: string,
+  drawingRelsXml: string
+): AnchoredImageRef[] {
+  const targets = relationshipTargets(drawingRelsXml);
+  const baseDir = directoryOf(drawingPath);
+  const refs: AnchoredImageRef[] = [];
+
+  const anchors = drawingXml.matchAll(
+    /<(?:\w+:)?(twoCellAnchor|oneCellAnchor)\b[^>]*>([\s\S]*?)<\/(?:\w+:)?\1>/g
+  );
+  for (const [, , body] of anchors) {
+    const from = /<(?:\w+:)?from\b[^>]*>([\s\S]*?)<\/(?:\w+:)?from>/.exec(body)?.[1];
+    if (!from) continue;
+
+    const col = /<(?:\w+:)?col\b[^>]*>(\d+)</.exec(from)?.[1];
+    const row = /<(?:\w+:)?row\b[^>]*>(\d+)</.exec(from)?.[1];
+    if (col === undefined || row === undefined) continue;
+
+    // `r:embed` is the embedded picture; `r:link` points outside the file and
+    // has no bytes to import.
+    const relId = /<(?:\w+:)?blip\b[^>]*?\s\w+:embed="([^"]*)"/.exec(body)?.[1];
+    if (!relId) continue;
+
+    const target = targets.get(relId);
+    if (!target) continue;
+
+    refs.push({
+      row: Number(row) + 1,
+      column: Number(col) + 1,
+      mediaPath: resolveRelativePath(baseDir, target),
+    });
+  }
+
+  return refs;
+}
+
 // ── Shared XML helpers ──────────────────────────────────────
 
 /** Relationship Id → Target, from any *.rels part. */
@@ -299,6 +379,12 @@ function resolveRelativePath(baseDir: string, target: string): string {
     else out.push(segment);
   }
   return out.join("/");
+}
+
+/** The directory a zip part lives in, with its trailing slash. */
+function directoryOf(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return cut < 0 ? "" : path.slice(0, cut + 1);
 }
 
 function decodeXmlEntities(value: string): string {
