@@ -735,9 +735,16 @@ export const tutorAskSchema = z.object({
   question: z.string().min(1).max(TUTOR_MAX_QUESTION_CHARS),
 });
 
-/** "Report this answer". messageId is the chat_messages row the tutor service
- * persisted and returned on the done frame. */
-export const tutorReportSchema = z.object({
+export const TUTOR_RATINGS = ["up", "down"] as const;
+
+/** Rating on one tutor answer. messageId is the chat_messages row the tutor
+ * service persisted and returned on the done frame. The note is optional —
+ * the rating alone is the signal worth having, and demanding an explanation
+ * is how you get no ratings at all. */
+export const tutorFeedbackSchema = z.object({
   messageId: uuid(),
+  rating: z.enum(TUTOR_RATINGS),
+  // Empty string means "no note": the dialog can be submitted untouched, and
+  // that must not overwrite a note left on an earlier pass with "".
   note: z.string().trim().max(1000).optional(),
 });

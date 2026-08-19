@@ -23,7 +23,7 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin", label: "Overview", icon: Gauge },
   { href: "/admin/questions", label: "Questions", icon: ListChecks },
   { href: "/admin/osce", label: "OSCE", icon: Stethoscope },
-  { href: "/admin/tutor/reports", label: "Tutor", icon: MessagesSquare },
+  { href: "/admin/tutor/feedback", label: "Tutor", icon: MessagesSquare },
   { href: "/admin/exams", label: "Exams", icon: GraduationCap },
   { href: "/admin/courses", label: "CME", icon: BookOpen },
   { href: "/admin/users", label: "Users", icon: Users },

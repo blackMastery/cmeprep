@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { tutorFeedbackSchema } from "@/lib/validation";
 import type { ExamAccess } from "@/lib/entitlements-core";
 import {
   stripCitation,
@@ -275,5 +276,49 @@ describe("stripLinks (the SSE rewriter)", () => {
 
   it("passes non-data lines through untouched", async () => {
     expect(await pump([`: heartbeat\n\n`])).toBe(`: heartbeat\n\n`);
+  });
+});
+
+describe("tutorFeedbackSchema", () => {
+  const base = { messageId: "0b3f1c2e-4d5a-4b6c-8d7e-9f0a1b2c3d4e" };
+
+  it("accepts a rating with no note — the note is optional by design", () => {
+    const parsed = tutorFeedbackSchema.safeParse({ ...base, rating: "up" });
+    expect(parsed.success).toBe(true);
+    // Absent, not "": the route uses undefined to mean "leave any existing
+    // note alone", so the rating click must not wipe earlier detail.
+    if (parsed.success) expect(parsed.data.note).toBeUndefined();
+  });
+
+  it("accepts both ratings and rejects anything else", () => {
+    for (const rating of ["up", "down"]) {
+      expect(tutorFeedbackSchema.safeParse({ ...base, rating }).success).toBe(true);
+    }
+    for (const rating of ["good", "UP", "", 1, null]) {
+      expect(tutorFeedbackSchema.safeParse({ ...base, rating }).success).toBe(false);
+    }
+  });
+
+  it("requires a rating", () => {
+    expect(tutorFeedbackSchema.safeParse(base).success).toBe(false);
+  });
+
+  it("trims the note and caps its length", () => {
+    const parsed = tutorFeedbackSchema.safeParse({
+      ...base,
+      rating: "down",
+      note: "  cited the wrong chapter  ",
+    });
+    expect(parsed.success && parsed.data.note).toBe("cited the wrong chapter");
+    expect(
+      tutorFeedbackSchema.safeParse({ ...base, rating: "down", note: "x".repeat(1001) })
+        .success
+    ).toBe(false);
+  });
+
+  it("rejects a messageId that is not a uuid", () => {
+    expect(
+      tutorFeedbackSchema.safeParse({ messageId: "nope", rating: "up" }).success
+    ).toBe(false);
   });
 });

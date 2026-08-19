@@ -932,11 +932,17 @@ export type TutorThread = {
   updated_at: string;
 };
 
-/** "Report this answer" — quality signal and liability paper trail. */
-export type TutorAnswerReport = {
+export type TutorRating = "up" | "down";
+
+/** A rating on one tutor answer, with optional free-text detail. The quality
+ * signal for a strict-RAG tutor: a thumbs-down usually means retrieval missed
+ * or the corpus has a gap, a thumbs-up says the passages actually answered
+ * the question. Also the liability paper trail. */
+export type TutorAnswerFeedback = {
   id: string;
   user_id: string;
   message_id: string;
+  rating: TutorRating;
   note: string | null;
   created_at: string;
   handled_at: string | null;
@@ -976,7 +982,7 @@ export type Database = {
       file_assets: Table<FileAsset>;
       asset_descriptions: Table<AssetDescription>;
       tutor_threads: Table<TutorThread>;
-      tutor_answer_reports: Table<TutorAnswerReport>;
+      tutor_answer_feedback: Table<TutorAnswerFeedback>;
       tests: Table<Test>;
       test_questions: Table<TestQuestion>;
       test_answers: Table<TestAnswer>;

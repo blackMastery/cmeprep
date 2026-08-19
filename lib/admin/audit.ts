@@ -48,8 +48,8 @@ export type AuditAction =
   | "message.delete"
   // OSCE grade reports: same triage shape as messages.
   | "osce.report_handle"
-  // AI tutor answer reports: same triage shape.
-  | "tutor.report_handle"
+  // AI tutor answer feedback: same triage shape.
+  | "tutor.feedback_handle"
   // Study plans: the two sanctioned service-role deletes of a frozen week —
   // both user-initiated/self-healing, audited because RLS was bypassed.
   | "study_plan.dismiss_diagnostic"

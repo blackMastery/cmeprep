@@ -1,13 +1,15 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { TutorRating } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-export type TutorReportRow = {
+export type TutorFeedbackRow = {
   id: string;
   createdAt: string;
   userName: string;
+  rating: TutorRating;
   note: string | null;
   handledAt: string | null;
   /** The reported answer. */
@@ -21,9 +23,10 @@ export type TutorReportRow = {
   question: string | null;
 };
 
-type ReportJoinRow = {
+type FeedbackJoinRow = {
   id: string;
   created_at: string;
+  rating: TutorRating;
   note: string | null;
   handled_at: string | null;
   user_id: string;
@@ -40,7 +43,7 @@ type ReportJoinRow = {
 };
 
 /**
- * The tutor report queue: open first, newest first.
+ * The tutor feedback queue: unhandled first, newest first.
  *
  * The question is not stored on the report — chat_messages is a flat
  * append-only log, so the prompt that produced a reported answer is that
@@ -54,13 +57,13 @@ type ReportJoinRow = {
  * and PostgREST rejects the whole request with PGRST201 — which, with the
  * error discarded, would render as a permanently empty queue.
  */
-export async function listTutorReports(): Promise<TutorReportRow[]> {
+export async function listTutorFeedback(): Promise<TutorFeedbackRow[]> {
   const admin = createAdminClient();
 
   const { data, error } = await admin
-    .from("tutor_answer_reports")
+    .from("tutor_answer_feedback")
     .select(
-      "id, created_at, note, handled_at, user_id, message_id, profiles!tutor_answer_reports_user_id_fkey(full_name), chat_messages(content, model, chunk_ids, prompt_tokens, completion_tokens, created_at)"
+      "id, created_at, rating, note, handled_at, user_id, message_id, profiles!tutor_answer_feedback_user_id_fkey(full_name), chat_messages(content, model, chunk_ids, prompt_tokens, completion_tokens, created_at)"
     )
     .order("handled_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: false })
@@ -68,9 +71,9 @@ export async function listTutorReports(): Promise<TutorReportRow[]> {
 
   // Surfaced, not swallowed: a malformed embed fails 100% of the time and
   // would otherwise be indistinguishable from "no reports yet".
-  if (error) throw new Error(`could not read tutor reports: ${error.message}`);
+  if (error) throw new Error(`could not read tutor feedback: ${error.message}`);
 
-  const rows = (data ?? []) as unknown as ReportJoinRow[];
+  const rows = (data ?? []) as unknown as FeedbackJoinRow[];
 
   const questions = await questionsFor(admin, rows);
 
@@ -78,6 +81,7 @@ export async function listTutorReports(): Promise<TutorReportRow[]> {
     id: r.id,
     createdAt: r.created_at,
     userName: r.profiles?.full_name ?? "Unknown user",
+    rating: r.rating,
     note: r.note,
     handledAt: r.handled_at,
     answer: r.chat_messages?.content ?? "",
@@ -90,15 +94,15 @@ export async function listTutorReports(): Promise<TutorReportRow[]> {
 }
 
 /**
- * The question behind each reported answer, keyed by position in `rows`.
+ * The question behind each rated answer, keyed by position in `rows`.
  *
  * One query per distinct reporting user, then resolved in memory: the answer's
  * question is the latest `user` message strictly before it. Fetching per
- * report instead would be up to 200 round trips for one page render.
+ * row instead would be up to 200 round trips for one page render.
  */
 async function questionsFor(
   admin: Admin,
-  rows: ReportJoinRow[]
+  rows: FeedbackJoinRow[]
 ): Promise<(string | null)[]> {
   const userIds = [...new Set(rows.map((r) => r.user_id))];
   if (userIds.length === 0) return [];
