@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { SessionUser } from "@/lib/auth";
 import {
   examAccessFor,
+  examDocumentAccessFor,
   type ExamAccess,
   type OrgGrantContext,
   type SubscriptionScope,
@@ -77,6 +78,25 @@ export async function examAccessFrom(
   role: SessionUser["profile"]["role"],
   now: Date = new Date()
 ): Promise<ExamAccess> {
+  const { subs, org } = await accessInputs(client, userId);
+  return examAccessFor(role, subs, org, now);
+}
+
+/** Convenience for Server Components, which have no client in hand. */
+export async function getExamAccess(user: SessionUser): Promise<ExamAccess> {
+  const supabase = await createClient();
+  return examAccessFrom(supabase, user.id, user.profile.role);
+}
+
+/**
+ * The rows both access rules read. Shared so asking for document access costs
+ * the same two queries as asking for practice access, and so the two can
+ * never end up reading a different set of subscriptions.
+ */
+async function accessInputs(
+  client: DbClient,
+  userId: string
+): Promise<{ subs: SubscriptionScope[]; org: OrgGrantContext | null }> {
   const [{ data }, org] = await Promise.all([
     client
       .from("subscriptions")
@@ -84,12 +104,28 @@ export async function examAccessFrom(
       .eq("user_id", userId),
     orgGrantContextFrom(client, userId),
   ]);
-
-  return examAccessFor(role, (data ?? []) as SubscriptionScope[], org, now);
+  return { subs: (data ?? []) as SubscriptionScope[], org };
 }
 
-/** Convenience for Server Components, which have no client in hand. */
-export async function getExamAccess(user: SessionUser): Promise<ExamAccess> {
+/**
+ * Which exams' DOCUMENTS may this user read? Same rows as examAccessFrom,
+ * narrowed by examDocumentAccessFor to what was actually paid for — a trial
+ * allowance does not buy the syllabus.
+ */
+export async function examDocumentAccessFrom(
+  client: DbClient,
+  userId: string,
+  role: SessionUser["profile"]["role"],
+  now: Date = new Date()
+): Promise<ExamAccess> {
+  const { subs, org } = await accessInputs(client, userId);
+  return examDocumentAccessFor(role, subs, org, now);
+}
+
+/** Convenience for Server Components — the /resources page. */
+export async function getExamDocumentAccess(
+  user: SessionUser
+): Promise<ExamAccess> {
   const supabase = await createClient();
-  return examAccessFrom(supabase, user.id, user.profile.role);
+  return examDocumentAccessFrom(supabase, user.id, user.profile.role);
 }

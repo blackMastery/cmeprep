@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Eye, EyeOff, FileUp, Plus, Trash2 } from "lucide-react";
 import type { ExamWithSpecialties } from "@/lib/admin/taxonomy";
+import type { ExamDocumentSummary } from "@/lib/exam-documents";
 import {
   createSpecialty,
   deleteExam,
@@ -22,9 +23,16 @@ import { Badge } from "@/components/ui/badge";
 import { FormMessage } from "@/components/auth/form-parts";
 import { AdminSubmit } from "@/components/admin/form-parts";
 import { ConfirmSubmit } from "@/components/confirm-dialog";
+import { ExamDocumentsCard } from "@/components/admin/exam-documents-card";
 
 /** Everything you can do to one exam, on its own page. */
-export function ExamDetail({ exam }: { exam: ExamWithSpecialties }) {
+export function ExamDetail({
+  exam,
+  documents,
+}: {
+  exam: ExamWithSpecialties;
+  documents: ExamDocumentSummary[];
+}) {
   const [specialtyState, specialtyAction] = useActionState<AdminState, FormData>(
     createSpecialty,
     null
@@ -48,6 +56,12 @@ export function ExamDetail({ exam }: { exam: ExamWithSpecialties }) {
           </Button>
         </CardContent>
       </Card>
+
+      <ExamDocumentsCard
+        examId={exam.id}
+        examName={exam.name}
+        documents={documents}
+      />
 
       <ExamSettingsCard exam={exam} />
 
@@ -103,7 +117,7 @@ export function ExamDetail({ exam }: { exam: ExamWithSpecialties }) {
         </CardContent>
       </Card>
 
-      <DangerZone exam={exam} />
+      <DangerZone exam={exam} documentCount={documents.length} />
     </div>
   );
 }
@@ -212,7 +226,13 @@ function AvailabilityRow({ exam }: { exam: ExamWithSpecialties }) {
   );
 }
 
-function DangerZone({ exam }: { exam: ExamWithSpecialties }) {
+function DangerZone({
+  exam,
+  documentCount,
+}: {
+  exam: ExamWithSpecialties;
+  documentCount: number;
+}) {
   const [deleteState, deleteAction] = useActionState<AdminState, FormData>(
     deleteExam,
     null
@@ -220,7 +240,8 @@ function DangerZone({ exam }: { exam: ExamWithSpecialties }) {
 
   const specialtyBlock = exam.specialties.length > 0;
   const subscriptionBlock = exam.subscriptionCount > 0;
-  const blocked = specialtyBlock || subscriptionBlock;
+  const documentBlock = documentCount > 0;
+  const blocked = specialtyBlock || subscriptionBlock || documentBlock;
 
   return (
     <Card className="[--card-spacing:--spacing(5)]">
@@ -235,7 +256,11 @@ function DangerZone({ exam }: { exam: ExamWithSpecialties }) {
               ? `${exam.name} still has ${exam.subscriptionCount} subscription${
                   exam.subscriptionCount === 1 ? "" : "s"
                 } tied to it. Withdraw it from checkout instead — sold exams can't be deleted.`
-              : "This exam holds no specialties or subscriptions, so deleting it loses nothing else."}
+              : documentBlock
+                ? `${exam.name} still has ${documentCount} document${
+                    documentCount === 1 ? "" : "s"
+                  }. Delete them first, so their files are removed from storage too.`
+                : "This exam holds no specialties, subscriptions or documents, so deleting it loses nothing else."}
         </p>
         <FormMessage error={deleteState?.error} />
         <form action={deleteAction}>

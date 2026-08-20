@@ -148,6 +148,25 @@ public = true
 file_size_limit = "10MiB"
 allowed_mime_types = ["image/png", "image/jpeg", "image/webp"]
 
+# Per-exam syllabus and reference documents. Private — served via signed URLs
+# minted only after the PAID entitlement check, so a public bucket would make
+# that gate cosmetic. Mirrored by migrations/..._exam_documents.sql.
+[storage.buckets."exam-documents"]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true

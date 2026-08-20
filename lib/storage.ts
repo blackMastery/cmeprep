@@ -141,3 +141,104 @@ export function isCourseObjectPath(path: string): boolean {
     `^courses\\/${UUID_SEG}\\/(cover\\/${UUID_SEG}|lessons\\/${UUID_SEG}\\/${UUID_SEG})\\.(mp4|jpg|png|webp|pdf)$`
   ).test(path);
 }
+
+// ── Exam documents ──────────────────────────────────────────
+
+/** PRIVATE bucket — syllabus material is a PAID benefit, so it is served via
+ * short-lived signed URLs minted only after the entitlement check in
+ * app/api/exams/documents/[docId]. A public bucket would make that gate
+ * cosmetic: the URL would be the file. */
+export const EXAM_DOCUMENT_BUCKET = "exam-documents";
+
+/**
+ * Matches the bucket's own allowed_mime_types and file_size_limit — the
+ * bucket config is the second layer, this is the one the UI and the mint
+ * action read. Legacy .doc/.xls/.ppt are in deliberately: real syllabi are
+ * often old files, and rejecting them would push admins into converting by
+ * hand for no gain.
+ */
+export const EXAM_DOCUMENT_RULES: {
+  maxBytes: number;
+  mimes: readonly string[];
+  accept: string;
+  label: string;
+} = {
+  maxBytes: 50 * 1024 * 1024,
+  mimes: [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+  ],
+  accept:
+    ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,application/pdf",
+  label: "PDF, Word, PowerPoint, Excel or an image, up to 50 MB",
+};
+
+const EXAM_DOCUMENT_EXT_BY_TYPE: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    "pptx",
+  "application/vnd.ms-powerpoint": "ppt",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-excel": "xls",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+export function examDocumentExtensionForType(
+  contentType: string
+): string | null {
+  return EXAM_DOCUMENT_EXT_BY_TYPE[contentType] ?? null;
+}
+
+/**
+ * Browsers report an empty (or plainly wrong) `File.type` for Office files
+ * often enough that trusting it drops legitimate .docx/.xlsx uploads on the
+ * floor. Fall back to the extension. UX only — the mint action re-validates
+ * whatever content type it is handed, so a lie here buys nothing beyond what
+ * the allowlist already permits.
+ */
+const EXAM_DOCUMENT_TYPE_BY_EXT: Record<string, string> = Object.fromEntries(
+  Object.entries(EXAM_DOCUMENT_EXT_BY_TYPE).map(([mime, ext]) => [ext, mime])
+);
+
+export function examDocumentContentType(file: {
+  type: string;
+  name: string;
+}): string | null {
+  if (EXAM_DOCUMENT_RULES.mimes.includes(file.type)) return file.type;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return EXAM_DOCUMENT_TYPE_BY_EXT[ext === "jpeg" ? "jpg" : ext] ?? null;
+}
+
+/**
+ * Same defence as isCourseObjectPath: the confirm action and the download
+ * route both read a client-supplied path with the service-role client, which
+ * ignores RLS. Without this an admin could file another exam's object — or
+ * any object — under a document row. Segments pin the strict 8-4-4-4-12
+ * layout; a loose [0-9a-f-]{36} would accept paths this module never minted.
+ */
+export function isExamDocumentPath(path: string): boolean {
+  return new RegExp(
+    `^exams\\/${UUID_SEG}\\/${UUID_SEG}\\.(pdf|docx|doc|pptx|ppt|xlsx|xls|png|jpg|webp)$`
+  ).test(path);
+}
+
+/** The exam a minted path is filed under, or null if the shape is wrong.
+ * Callers pair this with the examId they were given — a valid-looking path
+ * pointing at a different exam must not be accepted. */
+export function examDocumentPathExamId(path: string): string | null {
+  if (!isExamDocumentPath(path)) return null;
+  return path.split("/")[1];
+}

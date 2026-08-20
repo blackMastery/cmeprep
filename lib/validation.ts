@@ -212,6 +212,29 @@ export const examSchema = z.object({
   code: z.string().trim().max(20, "Code is too long").optional(),
 });
 
+/**
+ * A document row, as the confirm action receives it. The upload has already
+ * happened by then, so `path`/`fileName`/`fileSize`/`contentType` describe an
+ * object that exists — the action still re-checks the path SHAPE
+ * (isExamDocumentPath) and the mime/size (examDocumentUploadProblem), because
+ * every one of these fields arrives from the browser.
+ */
+export const examDocumentSchema = z.object({
+  examId: uuid(),
+  title: z.string().trim().min(2, "Give the document a title").max(140),
+  description: z.string().trim().max(500, "Description is too long").default(""),
+  path: z.string().min(1, "The upload didn't finish"),
+  fileName: z.string().trim().min(1).max(255),
+  fileSize: z.coerce.number().int().positive(),
+  contentType: z.string().min(1),
+});
+
+export const examDocumentEditSchema = z.object({
+  id: uuid(),
+  title: z.string().trim().min(2, "Give the document a title").max(140),
+  description: z.string().trim().max(500, "Description is too long").default(""),
+});
+
 export const specialtySchema = z.object({
   examId: uuid(),
   name: z.string().trim().min(2, "Specialty name is too short").max(80),

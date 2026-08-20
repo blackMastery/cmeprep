@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getExam } from "@/lib/admin/taxonomy";
+import { listExamDocumentsForAdmin } from "@/lib/exam-documents";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ExamDetail } from "@/components/admin/exam-detail";
@@ -22,6 +23,11 @@ export default async function AdminExamPage(
   const exam = await getExam(id);
 
   if (!exam) notFound();
+
+  // ExamDetail is a Client Component, so the documents are read here — the
+  // table is service-role only and requireAdmin() already ran in the layout
+  // and is re-run by every action the card posts to.
+  const documents = await listExamDocumentsForAdmin(exam.id);
 
   const questionCount = exam.specialties.reduce(
     (sum, sp) => sum + sp.questionCount,
@@ -57,7 +63,7 @@ export default async function AdminExamPage(
         </p>
       </header>
 
-      <ExamDetail exam={exam} />
+      <ExamDetail exam={exam} documents={documents} />
     </div>
   );
 }

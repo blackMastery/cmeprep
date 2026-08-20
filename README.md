@@ -36,10 +36,18 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
 - **Dashboard** — attempted / accuracy / streak, weak areas, past tests,
   trial usage with upgrade prompt.
 
+- **Exam documents** — per-exam syllabus and reference material, uploaded by
+  admins on the exam page and read by students at `/resources`. Reading one
+  is a *paid* benefit: trial breadth covers practice, not the syllabus, so a
+  trial user sees the file count behind a lock and an upgrade prompt. Files
+  live in a private bucket and are served by short-lived signed URLs minted
+  only after the entitlement check.
+
 - **Admin** — role-gated `/admin`: subjects CRUD with reorder and
   safe delete, question list (search, filters, pagination), question editor
   with dynamic option rows and a live student preview, publish/draft, soft
-  delete, image upload to Supabase Storage, and an audit log.
+  delete, image upload to Supabase Storage, per-exam document uploads, and an
+  audit log.
 
 - **Payments** — PayPal one-time captures scoped per exam, with the money
   recorded in `payments` before any grant is attempted, amount-aware refunds,

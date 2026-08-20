@@ -66,6 +66,29 @@ export type Specialty = Timestamps & {
   position: number;
 };
 
+/**
+ * One admin-uploaded document filed under an exam — syllabus, blueprint, or
+ * related reference material. Deny-all to client roles: reading one is a PAID
+ * benefit, and that rule lives in lib/entitlements-core.ts, not in RLS.
+ */
+export type ExamDocument = Timestamps & {
+  id: string;
+  exam_id: string;
+  title: string;
+  description: string;
+  /** Object path in the exam-documents bucket (private, signed URLs). */
+  file_path: string;
+  /** Original filename — the `download` name on the signed URL. */
+  file_name: string;
+  file_size: number;
+  content_type: string;
+  position: number;
+  is_published: boolean;
+  created_by: string | null;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
 export type Subject = Timestamps & {
   id: string;
   specialty_id: string;
@@ -969,6 +992,7 @@ export type Database = {
     Tables: {
       profiles: Table<Profile>;
       exams: Table<Exam>;
+      exam_documents: Table<ExamDocument>;
       specialties: Table<Specialty>;
       subjects: Table<Subject>;
       questions: Table<Question>;

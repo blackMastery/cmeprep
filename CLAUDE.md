@@ -112,6 +112,18 @@ vice versa. Exam-mode tests must never be served correctness while in
 progress. `lib/scoring.ts` must not be imported by a Client Component.
 Multi-correct scoring is all-or-nothing in v1.
 
+### Exam documents are paid-only
+
+`exam_documents` is deny-all to client roles and its bucket is private, so the
+only way the bytes reach a student is `app/api/exams/documents/[docId]` — that
+route, not the `/resources` page, is the control. It gates on
+`examDocumentAccessFor` (`lib/entitlements-core.ts`), **not** `examAccessFor`:
+the two differ only in that the document rule coerces `trial` to `student`,
+because trial breadth is a practice allowance and does not buy the client's
+syllabus. Locked exams may show a document COUNT and never a title. Paths are
+client-supplied and read with the service-role client, so
+`isExamDocumentPath` / `examDocumentPathExamId` must gate every one of them.
+
 ### Timing
 
 `tests.expires_at` is set server-side at creation; the client countdown only

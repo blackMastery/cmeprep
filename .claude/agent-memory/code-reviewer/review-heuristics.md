@@ -123,3 +123,48 @@ on `TUTOR_SHARED_SECRET` and both default it to empty/absent, so the pair fails
 OPEN if the Render env var is unset.
 **How to apply:** when reviewing either repo, read the counterpart's env
 defaults; a "second factor" that both sides skip when blank is not a factor.
+
+---
+
+Added from the exam-documents review (2026-08-20).
+
+**Signed-upload MIME rejection is a confirmed, silent bug class here.** Every
+uploader in this repo calls `uploadToSignedUrl(path, token, file)` with the raw
+`File`. storage-js's browser branch puts a Blob into a `FormData` and IGNORES
+`fileOptions.contentType`, so the multipart part carries `file.type` — and an
+empty `file.type` becomes `application/octet-stream`, which the bucket's
+`allowed_mime_types` rejects with 415 `invalid_mime_type`. Verified live against
+the local `course-content` bucket by curl-ing a signed PUT with
+`type=application/octet-stream`. Any feature that "fixes" a wrong `File.type` by
+falling back to the file EXTENSION fixes only the DB row, never the bytes — the
+upload still 415s. Fix shape: `new File([file], file.name, { type: resolved })`
+before uploading.
+**How to apply:** whenever a diff resolves a content type from an extension, check
+whether the same corrected type reaches the upload body, not just the metadata.
+
+**Download endpoints are linked with a plain `<a href>`, never `next/link`.**
+Precedent: `app/(app)/cme/certificates/page.tsx` and
+`components/course/certificate-card.tsx` → `/api/cme/certificates/[id]`. A
+`<Link>` to a route handler gets router-intercepted into an RSC fetch, which on
+a route that 302s to a signed storage URL means the mint runs twice per click
+(and the discarded fetch may pull the whole file). Flag `<Link>` on any
+`/api/...` href.
+
+**Verifying a migration without touching the user's local data:** pipe
+`begin; <migration>; <checks>; rollback;` into
+`docker exec -i supabase_db_cmeprep psql -U postgres -d postgres -v ON_ERROR_STOP=1`.
+Confirms DDL validity, `information_schema.role_table_grants` (the
+new-table-grants gotcha), `pg_class.relrowsecurity` and `storage.buckets` rows
+without a `db reset`. There is no host `psql`, but the container has one.
+
+**The paid-vs-practice access split (exam documents).** `examDocumentAccessFor`
+in entitlements-core coerces `role === 'trial'` → `'student'` and delegates to
+`examAccessFor`; it does NOT restate the rule or branch on `reason`. This is the
+correct shape given the ExamAccess org-rider trap already recorded above, and it
+keeps `orgExamAllowed`/`orgCoversExam` intact. If a future gate needs "paid
+only", expect this coercion, not a `reason !== 'trial'` check.
+
+**Norms confirmed again:** hard-deleted parents with `on delete cascade` to a
+table that owns storage objects orphan the bytes — `deleteExam` pre-flights
+specialties and subscriptions but nothing else, so any new child table of
+`exams` needs either its own pre-flight or a storage sweep.

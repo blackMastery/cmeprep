@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireUser, hasTrialsRemaining } from "@/lib/auth";
-import { listActivePlans, paidPlans } from "@/lib/plans";
+import { listActivePlans, paidPlans, upsellPlan } from "@/lib/plans";
 import { listExamCatalogTree } from "@/lib/catalog";
 import { createClient } from "@/lib/supabase/server";
 import { getExamAccess } from "@/lib/entitlements";
@@ -9,27 +9,11 @@ import {
   consumesTrialCredit,
   visibleExamsFor,
 } from "@/lib/entitlements-core";
-import type { Plan } from "@/lib/supabase/types";
 import { NewTestWizard } from "@/components/test/new-test-wizard";
 import { TrialLimitCard } from "@/components/app/trial-limit-card";
 import { ExamAccessRequiredCard } from "@/components/app/exam-access-required-card";
 
 export const metadata: Metadata = { title: "New test" };
-
-/**
- * Where a locked exam's "Get access" link points: the featured paid plan,
- * else the cheapest. Checkout then offers a "Change plan" link back to
- * /#pricing, so the loop closes without a separate plan-picker route.
- */
-function upsellPlan(plans: Plan[]): Plan | null {
-  const buyable = paidPlans(plans).filter((p) => p.duration_months !== null);
-  return (
-    [...buyable].sort(
-      (a, b) =>
-        Number(b.featured) - Number(a.featured) || a.price_cents - b.price_cents
-    )[0] ?? null
-  );
-}
 
 export default async function NewTestPage() {
   const user = await requireUser();

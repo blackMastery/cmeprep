@@ -166,6 +166,37 @@ export function canAccessExam(
 }
 
 /**
+ * The same access, narrowed to what a PAID entitlement covers — the rule for
+ * exam DOCUMENTS (syllabus and reference material).
+ *
+ * examAccessFor short-circuits trial users to `kind:"all"` because the trial
+ * QUOTA, not the taxonomy, is their limiter for PRACTICE. Documents are not
+ * practice: they are the client's licensed material, and a trial allowance
+ * does not buy them. So coerce trial → student and let examAccessFor read the
+ * user's ACTUAL rows.
+ *
+ * Deliberately a coercion rather than a restated rule (the cores cross-import,
+ * they do not duplicate). Two things fall out of it for free:
+ *
+ *  - the trial user who has just bought one exam is not locked out of the
+ *    syllabus they paid for in the window before the role sync runs — their
+ *    row is in `subs`, so they land on `kind:"scoped"` naming that exam;
+ *  - the org rider is computed identically either way, so orgExamAllowed and
+ *    orgCoversExam keep working untouched. An org member reads the documents
+ *    for the exams their org bought, and for their org's own private bank.
+ *
+ * Admins keep full breadth: they have to be able to QA what they publish.
+ */
+export function examDocumentAccessFor(
+  role: UserRole,
+  subs: readonly SubscriptionScope[],
+  org: OrgGrantContext | null,
+  now: Date
+): ExamAccess {
+  return examAccessFor(role === "admin" ? "admin" : "student", subs, org, now);
+}
+
+/**
  * Does starting a test on this exam burn a trial credit? The unmetered rule
  * stated once (SPEC §3): org-covered exams — bought ones, comp all-access,
  * and the org's own bank — are free for trial-ROLE members; everything else

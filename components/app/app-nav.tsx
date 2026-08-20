@@ -3,6 +3,7 @@
 import {
   Bookmark,
   BookOpen,
+  BookMarked,
   Building2,
   ClipboardList,
   FilePlus2,
@@ -25,6 +26,7 @@ const NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tests/new", label: "New test", icon: FilePlus2 },
   { href: "/plan", label: "Study plan", icon: ListTodo },
+  { href: "/resources", label: "Resources", icon: BookMarked },
   { href: "/tutor", label: "AI tutor", icon: MessagesSquare },
   { href: "/tests", label: "History", icon: History },
   { href: "/cme", label: "CME", icon: BookOpen },

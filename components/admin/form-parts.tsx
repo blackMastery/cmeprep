@@ -63,6 +63,7 @@ export function AdminTextarea({
   hint,
   error,
   className,
+  id,
   ...props
 }: React.ComponentProps<typeof Textarea> & {
   label: string;
@@ -70,11 +71,15 @@ export function AdminTextarea({
   hint?: string;
   error?: string;
 }) {
+  // Same rule as AdminField: the id defaults to the name, but forms rendered
+  // per-row must pass a unique one — several rows can be open at once, and
+  // duplicate ids point every label at the first field.
+  const fieldId = id ?? name;
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={fieldId}>{label}</Label>
       <Textarea
-        id={name}
+        id={fieldId}
         name={name}
         aria-invalid={error ? true : undefined}
         {...props}
