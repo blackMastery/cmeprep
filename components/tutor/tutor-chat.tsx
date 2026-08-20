@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/markdown";
 import { CitationList } from "@/components/tutor/citation-list";
-import { ReportButton } from "@/components/tutor/report-button";
+import { FeedbackButtons } from "@/components/tutor/feedback-buttons";
 import {
   TUTOR_MIN_QUESTION_CHARS,
   validateQuestion,
@@ -37,7 +37,7 @@ type Turn = {
   role: "user" | "assistant";
   content: string;
   citations?: Citation[];
-  /** chat_messages id — only known for answers we can report. */
+  /** chat_messages id — only known for answers that can be rated. */
   messageId?: string;
 };
 
@@ -61,9 +61,9 @@ export function TutorChat({
       id: t.id,
       role: t.role,
       content: t.content,
-      // TutorTurn.id IS the chat_messages row id, so answers stay reportable
-      // after a reload — otherwise a student could only flag a bad answer
-      // during the few seconds it was streaming. The report route re-checks
+      // TutorTurn.id IS the chat_messages row id, so answers stay ratable
+      // after a reload — otherwise a student could only rate an answer during
+      // the few seconds it was streaming. The feedback route re-checks
       // ownership, so handing the id to the client costs nothing.
       messageId: t.role === "assistant" ? t.id : undefined,
     }))
@@ -345,7 +345,7 @@ export function TutorChat({
             <div key={turn.id} className="max-w-[95%]">
               <Markdown className="text-sm">{turn.content}</Markdown>
               {turn.citations && <CitationList citations={turn.citations} />}
-              {turn.messageId && <ReportButton messageId={turn.messageId} />}
+              {turn.messageId && <FeedbackButtons messageId={turn.messageId} />}
             </div>
           )
         )}

@@ -7,10 +7,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { uuid } from "@/lib/validation";
 
 /**
- * Mark a tutor answer report handled. requireAdmin() first statement, outside
+ * Mark one piece of tutor feedback handled. requireAdmin() first statement, outside
  * any try/catch — layouts never gate actions.
  */
-export async function markTutorReportHandled(formData: FormData): Promise<void> {
+export async function markTutorFeedbackHandled(formData: FormData): Promise<void> {
   const user = await requireAdmin();
 
   const id = uuid().safeParse(formData.get("id"));
@@ -18,7 +18,7 @@ export async function markTutorReportHandled(formData: FormData): Promise<void> 
 
   const admin = createAdminClient();
   const { data } = await admin
-    .from("tutor_answer_reports")
+    .from("tutor_answer_feedback")
     .update({ handled_at: new Date().toISOString(), handled_by: user.id })
     .eq("id", id.data)
     .is("handled_at", null)
@@ -27,7 +27,7 @@ export async function markTutorReportHandled(formData: FormData): Promise<void> 
 
   // Already handled by someone else: their audit row tells the story.
   if (data) {
-    await audit(user.id, "tutor.report_handle", id.data);
+    await audit(user.id, "tutor.feedback_handle", id.data);
   }
-  revalidatePath("/admin/tutor/reports");
+  revalidatePath("/admin/tutor/feedback");
 }

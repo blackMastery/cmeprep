@@ -30,7 +30,8 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   Render); `app/api/tutor/chat` proxies its SSE stream and is the only place
   entitlement and the message caps are enforced. Trial users get
   `TUTOR_TRIAL_ALLOWANCE` questions in total, subscribers `TUTOR_DAILY_CAP`
-  per day. Requires `TUTOR_API_URL` + `TUTOR_SHARED_SECRET`.
+  per day. Answers can be rated good/bad with optional detail, triaged at
+  `/admin/tutor/feedback`. Requires `TUTOR_API_URL` + `TUTOR_SHARED_SECRET`.
 
 - **Dashboard** — attempted / accuracy / streak, weak areas, past tests,
   trial usage with upgrade prompt.
