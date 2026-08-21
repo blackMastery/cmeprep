@@ -133,6 +133,8 @@ export function NewTestWizard({
     () => specialtyGroups.flatMap((sp) => sp.subjects),
     [specialtyGroups]
   );
+  const allSubjectsSelected =
+    examSubjects.length > 0 && examSubjects.every((s) => subjectIds.includes(s.id));
 
   function toggle(list: string[], id: string) {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
@@ -403,9 +405,23 @@ export function NewTestWizard({
 
           {currentStep === "Subjects" && (
             <fieldset className="space-y-3">
-              <legend className="mb-3 font-display text-lg">
-                Which subjects?
-              </legend>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <legend className="font-display text-lg">Which subjects?</legend>
+                {examSubjects.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSubjectIds(
+                        allSubjectsSelected ? [] : examSubjects.map((s) => s.id)
+                      )
+                    }
+                  >
+                    {allSubjectsSelected ? "Clear all" : "Select all"}
+                  </Button>
+                )}
+              </div>
 
               {specialtyGroups.length > 1 ? (
                 <div className="space-y-4">
