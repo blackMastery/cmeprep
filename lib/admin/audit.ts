@@ -10,6 +10,10 @@ export type AuditAction =
   | "question.delete"
   | "question.restore"
   | "question.bulk_import"
+  // Export is a read, but it is a bulk extraction of the answer key — one
+  // summary row per download (filters + row count) so a leaked bank can be
+  // traced to who pulled it and when.
+  | "question.export"
   // Bulk actions write ONE summary row with target null and the ids in meta,
   // matching question.bulk_import — twenty rows per click would drown the log.
   | "question.bulk_publish"

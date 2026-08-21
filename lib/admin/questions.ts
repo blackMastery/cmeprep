@@ -8,22 +8,60 @@ import type {
   QuestionType,
 } from "@/lib/supabase/types";
 import type { ExistingOption } from "@/lib/admin/option-diff";
+import type { QuestionListFilters } from "@/lib/admin/question-filters-core";
+
+export type { QuestionListFilters };
 
 export const PAGE_SIZE = 20;
 
-export type QuestionListFilters = {
-  search?: string;
-  examId?: string;
-  specialtyId?: string;
-  subjectId?: string;
-  difficulty?: Difficulty;
-  type?: QuestionType;
-  published?: boolean;
-  includeDeleted?: boolean;
-  page?: number;
-  /** Narrow to one org's private bank; omitted = everything (platform). */
-  orgId?: string;
+/** The embed path every list/export read walks — filters and the org wall hang off it. */
+export const QUESTION_TAXONOMY_EMBED =
+  "subjects!inner(id, name, specialty_id, specialties!inner(id, name, exam_id, exams!inner(id, name)))";
+
+type FilterableQuery = {
+  is(column: string, value: null): FilterableQuery;
+  eq(column: string, value: unknown): FilterableQuery;
+  textSearch(
+    column: string,
+    query: string,
+    options: { type: "websearch"; config: string }
+  ): FilterableQuery;
 };
+
+/**
+ * Apply the list filters to a `questions` query that selects
+ * QUESTION_TAXONOMY_EMBED. Shared by the paged list and the export so the
+ * two can never disagree about which rows "match".
+ */
+export function applyQuestionFilters<Q extends FilterableQuery>(
+  query: Q,
+  filters: QuestionListFilters
+): Q {
+  let q: FilterableQuery = query;
+  if (!filters.includeDeleted) q = q.is("deleted_at", null);
+  // The org wall rides the same !inner joins the level filters use.
+  if (filters.orgId)
+    q = q.eq("subjects.specialties.exams.org_id", filters.orgId);
+  // Most-specific level wins; the !inner joins above make parent filters work.
+  if (filters.subjectId) q = q.eq("subject_id", filters.subjectId);
+  else if (filters.specialtyId)
+    q = q.eq("subjects.specialty_id", filters.specialtyId);
+  else if (filters.examId)
+    q = q.eq("subjects.specialties.exam_id", filters.examId);
+  if (filters.difficulty) q = q.eq("difficulty", filters.difficulty);
+  if (filters.type) q = q.eq("type", filters.type);
+  if (filters.published !== undefined)
+    q = q.eq("is_published", filters.published);
+  if (filters.search) {
+    // websearch_to_tsquery never throws on free text; to_tsquery (the default)
+    // 400s on anything with a space. `english` must match the generated column.
+    q = q.textSearch("search_vec", filters.search, {
+      type: "websearch",
+      config: "english",
+    });
+  }
+  return q as Q;
+}
 
 export type QuestionListRow = {
   id: string;
@@ -76,38 +114,18 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
   const page = Math.max(1, filters.page ?? 1);
   const from = (page - 1) * PAGE_SIZE;
 
-  let query = admin
-    .from("questions")
-    .select(
-      "id, stem, type, difficulty, is_published, deleted_at, updated_at, subject_id, " +
-        "subjects!inner(id, name, specialty_id, specialties!inner(id, name, exam_id, exams!inner(id, name)))",
-      { count: "exact" }
-    )
-    .order("updated_at", { ascending: false, nullsFirst: false })
-    .range(from, from + PAGE_SIZE - 1);
-
-  if (!filters.includeDeleted) query = query.is("deleted_at", null);
-  // The org wall rides the same !inner joins the level filters use.
-  if (filters.orgId)
-    query = query.eq("subjects.specialties.exams.org_id", filters.orgId);
-  // Most-specific level wins; the !inner joins above make parent filters work.
-  if (filters.subjectId) query = query.eq("subject_id", filters.subjectId);
-  else if (filters.specialtyId)
-    query = query.eq("subjects.specialty_id", filters.specialtyId);
-  else if (filters.examId)
-    query = query.eq("subjects.specialties.exam_id", filters.examId);
-  if (filters.difficulty) query = query.eq("difficulty", filters.difficulty);
-  if (filters.type) query = query.eq("type", filters.type);
-  if (filters.published !== undefined)
-    query = query.eq("is_published", filters.published);
-  if (filters.search) {
-    // websearch_to_tsquery never throws on free text; to_tsquery (the default)
-    // 400s on anything with a space. `english` must match the generated column.
-    query = query.textSearch("search_vec", filters.search, {
-      type: "websearch",
-      config: "english",
-    });
-  }
+  const query = applyQuestionFilters(
+    admin
+      .from("questions")
+      .select(
+        "id, stem, type, difficulty, is_published, deleted_at, updated_at, subject_id, " +
+          QUESTION_TAXONOMY_EMBED,
+        { count: "exact" }
+      )
+      .order("updated_at", { ascending: false, nullsFirst: false })
+      .range(from, from + PAGE_SIZE - 1),
+    filters
+  );
 
   const { data, count } = await query;
   const rows = (data ?? []) as unknown as EmbeddedRow[];

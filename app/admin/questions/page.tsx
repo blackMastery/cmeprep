@@ -4,45 +4,21 @@ import { Plus } from "lucide-react";
 import { listQuestions, PAGE_SIZE } from "@/lib/admin/questions";
 import { listHierarchy } from "@/lib/admin/taxonomy";
 import { pageWindow } from "@/lib/pagination";
-import type { Difficulty, QuestionType } from "@/lib/supabase/types";
-import { DIFFICULTIES, QUESTION_TYPES } from "@/lib/validation";
+import { questionFiltersFromSearchParams } from "@/lib/admin/question-filters-core";
 import { Button } from "@/components/ui/button";
 import { QuestionsTable } from "@/components/admin/questions-table";
 import { QuestionFilters } from "@/components/admin/question-filters";
+import { ExportButton } from "@/components/admin/export-button";
 
 export const metadata: Metadata = { title: "Questions" };
-
-function one(value: string | string[] | undefined): string | undefined {
-  const v = Array.isArray(value) ? value[0] : value;
-  return v && v.length > 0 ? v : undefined;
-}
 
 export default async function AdminQuestionsPage(
   props: PageProps<"/admin/questions">
 ) {
   const sp = await props.searchParams;
 
-  const difficulty = one(sp.difficulty);
-  const type = one(sp.type);
-  const published = one(sp.published);
-
   const [result, hierarchy] = await Promise.all([
-    listQuestions({
-      search: one(sp.q),
-      examId: one(sp.exam),
-      specialtyId: one(sp.specialty),
-      subjectId: one(sp.subject),
-      difficulty: DIFFICULTIES.includes(difficulty as Difficulty)
-        ? (difficulty as Difficulty)
-        : undefined,
-      type: QUESTION_TYPES.includes(type as QuestionType)
-        ? (type as QuestionType)
-        : undefined,
-      published:
-        published === "true" ? true : published === "false" ? false : undefined,
-      includeDeleted: one(sp.includeDeleted) === "1",
-      page: Number(one(sp.page) ?? 1) || 1,
-    }),
+    listQuestions(questionFiltersFromSearchParams(sp)),
     listHierarchy(),
   ]);
 
@@ -58,6 +34,7 @@ export default async function AdminQuestionsPage(
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ExportButton total={result.total} params={sp} />
           <Button size="lg" asChild>
             <Link href="/admin/questions/new">
               <Plus data-icon="inline-start" />
