@@ -37,8 +37,11 @@ export default async function AppLayout({
       }
     : null;
 
+  // --app-header-h is the single source of truth for the sticky header's
+  // height: AppHeader sizes itself from it, and full-height screens such as
+  // the new-test wizard subtract it from 100dvh.
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="flex min-h-svh flex-col [--app-header-h:--spacing(16)]">
       <AppChrome>
         <AppHeader
           user={user}

@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { LockedExamRow } from "@/components/test/locked-exam-row";
 
@@ -101,6 +100,38 @@ export function NewTestWizard({
   const [error, setError] = useState<string | null>(null);
 
   const currentStep = steps[stepIndex];
+
+  // Only the step content scrolls; header and footer are pinned. Each step
+  // starts at the top, and a fade at the bottom edge hints that more chips /
+  // exams sit below the fold — without it the clipped list looks complete.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    // Short viewports fall back to document scroll (see tests/new/page.tsx);
+    // a no-op otherwise.
+    window.scrollTo(0, 0);
+    const update = () =>
+      setMoreBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    for (const child of el.children) ro.observe(child);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [stepIndex, mode, examId]);
+
+  function close() {
+    // Return to wherever the user came from; a direct link has no in-app
+    // history, so fall back to the dashboard rather than leaving the site.
+    if (document.referrer.startsWith(window.location.origin)) router.back();
+    else router.push("/dashboard");
+  }
 
   const selectedExam = useMemo(
     () => exams.find((e) => e.id === examId) ?? null,
@@ -223,47 +254,72 @@ export function NewTestWizard({
           : true;
 
   return (
-    <div>
-      <header className="mb-6 text-center">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Start a new test
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {steps.length === 3
-            ? "Three quick steps — you'll be answering in under a minute."
-            : "Four quick steps — you'll be answering in under a minute."}
-        </p>
+    <div className="flex min-h-0 flex-1 flex-col bg-background sm:rounded-xl sm:border sm:border-border sm:bg-card sm:shadow-xs">
+      <header className="shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="hidden font-display text-2xl font-semibold tracking-tight sm:block">
+              Start a new test
+            </h1>
+            {/* Narrow screens can't fit four labelled nodes; the dots carry
+                progress and this line names where we are. */}
+            <p className="text-sm font-medium sm:hidden">
+              Step {stepIndex + 1} of {steps.length} · {currentStep}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={close}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            <X />
+          </Button>
+        </div>
+
+        <ol className="mt-2 flex items-center gap-2 text-xs sm:mt-3">
+          {steps.map((label, i) => (
+            <li key={label} className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "flex size-6 items-center justify-center rounded-full font-semibold",
+                  i <= stepIndex
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                {i + 1}
+              </span>
+              <span
+                className={cn(
+                  "hidden sm:inline",
+                  i === stepIndex ? "font-medium" : "text-muted-foreground"
+                )}
+              >
+                {label}
+              </span>
+              {i < steps.length - 1 && (
+                <span
+                  className="hidden h-px w-6 bg-border sm:mx-1 sm:block"
+                  aria-hidden="true"
+                />
+              )}
+            </li>
+          ))}
+        </ol>
       </header>
 
-      <ol className="mb-6 flex items-center justify-center gap-2 text-xs">
-        {steps.map((label, i) => (
-          <li key={label} className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex size-6 items-center justify-center rounded-full font-semibold",
-                i <= stepIndex
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
-              )}
-            >
-              {i + 1}
-            </span>
-            <span
-              className={cn(
-                i === stepIndex ? "font-medium" : "text-muted-foreground"
-              )}
-            >
-              {label}
-            </span>
-            {i < steps.length - 1 && (
-              <span className="mx-1 h-px w-6 bg-border" aria-hidden="true" />
-            )}
-          </li>
-        ))}
-      </ol>
-
-      <Card className="[--card-spacing:--spacing(6)]">
-        <CardContent className="space-y-6">
+      {/* Flex sizing rather than h-full: from `sm` the page only caps the
+          card with max-height, which is not a definite height for
+          percentage children but does constrain a shrinking flex item. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={bodyRef}
+          inert={submitting}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6"
+        >
+          <div className="space-y-6">
           {currentStep === "Mode" && (
             <fieldset className="space-y-3">
               <legend className="mb-3 font-display text-lg">
@@ -568,60 +624,77 @@ export function NewTestWizard({
             </p>
           )}
 
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+          </div>
+        </div>
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-background to-transparent transition-opacity sm:from-card",
+            moreBelow ? "opacity-100" : "opacity-0"
+          )}
+        />
+      </div>
+
+      <footer className="shrink-0 space-y-3 border-t border-border px-4 pt-3 pb-[max(--spacing(3),env(safe-area-inset-bottom))] sm:px-6 sm:pt-4 sm:pb-[max(--spacing(4),env(safe-area-inset-bottom))]">
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3">
+          {stepIndex > 0 && (
+            <Button
+              variant="outline-muted"
+              onClick={() => setStepIndex(stepIndex - 1)}
+              disabled={submitting}
             >
-              {error}
+              <ArrowLeft data-icon="inline-start" />
+              Back
+            </Button>
+          )}
+
+          {currentStep === "Subjects" && (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {subjectIds.length} selected
             </p>
           )}
 
-          <div className="flex items-center gap-3 border-t border-border pt-5">
-            {stepIndex > 0 && (
-              <Button
-                variant="outline-muted"
-                onClick={() => setStepIndex(stepIndex - 1)}
-                disabled={submitting}
-              >
-                <ArrowLeft data-icon="inline-start" />
-                Back
-              </Button>
-            )}
-
-            {stepIndex < steps.length - 1 ? (
-              <Button
-                className="ml-auto"
-                onClick={() => setStepIndex(stepIndex + 1)}
-                disabled={!canAdvance}
-              >
-                Continue
-                <ArrowRight data-icon="inline-end" />
-              </Button>
-            ) : (
-              <Button
-                className="ml-auto"
-                size="lg"
-                onClick={start}
-                disabled={submitting || !examReady || subjectIds.length === 0}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="animate-spin" data-icon="inline-start" />
-                    Building your test…
-                  </>
-                ) : mode === "tutor" ? (
-                  "Start practising"
-                ) : osceMode ? (
-                  "Start stations"
-                ) : (
-                  "Start test"
-                )}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          {stepIndex < steps.length - 1 ? (
+            <Button
+              className="flex-1 sm:ml-auto sm:flex-none"
+              onClick={() => setStepIndex(stepIndex + 1)}
+              disabled={!canAdvance}
+            >
+              Continue
+              <ArrowRight data-icon="inline-end" />
+            </Button>
+          ) : (
+            <Button
+              className="flex-1 sm:ml-auto sm:flex-none"
+              size="lg"
+              onClick={start}
+              disabled={submitting || !examReady || subjectIds.length === 0}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="animate-spin" data-icon="inline-start" />
+                  Building your test…
+                </>
+              ) : mode === "tutor" ? (
+                "Start practising"
+              ) : osceMode ? (
+                "Start stations"
+              ) : (
+                "Start test"
+              )}
+            </Button>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }
@@ -641,7 +714,7 @@ function Chip({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "min-h-10 rounded-full border px-4 text-sm font-medium transition-colors",
+        "min-h-11 rounded-full border px-4 text-sm font-medium transition-colors",
         "focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
         selected
           ? "border-primary bg-primary text-primary-foreground"
@@ -657,7 +730,7 @@ function Summary({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-muted/60 px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-display text-lg">{value}</dd>
+      <dd className="font-display text-base sm:text-lg">{value}</dd>
     </div>
   );
 }

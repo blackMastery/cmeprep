@@ -3,6 +3,9 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Viewports tall enough for a pinned header/footer + a usable scroll region
+   (see NewTestWizard). Landscape phones fall back to document scroll. */
+@custom-variant tall (@media (min-height: 481px));
 
 @theme inline {
   --color-background: var(--background);

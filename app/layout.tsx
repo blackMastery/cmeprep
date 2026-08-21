@@ -104,6 +104,9 @@ export const metadata: Metadata = {
  * contrasting bar reads as a rendering seam.
  */
 export const viewport: Viewport = {
+  // Lets env(safe-area-inset-*) resolve on notched phones, so pinned footers
+  // can pad themselves clear of the home indicator.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#faf6f1" },
     { media: "(prefers-color-scheme: dark)", color: "#1a1815" },

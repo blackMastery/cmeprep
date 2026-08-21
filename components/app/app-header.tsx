@@ -33,7 +33,7 @@ export function AppHeader({
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-      <div className="flex h-16 w-full items-center gap-2 px-4 sm:gap-4">
+      <div className="flex h-(--app-header-h) w-full items-center gap-2 px-4 sm:gap-4">
         <MobileNav user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
         <Logo href="/dashboard" tagline="inline" />
         {orgBrand && (

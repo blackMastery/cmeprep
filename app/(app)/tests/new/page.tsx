@@ -98,7 +98,13 @@ export default async function NewTestPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
+    // The wizard owns the viewport below the app header: its header and
+    // footer stay put and only the step content scrolls. Phones pin the
+    // footer to the bottom of the screen (thumb reach); from `sm` the card
+    // grows with its content and only caps at the viewport. On short
+    // (landscape-phone) viewports `tall:` doesn't match and the page scrolls
+    // normally instead of squeezing the content into a sliver.
+    <div className="mx-auto flex w-full max-w-3xl flex-col tall:h-[calc(100dvh-var(--app-header-h))] sm:p-4 sm:py-6 sm:tall:h-auto sm:tall:max-h-[calc(100dvh-var(--app-header-h))]">
       <NewTestWizard exams={exams} upsellPlanId={upsellPlanId} />
     </div>
   );
