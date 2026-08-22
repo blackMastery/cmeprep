@@ -108,6 +108,10 @@ export type Question = Timestamps & {
   deleted_at: string | null;
   created_by: string | null;
   updated_at: string | null;
+  /** Stamped only on CONTENT edits (stem/options/explanation/image) — the
+   * question-report pick split's boundary. updated_at moves on publish
+   * toggles too and would wipe the evidence that a fix landed. */
+  content_updated_at: string | null;
 };
 
 export type QuestionOption = Timestamps & {
@@ -855,6 +859,32 @@ export type OsceGradeReport = {
   handled_by: string | null;
 };
 
+/** Student "this question is broken" signal (question-reports-spec.md).
+ * One row per (user, question) while open; resolved rows are kept forever
+ * and carry the ruling the next rollup reopens against. */
+export type QuestionReportCategory =
+  | "wrong_key"
+  | "typo"
+  | "outdated"
+  | "ambiguous"
+  | "image"
+  | "other";
+export type QuestionReportResolution = "fixed" | "no_change" | "not_actionable";
+export type QuestionReport = {
+  id: string;
+  question_id: string;
+  user_id: string;
+  test_id: string | null;
+  /** Null = bare mid-test tap, never elaborated. */
+  category: QuestionReportCategory | null;
+  note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution: QuestionReportResolution | null;
+  resolution_note: string | null;
+};
+
 /** Published OSCE stations per subject — gates the wizard's OSCE mode. */
 export type SubjectOsceQuestionCount = {
   subject_id: string;
@@ -1000,6 +1030,7 @@ export type Database = {
       question_model_answers: Table<QuestionModelAnswer>;
       osce_grading_events: Table<OsceGradingEvent>;
       osce_grade_reports: Table<OsceGradeReport>;
+      question_reports: Table<QuestionReport>;
       synced_files: Table<SyncedFile>;
       chunks: Table<Chunk>;
       chat_messages: Table<ChatMessage>;
@@ -1099,6 +1130,30 @@ export type Database = {
       tutor_reset_thread: {
         Args: { p_user: string };
         Returns: string;
+      };
+      /** Question-report evidence: live attempt counts per reported
+       * question, split at questions.updated_at. Service-role only. */
+      question_report_attempt_counts: {
+        Args: { question_ids: string[] };
+        Returns: {
+          question_id: string;
+          attempts: number;
+          since_edit: number;
+          before_edit: number;
+        }[];
+      };
+      open_report_question_count: {
+        Args: { p_org_id?: string | null };
+        Returns: number;
+      };
+      question_report_pick_counts: {
+        Args: { question_ids: string[] };
+        Returns: {
+          question_id: string;
+          option_id: string;
+          since_edit: boolean;
+          picks: number;
+        }[];
       };
     };
     Enums: {

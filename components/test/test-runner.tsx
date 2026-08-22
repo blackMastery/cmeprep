@@ -10,6 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { TakeState } from "@/lib/tests";
+import type { OpenReport } from "@/lib/question-reports";
 import { cn } from "@/lib/utils";
 import { questionImageUrl } from "@/lib/storage";
 import { QuestionImage } from "@/components/test/question-image";
@@ -22,13 +23,35 @@ import { TestTimer } from "@/components/test/test-timer";
 import { SubmitDialog } from "@/components/test/submit-dialog";
 import { AutosaveIndicator } from "@/components/test/autosave-indicator";
 import { useAnswerAutosave } from "@/components/test/use-answer-autosave";
+import { ReportQuestionTap } from "@/components/report-question";
 
 const LETTERS = "ABCDEFGH".split("");
 
 /** The timed exam runner. Tutor sessions render TutorRunner instead. */
-export function TestRunner({ state }: { state: TakeState }) {
+export function TestRunner({
+  state,
+  initialReports = [],
+}: {
+  state: TakeState;
+  /** The student's open reports on this paper's questions. */
+  initialReports?: OpenReport[];
+}) {
   const router = useRouter();
   const { test, questions } = state;
+
+  // Owned here, not by the tap: it remounts per question and would forget
+  // an in-session toggle the moment the student navigated away and back.
+  const [reports, setReports] = useState<Map<string, OpenReport>>(
+    () => new Map(initialReports.map((r) => [r.questionId, r]))
+  );
+  const setReport = useCallback((questionId: string, next: OpenReport | null) => {
+    setReports((prev) => {
+      const copy = new Map(prev);
+      if (next) copy.set(questionId, next);
+      else copy.delete(questionId);
+      return copy;
+    });
+  }, []);
 
   const [index, setIndex] = useState(() => {
     const firstUnanswered = questions.findIndex(
@@ -276,6 +299,17 @@ export function TestRunner({ state }: { state: TakeState }) {
               <QuestionImage src={questionImageUrl(current.imagePath)!} />
             </div>
           )}
+
+          {/* A small text link under the stem, no shortcut — deliberately
+              unlike the review flag above. */}
+          <div className="mt-2">
+            <ReportQuestionTap
+              testId={test.id}
+              questionId={current.questionId}
+              report={reports.get(current.questionId) ?? null}
+              onChange={(next) => setReport(current.questionId, next)}
+            />
+          </div>
 
           {isMulti && (
             <p className="mt-3 text-sm font-medium text-primary">

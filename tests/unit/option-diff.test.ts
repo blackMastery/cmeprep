@@ -4,6 +4,7 @@ import {
   diffOptions,
   OptionOwnershipError,
   type ExistingOption,
+  optionsChanged,
 } from "@/lib/admin/option-diff";
 
 const Q = "11111111-1111-1111-1111-111111111111";
@@ -231,5 +232,31 @@ describe("correctnessChanged", () => {
       ids()
     );
     expect(correctnessChanged(existing(), rows)).toBe(false);
+  });
+});
+
+describe("optionsChanged", () => {
+  const existing = [
+    { id: "a", label: "A", is_correct: true, position: 0, deleted_at: null },
+    { id: "b", label: "B", is_correct: false, position: 1, deleted_at: null },
+  ];
+  it("is false for a no-op resave", () => {
+    const diff = diffOptions("q", existing, [
+      { id: "a", label: "A", isCorrect: true },
+      { id: "b", label: "B", isCorrect: false },
+    ]);
+    expect(optionsChanged(existing, diff)).toBe(false);
+  });
+  it("is true for a relabel, reorder, key flip, add or retire", () => {
+    const cases = [
+      [{ id: "a", label: "A!", isCorrect: true }, { id: "b", label: "B", isCorrect: false }],
+      [{ id: "b", label: "B", isCorrect: false }, { id: "a", label: "A", isCorrect: true }],
+      [{ id: "a", label: "A", isCorrect: false }, { id: "b", label: "B", isCorrect: true }],
+      [{ id: "a", label: "A", isCorrect: true }, { id: "b", label: "B", isCorrect: false }, { label: "C", isCorrect: false }],
+      [{ id: "a", label: "A", isCorrect: true }],
+    ];
+    for (const submitted of cases) {
+      expect(optionsChanged(existing, diffOptions("q", existing, submitted))).toBe(true);
+    }
   });
 });

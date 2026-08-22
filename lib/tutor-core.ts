@@ -1,5 +1,4 @@
-import { guyanaDayBounds } from "@/lib/analytics-core";
-import { guyanaDay } from "@/lib/orgs-core";
+import { dailyCapWindowStart } from "@/lib/analytics-core";
 import type { ExamAccess } from "@/lib/entitlements-core";
 import type { UserRole } from "@/lib/supabase/types";
 
@@ -26,7 +25,7 @@ export const TUTOR_MAX_QUESTION_CHARS = 4000;
  * Same civil-day convention as streaks and OSCE grading; the bounds rule
  * itself lives in analytics-core (cores cross-import rather than restate). */
 export function tutorCapWindowStart(now: Date): string {
-  return guyanaDayBounds(guyanaDay(now)).fromIso;
+  return dailyCapWindowStart(now);
 }
 
 /** Human-message guard, or null when the question is askable. */

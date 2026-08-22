@@ -13,6 +13,7 @@ import { AnswerOption, type AnswerState } from "@/components/test/answer-option"
 import { ExplanationStrip } from "@/components/test/explanation-strip";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
 import { QuestionNoteEditor } from "@/components/question-note-editor";
+import { ReportQuestionDialog } from "@/components/report-question";
 
 const LETTERS = "ABCDEFGH".split("");
 
@@ -22,15 +23,24 @@ export function ReviewList({
   initialBookmarkedIds = [],
   notesByQuestion = {},
   testId,
+  initialReportedIds = [],
 }: {
   questions: ReviewQuestion[];
   initialWrongOnly: boolean;
   initialBookmarkedIds?: string[];
   notesByQuestion?: Record<string, string>;
-  /** Enables "Report this grade" on OSCE stations (posts to this test). */
+  /** Enables "Report this grade" on OSCE stations and "Report a problem" on
+   * MCQs (both post against this test). */
   testId?: string;
+  /** MCQs this student already has an open report on. */
+  initialReportedIds?: string[];
 }) {
   const [wrongOnly, setWrongOnly] = useState(initialWrongOnly);
+  // Owned by the list: the wrong-only filter unmounts cards, which would
+  // reset a per-card "reported" flag to its stale initial value.
+  const [reportedIds, setReportedIds] = useState<Set<string>>(
+    () => new Set(initialReportedIds)
+  );
 
   const visible = useMemo(
     () => (wrongOnly ? questions.filter((q) => !q.isCorrect) : questions),
@@ -72,6 +82,10 @@ export function ReviewList({
                 initialBookmarked={initialBookmarkedIds.includes(q.questionId)}
                 note={notesByQuestion[q.questionId] ?? null}
                 testId={testId}
+                reported={reportedIds.has(q.questionId)}
+                onReported={() =>
+                  setReportedIds((prev) => new Set(prev).add(q.questionId))
+                }
               />
             </li>
           ))}
@@ -86,11 +100,15 @@ function ReviewCard({
   initialBookmarked,
   note,
   testId,
+  reported = false,
+  onReported = () => {},
 }: {
   question: ReviewQuestion;
   initialBookmarked: boolean;
   note: string | null;
   testId?: string;
+  reported?: boolean;
+  onReported?: () => void;
 }) {
   // Private-bank content after leaving the org: the score survives, the
   // organisation's material does not (SPEC §4). Render the gap, never a 404.
@@ -227,6 +245,17 @@ function ReviewCard({
         )}
 
         <ExplanationStrip explanation={question.explanation} />
+
+        {/* One report affordance per question: OSCE stations have "Report
+            this grade" above; MCQs get the question report here. */}
+        {question.type !== "osce" && testId && (
+          <ReportQuestionDialog
+            testId={testId}
+            questionId={question.questionId}
+            reported={reported}
+            onReported={onReported}
+          />
+        )}
 
         <QuestionNoteEditor
           questionId={question.questionId}

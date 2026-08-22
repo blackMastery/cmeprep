@@ -2,6 +2,11 @@ import { z } from "zod";
 
 import { OSCE_MAX_ANSWER_CHARS } from "@/lib/osce-grading-core";
 import { TUTOR_MAX_QUESTION_CHARS } from "@/lib/tutor-core";
+import {
+  REPORT_CATEGORIES,
+  REPORT_NOTE_MAX,
+  REPORT_RESOLUTIONS,
+} from "@/lib/question-reports-core";
 
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -84,6 +89,39 @@ export const gradeAnswerSchema = z.object({
 export const reportGradeSchema = z.object({
   questionId: uuid(),
   note: z.string().trim().max(1000, "Keep the note under 1000 characters").optional(),
+});
+
+/**
+ * POST /api/question-reports — "this question is broken". `testId` is where
+ * the student met it (omitted from /bookmarks); category is optional here
+ * because the route decides whether it was required (mid-test it is not).
+ */
+export const questionReportSchema = z.object({
+  questionId: uuid(),
+  testId: uuid().optional(),
+  category: z.enum(REPORT_CATEGORIES).optional(),
+  note: z
+    .string()
+    .trim()
+    .max(REPORT_NOTE_MAX, `Keep the note under ${REPORT_NOTE_MAX} characters`)
+    .optional(),
+});
+
+/** DELETE /api/question-reports — the mid-test undo. */
+export const withdrawQuestionReportSchema = z.object({
+  questionId: uuid(),
+  testId: uuid(),
+});
+
+/** Admin/org resolution of every open report on one question. */
+export const resolveQuestionReportsSchema = z.object({
+  questionId: uuid(),
+  resolution: z.enum(REPORT_RESOLUTIONS),
+  note: z
+    .string()
+    .trim()
+    .max(REPORT_NOTE_MAX, `Keep the note under ${REPORT_NOTE_MAX} characters`)
+    .optional(),
 });
 
 // ── Admin content schemas ───────────────────────────────────

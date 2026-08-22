@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { finalizeIfExpired, getTestForUser } from "@/lib/tests";
 import { getTestResults } from "@/lib/results";
+import { openReportsFor } from "@/lib/question-reports";
 import { Button } from "@/components/ui/button";
 import { ReviewList } from "@/components/test/review-list";
 
@@ -33,7 +34,7 @@ export default async function ReviewPage(
   const questionIds = results.questions.map((q) => q.questionId);
   const idFilter = questionIds.length > 0 ? questionIds : [""];
   const supabase = await createClient();
-  const [{ data: bookmarkRows }, { data: noteRows }] = await Promise.all([
+  const [{ data: bookmarkRows }, { data: noteRows }, reports] = await Promise.all([
     supabase
       .from("bookmarks")
       .select("question_id")
@@ -44,6 +45,8 @@ export default async function ReviewPage(
       .select("question_id, body")
       .eq("user_id", user.id)
       .in("question_id", idFilter),
+    // MCQ reports only — OSCE review keeps "Report this grade".
+    test.mode === "osce" ? Promise.resolve([]) : openReportsFor(user.id, questionIds),
   ]);
 
   const notesByQuestion: Record<string, string> = {};
@@ -69,6 +72,7 @@ export default async function ReviewPage(
         initialBookmarkedIds={(bookmarkRows ?? []).map((b) => b.question_id)}
         notesByQuestion={notesByQuestion}
         testId={id}
+        initialReportedIds={reports.map((r) => r.questionId)}
       />
     </div>
   );

@@ -5,11 +5,13 @@ import { ArrowLeft } from "lucide-react";
 import { requireOrgAdmin } from "@/lib/orgs";
 import { questionInScope } from "@/lib/admin/content-scope";
 import { getQuestionForEdit } from "@/lib/admin/questions";
+import { questionReportHistory } from "@/lib/admin/question-reports";
 import { listSubjectOptions } from "@/lib/admin/taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QuestionEditor } from "@/components/admin/question-editor";
+import { QuestionReportHistory } from "@/components/admin/question-report-history";
 
 export const metadata: Metadata = { title: "Edit question" };
 
@@ -26,9 +28,12 @@ export default async function OrgEditQuestionPage(
     notFound();
   }
 
-  const [record, subjects] = await Promise.all([
+  // History read only after the scope pin above — reporter identities are
+  // the org's own members' and must never leak across banks.
+  const [record, subjects, reports] = await Promise.all([
     getQuestionForEdit(id),
     listSubjectOptions(session.org.id),
+    questionReportHistory(id),
   ]);
   if (!record) notFound();
 
@@ -66,7 +71,16 @@ export default async function OrgEditQuestionPage(
         modelAnswer={record.modelAnswer}
         usageCount={record.usageCount}
         basePath="/org/content/questions"
+        openReportCount={reports.open}
       />
+
+      <div className="mt-8">
+        <QuestionReportHistory
+          open={reports.open}
+          rows={reports.rows}
+          reportsHref="/org/content/reports"
+        />
+      </div>
     </div>
   );
 }

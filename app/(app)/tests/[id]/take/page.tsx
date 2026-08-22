@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { finalizeIfExpired, getTakeState, getTestForUser } from "@/lib/tests";
+import { openReportsFor } from "@/lib/question-reports";
 import { TestRunner } from "@/components/test/test-runner";
 import { TutorRunner } from "@/components/test/tutor-runner";
 import { OsceRunner } from "@/components/test/osce-runner";
@@ -29,17 +30,23 @@ export default async function TakeTestPage(
   const state = await getTakeState(id, user.id);
   if (!state) notFound();
 
+  const questionIds = state.questions.map((q) => q.questionId);
+
+  // "You reported this" persists wherever the student meets the question —
+  // and mid-test the tap toggles, so the runner needs what's open (with
+  // test id + category, to know which it may undo). OSCE stations keep
+  // "Report this grade" and get no second control.
   if (state.test.mode === "exam") {
-    return <TestRunner state={state} />;
+    const reports = await openReportsFor(user.id, questionIds);
+    return <TestRunner state={state} initialReports={reports} />;
   }
 
   // Tutor and OSCE sessions surface bookmark + note editing at reveal time,
   // so the runner needs the learner's existing rows up front (RLS-scoped,
   // same pattern as the review page).
-  const questionIds = state.questions.map((q) => q.questionId);
   const idFilter = questionIds.length > 0 ? questionIds : [""];
   const supabase = await createClient();
-  const [{ data: bookmarkRows }, { data: noteRows }] = await Promise.all([
+  const [{ data: bookmarkRows }, { data: noteRows }, reports] = await Promise.all([
     supabase
       .from("bookmarks")
       .select("question_id")
@@ -50,6 +57,9 @@ export default async function TakeTestPage(
       .select("question_id, body")
       .eq("user_id", user.id)
       .in("question_id", idFilter),
+    state.test.mode === "osce"
+      ? Promise.resolve([])
+      : openReportsFor(user.id, questionIds),
   ]);
 
   const notesByQuestion: Record<string, string> = {};
@@ -64,6 +74,9 @@ export default async function TakeTestPage(
   return state.test.mode === "osce" ? (
     <OsceRunner {...runnerProps} />
   ) : (
-    <TutorRunner {...runnerProps} />
+    <TutorRunner
+      {...runnerProps}
+      initialReportedIds={reports.map((r) => r.questionId)}
+    />
   );
 }

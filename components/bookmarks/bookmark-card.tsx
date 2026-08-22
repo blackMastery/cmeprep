@@ -16,6 +16,7 @@ import { AnswerOption, type AnswerState } from "@/components/test/answer-option"
 import { QuestionImage } from "@/components/test/question-image";
 import { QuestionNoteEditor } from "@/components/question-note-editor";
 import { ConfirmSubmit } from "@/components/confirm-dialog";
+import { ReportQuestionDialog } from "@/components/report-question";
 
 const LETTERS = "ABCDEFGH".split("");
 
@@ -27,6 +28,7 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
 
 export function BookmarkCard({ row }: { row: BookmarkRow }) {
   const [expanded, setExpanded] = useState(false);
+  const [reported, setReported] = useState(row.reported);
   const [removeState, removeAction] = useActionState<
     BookmarkFormState,
     FormData
@@ -92,6 +94,16 @@ export function BookmarkCard({ row }: { row: BookmarkRow }) {
         )}
 
         <QuestionNoteEditor questionId={row.questionId} initialBody={row.note} />
+
+        {/* A bookmark counts as having "met" the question; OSCE stations are
+            reported through their grade, never here. */}
+        {row.type !== "osce" && (
+          <ReportQuestionDialog
+            questionId={row.questionId}
+            reported={reported}
+            onReported={() => setReported(true)}
+          />
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
           {row.detail ? (

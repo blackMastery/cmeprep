@@ -37,6 +37,7 @@ import { AutosaveIndicator } from "@/components/test/autosave-indicator";
 import { useAnswerAutosave } from "@/components/test/use-answer-autosave";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
 import { QuestionNoteEditor } from "@/components/question-note-editor";
+import { ReportQuestionDialog } from "@/components/report-question";
 
 const LETTERS = "ABCDEFGH".split("");
 
@@ -50,10 +51,13 @@ export function TutorRunner({
   state,
   initialBookmarkedIds,
   notesByQuestion,
+  initialReportedIds = [],
 }: {
   state: TakeState;
   initialBookmarkedIds: string[];
   notesByQuestion: Record<string, string>;
+  /** Questions this student already has an open report on. */
+  initialReportedIds?: string[];
 }) {
   const router = useRouter();
   const { test, questions } = state;
@@ -91,6 +95,11 @@ export function TutorRunner({
   const [missedOnly, setMissedOnly] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Owned here: the dialog remounts per question and would forget a report
+  // filed this session when the student steps back to it.
+  const [reportedIds, setReportedIds] = useState<Set<string>>(
+    () => new Set(initialReportedIds)
+  );
 
   const current = questions[index];
 
@@ -562,6 +571,18 @@ export function TutorRunner({
           {isRevealed && (
             <div className="mt-6 space-y-4">
               <ExplanationStrip explanation={currentReveal.explanation} />
+              {/* Tutor mode: the full dialog, offered only after the reveal —
+                  the student has seen the key they're disputing. Keyed like
+                  the note/bookmark below. */}
+              <ReportQuestionDialog
+                key={`report-${current.questionId}`}
+                testId={test.id}
+                questionId={current.questionId}
+                reported={reportedIds.has(current.questionId)}
+                onReported={() =>
+                  setReportedIds((prev) => new Set(prev).add(current.questionId))
+                }
+              />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {/* Keyed by question: both children seed their state from

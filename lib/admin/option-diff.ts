@@ -100,3 +100,28 @@ export function correctnessChanged(
   for (const id of before) if (!after.has(id)) return true;
   return false;
 }
+
+/**
+ * Did the option SET change at all (label, correctness, order, additions,
+ * retirements)? Feeds questions.content_updated_at — the pick-split
+ * boundary for question reports — which must move only on real content
+ * edits, never on a no-op save.
+ */
+export function optionsChanged(
+  existing: readonly ExistingOption[],
+  diff: OptionDiff
+): boolean {
+  if (diff.retireIds.length > 0) return true;
+  const live = existing.filter((e) => !e.deleted_at);
+  if (live.length !== diff.rows.length) return true;
+  const byId = new Map(live.map((e) => [e.id, e]));
+  return diff.rows.some((r) => {
+    const before = byId.get(r.id);
+    return (
+      !before ||
+      before.label !== r.label ||
+      before.is_correct !== r.is_correct ||
+      before.position !== r.position
+    );
+  });
+}

@@ -30,6 +30,7 @@ export function QuestionEditor({
   modelAnswer: initialModelAnswer = null,
   usageCount = 0,
   basePath = "/admin/questions",
+  openReportCount = 0,
 }: {
   subjects: SubjectOption[];
   question?: Question;
@@ -39,6 +40,8 @@ export function QuestionEditor({
   usageCount?: number;
   /** The list URL Cancel returns to — /admin and /org/content share it. */
   basePath?: string;
+  /** Open student reports on this question — offers "Resolve as fixed?". */
+  openReportCount?: number;
 }) {
   const [state, formAction] = useActionState<QuestionState, FormData>(
     saveQuestion,
@@ -470,6 +473,27 @@ export function QuestionEditor({
                     className="mt-0.5 size-4 accent-[var(--destructive)]"
                   />
                   I understand — change the answer key anyway
+                </label>
+              </div>
+            )}
+
+            {question && openReportCount > 0 && (
+              <div className="space-y-2 rounded-lg bg-sun/15 p-3">
+                <p className="text-xs">
+                  {openReportCount} open report{openReportCount === 1 ? "" : "s"}{" "}
+                  from students on this question.
+                </p>
+                {/* Offered, never assumed: auto-resolving on save would
+                    close 41 "wrong key" reports over a comma fix. */}
+                <label className="flex items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    name="resolveReports"
+                    value="true"
+                    className="mt-0.5 size-4 accent-[var(--primary)]"
+                  />
+                  Resolve {openReportCount === 1 ? "it" : "them"} as fixed when I
+                  save
                 </label>
               </div>
             )}

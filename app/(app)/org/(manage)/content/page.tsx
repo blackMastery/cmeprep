@@ -4,6 +4,8 @@ import { ListChecks, Plus } from "lucide-react";
 import { requireOrgAdmin } from "@/lib/orgs";
 import { listHierarchy } from "@/lib/admin/taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { openReportQuestionCount } from "@/lib/admin/question-reports";
+import { ReportsLink } from "@/components/admin/question-reports-page";
 import { Button } from "@/components/ui/button";
 import { OrgExamCards, type OrgExamCard } from "@/components/org/exam-cards";
 
@@ -11,7 +13,10 @@ export const metadata: Metadata = { title: "Organisation content" };
 
 export default async function OrgContentPage() {
   const session = await requireOrgAdmin();
-  const hierarchy = await listHierarchy(session.org.id);
+  const [hierarchy, openReports] = await Promise.all([
+    listHierarchy(session.org.id),
+    openReportQuestionCount({ kind: "org", orgId: session.org.id }),
+  ]);
 
   // Hierarchy counts include drafts; members only ever see published — the
   // cards show both so "why can't my team see this?" answers itself.
@@ -62,6 +67,7 @@ export default async function OrgContentPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap justify-end gap-2">
+        <ReportsLink href="/org/content/reports" count={openReports} />
         <Button variant="outline" asChild>
           <Link href="/org/content/questions">
             <ListChecks data-icon="inline-start" />

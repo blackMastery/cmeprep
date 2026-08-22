@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { opsAlertCounts } from "@/lib/analytics";
+import { openReportQuestionCount } from "@/lib/admin/question-reports";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminSidebar } from "@/components/admin/admin-nav";
 
@@ -31,8 +32,14 @@ export default async function AdminLayout({
   // payment_events_unprocessed_idx) — cheap enough to skip caching. Known
   // limitation: layouts don't re-render on soft navigation, so the badge
   // refreshes on hard loads and section changes, not every click.
-  const alerts = await opsAlertCounts();
-  const badges = { payments: alerts.unclaimed + alerts.backlog };
+  const [alerts, openReports] = await Promise.all([
+    opsAlertCounts(),
+    openReportQuestionCount({ kind: "platform" }),
+  ]);
+  const badges = {
+    payments: alerts.unclaimed + alerts.backlog,
+    questions: openReports,
+  };
 
   return (
     <div className="flex min-h-svh flex-col bg-background">

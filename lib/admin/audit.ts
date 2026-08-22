@@ -22,6 +22,10 @@ export type AuditAction =
   | "question.bulk_restore"
   | "question.image.remove"
   | "option.correctness_change"
+  // Question reports resolve per QUESTION — one row per ruling, meta carries
+  // the outcome and how many open reports it closed. Soft-deletes emit this
+  // too (as not_actionable) so the closure is traceable to the delete.
+  | "question.report_resolve"
   | "exam.create"
   | "exam.rename"
   | "exam.delete"

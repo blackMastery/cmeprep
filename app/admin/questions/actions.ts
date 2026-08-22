@@ -11,18 +11,22 @@ import {
   requireContentAuthor,
   scopeOrgId,
   subjectInScope,
+  type ContentScope,
 } from "@/lib/admin/content-scope";
 import {
   correctnessChanged,
   diffOptions,
   OptionOwnershipError,
+  optionsChanged,
 } from "@/lib/admin/option-diff";
 import { getQuestionForEdit } from "@/lib/admin/questions";
 import { publishBlocker } from "@/lib/admin/publish-gate";
+import { resolveOpenReports } from "@/lib/admin/question-reports";
 import {
   bulkQuestionIdsSchema,
   parseQuestionForm,
   questionSchema,
+  resolveQuestionReportsSchema,
   uuid,
 } from "@/lib/validation";
 import {
@@ -117,6 +121,7 @@ export async function saveQuestion(
         is_published: false,
         created_by: user.id,
         updated_at: now,
+        content_updated_at: now,
       })
       .select("id")
       .single();
@@ -272,6 +277,18 @@ export async function saveQuestion(
     }
   }
 
+  // content_updated_at is the question-report pick-split boundary: it moves
+  // only when what students SEE changed. A publish toggle or no-op save
+  // leaves it alone, so the evidence that a fix landed survives.
+  const q = current.question;
+  const contentChanged =
+    q.stem !== input.stem ||
+    q.explanation !== input.explanation ||
+    q.image_path !== input.imagePath ||
+    q.type !== input.type ||
+    modelAnswerChanged ||
+    optionsChanged(current.options, diff);
+
   const { error: updateError } = await admin
     .from("questions")
     .update({
@@ -283,6 +300,7 @@ export async function saveQuestion(
       image_path: input.imagePath,
       is_published: input.isPublished,
       updated_at: now,
+      ...(contentChanged ? { content_updated_at: now } : {}),
     })
     .eq("id", id.data);
 
@@ -322,10 +340,40 @@ export async function saveQuestion(
     );
   }
 
+  // "Resolve as Fixed?" — offered on the editor, never assumed. Auto-
+  // resolving on save would silently close 41 "the key is wrong" reports
+  // when all that changed was a comma.
+  // The save has committed by here; a failure closing reports must report
+  // as a partial success, never throw the whole action (which would read
+  // as "the save failed" and invite a re-submit).
+  let resolvedNote = "";
+  if (formData.get("resolveReports") === "true") {
+    try {
+      const closed = await resolveOpenReports(admin, [id.data], {
+        resolution: "fixed",
+        note: null,
+        resolvedBy: user.id,
+      });
+      if (closed > 0) {
+        await audit(
+          user.id,
+          "question.report_resolve",
+          id.data,
+          { resolution: "fixed", closed, via: "editor_save" },
+          scopeOrgId(scope)
+        );
+        resolvedNote = ` ${closed} report${closed === 1 ? "" : "s"} resolved as fixed.`;
+      }
+      revalidateReports();
+    } catch {
+      resolvedNote = " The reports could not be resolved — use the queue.";
+    }
+  }
+
   revalidateQuestions();
   revalidatePath(`/admin/questions/${id.data}`);
   revalidatePath(`/org/content/questions/${id.data}`);
-  return { success: "Saved." };
+  return { success: `Saved.${resolvedNote}` };
 }
 
 export async function togglePublish(
@@ -413,8 +461,18 @@ export async function setQuestionDeleted(
     undefined,
     scopeOrgId(scope)
   );
+
+  // A deleted question can't be fixed, and it would sit at the top of a
+  // rate-ranked queue — close its reports. Unpublishing deliberately does
+  // NOT do this: you are usually mid-fix and the notes are the spec.
+  const reportsNote = restore
+    ? ""
+    : await closeReportsForDeleted(user.id, [id.data], scope);
+
   revalidateQuestions();
-  return { success: restore ? "Restored as a draft." : "Question deleted." };
+  return {
+    success: (restore ? "Restored as a draft." : "Question deleted.") + reportsNote,
+  };
 }
 
 /* ── Bulk actions ───────────────────────────────────────────
@@ -603,13 +661,109 @@ export async function bulkSetDeleted(
     { ids: data?.map((r) => r.id) ?? [], count: affected },
     scopeOrgId(scope)
   );
+  const reportsNote = restore
+    ? ""
+    : await closeReportsForDeleted(user.id, data?.map((r) => r.id) ?? [], scope);
   revalidateQuestions();
 
   return {
-    success: restore
-      ? `${affected} restored as draft${affected === 1 ? "" : "s"}.`
-      : `${affected} question${affected === 1 ? "" : "s"} deleted.`,
+    success:
+      (restore
+        ? `${affected} restored as draft${affected === 1 ? "" : "s"}.`
+        : `${affected} question${affected === 1 ? "" : "s"} deleted.`) + reportsNote,
   };
+}
+
+/**
+ * Soft-delete lifecycle hook: open reports close as not_actionable. Runs
+ * AFTER the delete committed, so it never throws — it returns a suffix for
+ * the success message instead ("" when nothing needed saying).
+ */
+async function closeReportsForDeleted(
+  actorId: string,
+  questionIds: string[],
+  scope: ContentScope
+): Promise<string> {
+  let closed: number;
+  try {
+    closed = await resolveOpenReports(createAdminClient(), questionIds, {
+      resolution: "not_actionable",
+      note: "Question deleted.",
+      resolvedBy: actorId,
+    });
+  } catch {
+    return " Its open reports could not be closed — resolve them from the queue.";
+  }
+  if (closed > 0) {
+    await audit(
+      actorId,
+      "question.report_resolve",
+      questionIds.length === 1 ? questionIds[0] : null,
+      { resolution: "not_actionable", closed, via: "delete", ids: questionIds },
+      scopeOrgId(scope)
+    );
+    revalidateReports();
+  }
+  return "";
+}
+
+/**
+ * Resolve every open report on one question under one ruling. `no_change`
+ * is the valuable one: the rollup reopens carrying it forward. Nothing is
+ * deleted — resolved rows stay queryable and the editor shows them.
+ */
+export async function resolveQuestionReports(
+  _prev: QuestionState,
+  formData: FormData
+): Promise<QuestionState> {
+  const { user, scope } = await requireContentAuthor();
+
+  const parsed = resolveQuestionReportsSchema.safeParse({
+    questionId: formData.get("questionId"),
+    resolution: formData.get("resolution"),
+    note: formData.get("note") ?? undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const { questionId, resolution, note } = parsed.data;
+
+  const admin = createAdminClient();
+  if (!(await questionInScope(admin, questionId, scope))) {
+    return { error: "Unknown question." };
+  }
+
+  let closed: number;
+  try {
+    closed = await resolveOpenReports(admin, [questionId], {
+      resolution,
+      note: note && note.length > 0 ? note : null,
+      resolvedBy: user.id,
+    });
+  } catch {
+    return { error: "Could not resolve the reports." };
+  }
+  if (closed === 0) return { error: "Nothing open — someone got there first." };
+
+  await audit(
+    user.id,
+    "question.report_resolve",
+    questionId,
+    { resolution, closed, ...(note ? { note } : {}) },
+    scopeOrgId(scope)
+  );
+  revalidateReports();
+  revalidatePath(`/admin/questions/${questionId}`);
+  revalidatePath(`/org/content/questions/${questionId}`);
+  return {
+    success: `${closed} report${closed === 1 ? "" : "s"} resolved.`,
+  };
+}
+
+function revalidateReports() {
+  revalidatePath("/admin/questions/reports");
+  revalidatePath("/org/content/reports");
+  // The nav badge lives in the layouts.
+  revalidatePath("/admin", "layout");
+  revalidatePath("/org", "layout");
 }
 
 function revalidateQuestions() {

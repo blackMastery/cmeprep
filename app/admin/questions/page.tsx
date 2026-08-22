@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Flag, Plus } from "lucide-react";
 import { listQuestions, PAGE_SIZE } from "@/lib/admin/questions";
 import { listHierarchy } from "@/lib/admin/taxonomy";
 import { pageWindow } from "@/lib/pagination";
@@ -34,6 +34,12 @@ export default async function AdminQuestionsPage(
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/admin/questions/reports">
+              <Flag data-icon="inline-start" />
+              Reports
+            </Link>
+          </Button>
           <ExportButton total={result.total} params={sp} />
           <Button size="lg" asChild>
             <Link href="/admin/questions/new">

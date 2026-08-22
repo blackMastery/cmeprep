@@ -1,5 +1,4 @@
-import { guyanaDayBounds } from "@/lib/analytics-core";
-import { guyanaDay } from "@/lib/orgs-core";
+import { dailyCapWindowStart } from "@/lib/analytics-core";
 
 /**
  * OSCE grading — pure rules: answer guards, judge prompt construction and
@@ -19,7 +18,7 @@ export const OSCE_DAILY_CAP = 50;
  * Same civil-day convention as streaks; the bounds rule itself lives in
  * analytics-core (cores cross-import rather than restate). */
 export function osceCapWindowStart(now: Date): string {
-  return guyanaDayBounds(guyanaDay(now)).fromIso;
+  return dailyCapWindowStart(now);
 }
 
 /** Human-message guard, or null when the text is gradeable. */

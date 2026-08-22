@@ -6,6 +6,8 @@ import { listQuestions } from "@/lib/admin/questions";
 import { listHierarchy } from "@/lib/admin/taxonomy";
 import { pageWindow } from "@/lib/pagination";
 import { questionFiltersFromSearchParams } from "@/lib/admin/question-filters-core";
+import { openReportQuestionCount } from "@/lib/admin/question-reports";
+import { ReportsLink } from "@/components/admin/question-reports-page";
 import { Button } from "@/components/ui/button";
 import { QuestionsTable } from "@/components/admin/questions-table";
 import { QuestionFilters } from "@/components/admin/question-filters";
@@ -23,12 +25,13 @@ export default async function OrgQuestionsPage(
 
   // Every read is pinned to the org: the orgId filter walls the list, and
   // the hierarchy only offers the org's own tree to filter by.
-  const [result, hierarchy] = await Promise.all([
+  const [result, hierarchy, openReports] = await Promise.all([
     listQuestions({
       ...questionFiltersFromSearchParams(sp),
       orgId: session.org.id,
     }),
     listHierarchy(session.org.id),
+    openReportQuestionCount({ kind: "org", orgId: session.org.id }),
   ]);
 
   const pages = pageWindow(result.page, result.pageCount);
@@ -40,6 +43,7 @@ export default async function OrgQuestionsPage(
           {result.total} question{result.total === 1 ? "" : "s"} in your bank.
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          <ReportsLink href="/org/content/reports" count={openReports} />
           <ExportButton total={result.total} params={sp} />
           <Button asChild>
             <Link href={`${BASE}/new`}>

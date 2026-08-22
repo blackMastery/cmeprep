@@ -3,10 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getQuestionForEdit } from "@/lib/admin/questions";
+import { questionReportHistory } from "@/lib/admin/question-reports";
 import { listSubjectOptions } from "@/lib/admin/taxonomy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QuestionEditor } from "@/components/admin/question-editor";
+import { QuestionReportHistory } from "@/components/admin/question-report-history";
 
 export const metadata: Metadata = { title: "Edit question" };
 
@@ -15,9 +17,10 @@ export default async function EditQuestionPage(
 ) {
   const { id } = await props.params;
 
-  const [record, subjects] = await Promise.all([
+  const [record, subjects, reports] = await Promise.all([
     getQuestionForEdit(id),
     listSubjectOptions(),
+    questionReportHistory(id),
   ]);
 
   if (!record) notFound();
@@ -55,7 +58,16 @@ export default async function EditQuestionPage(
         options={record.visibleOptions}
         modelAnswer={record.modelAnswer}
         usageCount={record.usageCount}
+        openReportCount={reports.open}
       />
+
+      <div className="mt-8">
+        <QuestionReportHistory
+          open={reports.open}
+          rows={reports.rows}
+          reportsHref="/admin/questions/reports"
+        />
+      </div>
     </div>
   );
 }

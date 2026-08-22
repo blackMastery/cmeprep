@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { QuestionType } from "@/lib/supabase/types";
+import { openReportsFor } from "@/lib/question-reports";
 
 export const BOOKMARKS_PAGE_SIZE = 20;
 
@@ -22,6 +23,8 @@ export type BookmarkRow = {
   imagePath: string | null;
   subjectName: string;
   note: string | null;
+  /** The learner has an open "this question is broken" report on it. */
+  reported: boolean;
   lastAttempt: {
     answeredAt: string;
     isCorrect: boolean;
@@ -97,7 +100,7 @@ export async function getBookmarksPage(
     };
   }
 
-  const [{ data: notes }, { data: attempts }] = await Promise.all([
+  const [{ data: notes }, { data: attempts }, reports] = await Promise.all([
     supabase
       .from("notes")
       .select("question_id, body")
@@ -109,7 +112,9 @@ export async function getBookmarksPage(
       .eq("user_id", userId)
       .in("question_id", questionIds)
       .order("answered_at", { ascending: false }),
+    openReportsFor(userId, questionIds),
   ]);
+  const reportedIds = new Set(reports.map((r) => r.questionId));
 
   const noteByQuestion = new Map<string, string>();
   for (const n of notes ?? []) noteByQuestion.set(n.question_id, n.body);
@@ -166,6 +171,7 @@ export async function getBookmarksPage(
       imagePath: q?.image_path ?? null,
       subjectName: q?.subjects?.name ?? "",
       note: noteByQuestion.get(b.question_id) ?? null,
+      reported: reportedIds.has(b.question_id),
       lastAttempt: attempt,
       // OSCE questions have no options — an attempt alone unlocks their
       // explanation (the model answer stays server-side, deliberately).

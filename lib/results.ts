@@ -60,7 +60,11 @@ type QuestionRow = {
  * read? Empty for the overwhelmingly common all-public paper — the org query
  * only runs when an org question is actually present.
  */
-async function withheldQuestionIds(
+/**
+ * Exported for the question-report gate: a student may only report a
+ * question they can still READ, and this is the one statement of that rule.
+ */
+export async function withheldQuestionIds(
   admin: ReturnType<typeof createAdminClient>,
   questionIds: string[],
   userId: string

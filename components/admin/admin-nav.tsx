@@ -41,14 +41,17 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
  */
 export type AdminNavBadges = {
   payments?: number;
+  /** Open question-report rollups (questions, not reports). Its own badge,
+   * kept apart from payments — money-ops has a different urgency. */
+  questions?: number;
 };
 
 function withBadges(badges: AdminNavBadges | undefined): SideNavItem[] {
-  return ADMIN_NAV_ITEMS.map((item) =>
-    item.href === "/admin/payments"
-      ? { ...item, badge: badges?.payments }
-      : item
-  );
+  return ADMIN_NAV_ITEMS.map((item) => {
+    if (item.href === "/admin/payments") return { ...item, badge: badges?.payments };
+    if (item.href === "/admin/questions") return { ...item, badge: badges?.questions };
+    return item;
+  });
 }
 
 export function AdminSidebar({ badges }: { badges?: AdminNavBadges }) {

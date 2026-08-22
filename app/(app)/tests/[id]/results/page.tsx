@@ -6,12 +6,18 @@ import { requireUser } from "@/lib/auth";
 import { finalizeIfExpired, getTestForUser } from "@/lib/tests";
 import { getTestResults } from "@/lib/results";
 import { getExamAccess } from "@/lib/entitlements";
+import { openReportsFor } from "@/lib/question-reports";
+import { needsElaboration } from "@/lib/question-reports-core";
 import { accuracyTone, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { TrialResultsUpsell } from "@/components/app/trial-results-upsell";
+import {
+  ReportElaboration,
+  type ElaborationItem,
+} from "@/components/test/report-elaboration";
 
 export const metadata: Metadata = { title: "Results" };
 
@@ -34,7 +40,23 @@ export default async function ResultsPage(
   // Same rule as the new-test wall (SPEC §3): a member whose org covers the
   // bank is not metered, so "2 free tests left — upgrade for unlimited mock
   // exams" was both untrue and an upsell for access they already have.
-  const access = await getExamAccess(user);
+  const [access, reports] = await Promise.all([
+    getExamAccess(user),
+    // Bare reports tapped during THIS test get a category + note here,
+    // skippable. OSCE has its own grade reports.
+    test.mode === "osce"
+      ? Promise.resolve([])
+      : openReportsFor(
+          user.id,
+          results.questions.map((q) => q.questionId)
+        ),
+  ]);
+  const bare = new Set(
+    reports.filter((r) => needsElaboration(r, test.id)).map((r) => r.questionId)
+  );
+  const toElaborate: ElaborationItem[] = results.questions
+    .filter((q) => bare.has(q.questionId) && !q.withheld)
+    .map((q) => ({ questionId: q.questionId, position: q.position, stem: q.stem }));
 
   // Tutor and OSCE share the untimed correct/answered contract.
   const tutor = test.mode !== "exam";
@@ -122,6 +144,8 @@ export default async function ResultsPage(
           </CardContent>
         </Card>
       )}
+
+      <ReportElaboration testId={id} items={toElaborate} />
 
       {!access.org && <TrialResultsUpsell profile={user.profile} />}
 
