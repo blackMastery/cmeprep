@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "cmeprep.me — Pass your Medical Board and Exit Examinations",
-  "short_name": "cmeprep.me",
-  "description": "Practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and MDCN.",
+  "name": "cmeqbank.com — Pass your Medical Board and Exit Examinations",
+  "short_name": "cmeqbank",
+  "description": "CME question bank: practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

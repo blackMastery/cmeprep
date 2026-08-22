@@ -3,9 +3,9 @@ import {
   OG_SIZE,
   renderOgImage,
 } from "@/lib/og-image";
-import { SITE_DESCRIPTION, SITE_TAGLINE } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 
-export const alt = `cmeprep.me — ${SITE_TAGLINE}`;
+export const alt = `${SITE_NAME} — ${SITE_TAGLINE}`;
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

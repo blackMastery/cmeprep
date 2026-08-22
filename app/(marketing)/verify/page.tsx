@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE_NAME } from "@/lib/site";
 import { Card, CardContent } from "@/components/ui/card";
 import { VerifyForm } from "@/components/marketing/verify-form";
 
@@ -10,7 +11,7 @@ import { VerifyForm } from "@/components/marketing/verify-form";
 export const metadata: Metadata = {
   title: "Verify a certificate",
   description:
-    "Check a cmeprep.me CME certificate of completion by its certificate ID.",
+    `Check a ${SITE_NAME} CME certificate of completion by its certificate ID.`,
   robots: { index: false, follow: false },
 };
 

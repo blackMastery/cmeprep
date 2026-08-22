@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { OG_IMAGE } from "@/lib/site";
+import { OG_IMAGE, SITE_NAME } from "@/lib/site";
 import { AuthCard } from "@/components/auth/auth-card";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { RegisterForm } from "@/components/auth/register-form";
@@ -8,13 +8,13 @@ import { RegisterForm } from "@/components/auth/register-form";
 export const metadata: Metadata = {
   title: "Create your account",
   description:
-    "Create a free cmeprep.me account and start with 10 questions and 2 practice tests — no card required.",
+    `Create a free ${SITE_NAME} account and start with 10 questions and 2 practice tests — no card required.`,
   alternates: { canonical: "/register" },
   // images repeated because a page-level openGraph replaces the root's — see
   // lib/site.ts.
   openGraph: {
     url: "/register",
-    title: "Create your account · cmeprep.me",
+    title: `Create your account · ${SITE_NAME}`,
     images: [OG_IMAGE],
   },
 };

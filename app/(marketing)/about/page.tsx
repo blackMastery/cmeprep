@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Mail, MessageCircle } from "lucide-react";
 import {
   OG_IMAGE,
+  SITE_NAME,
   SUPPORT_EMAIL,
   TWITTER_IMAGE,
   WHATSAPP_DISPLAY,
@@ -27,12 +28,12 @@ export const metadata: Metadata = {
   // strip og:image from this page. See lib/site.ts.
   openGraph: {
     url: "/about",
-    title: `${ABOUT_TITLE} · cmeprep.me`,
+    title: `${ABOUT_TITLE} · ${SITE_NAME}`,
     description: ABOUT_DESCRIPTION,
     images: [OG_IMAGE],
   },
   twitter: {
-    title: `${ABOUT_TITLE} · cmeprep.me`,
+    title: `${ABOUT_TITLE} · ${SITE_NAME}`,
     description: ABOUT_DESCRIPTION,
     images: [TWITTER_IMAGE],
   },

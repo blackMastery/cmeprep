@@ -39,12 +39,12 @@ export function renderOgImage(input: {
           padding: "72px 80px",
         }}
       >
-        {/* Wordmark: bold "cmeprep" + light ".me", the same weight contrast
-            the real Logo component uses. */}
+        {/* Wordmark: bold "cmeqbank" + light ".com", the same weight contrast
+            the Logo component uses. */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ display: "flex", fontSize: 44, color: INK }}>
-            <span style={{ fontWeight: 700 }}>cmeprep</span>
-            <span style={{ fontWeight: 400, color: CORAL_DEEP }}>.me</span>
+            <span style={{ fontWeight: 700 }}>cmeqbank</span>
+            <span style={{ fontWeight: 400, color: CORAL_DEEP }}>.com</span>
           </div>
           {input.eyebrow && (
             <div

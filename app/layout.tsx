@@ -43,6 +43,8 @@ export const metadata: Metadata = {
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   keywords: [
+    "CME question bank",
+    "medical question bank",
     "medical board exam practice questions",
     "USMLE question bank",
     "PLAB practice questions",

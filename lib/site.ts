@@ -16,7 +16,10 @@ export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.cmeqbank.com"
 ).replace(/\/$/, "");
 
-export const SITE_NAME = "cmeprep.me";
+/** The domain IS the brand, as it was with cmeprep.me. Titles, OG siteName,
+ * JSON-LD and the manifest all read this; the wordmark lockup is a separate
+ * asset (components/brand/logo.tsx). */
+export const SITE_NAME = "cmeqbank.com";
 
 export const SITE_TAGLINE =
   "Pass your Medical Board and Exit Examinations";
@@ -26,7 +29,7 @@ export const SITE_TAGLINE =
  * characters — Google truncates search snippets around there.
  */
 export const SITE_DESCRIPTION =
-  "Practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE. Start free.";
+  "CME question bank: practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE. Start free.";
 
 export const SUPPORT_EMAIL = "support@cmeprep.me";
 

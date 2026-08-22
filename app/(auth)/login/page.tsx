@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SITE_NAME } from "@/lib/site";
 import { AuthCard } from "@/components/auth/auth-card";
 import { LoginForm } from "@/components/auth/login-form";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 
 export const metadata: Metadata = {
   title: "Log in",
-  description: "Log in to your cmeprep.me account.",
+  description: `Log in to your ${SITE_NAME} account.`,
   // Canonical without the ?next= query, so the dozens of redirect variants
   // collapse to one indexable URL instead of competing with each other.
   alternates: { canonical: "/login" },

@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
+import { SITE_NAME } from "@/lib/site";
 import { opsAlertCounts } from "@/lib/analytics";
 import { openReportQuestionCount } from "@/lib/admin/question-reports";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminSidebar } from "@/components/admin/admin-nav";
 
 export const metadata: Metadata = {
-  title: { default: "Admin", template: "%s · Admin · cmeprep.me" },
+  title: { default: "Admin", template: `%s · Admin · ${SITE_NAME}` },
   robots: { index: false, follow: false },
 };
 
