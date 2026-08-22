@@ -13,7 +13,7 @@
  * so the production domain is the fallback rather than localhost.
  */
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || "https://www.cmeprep.me"
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.cmeqbank.com"
 ).replace(/\/$/, "");
 
 export const SITE_NAME = "cmeprep.me";

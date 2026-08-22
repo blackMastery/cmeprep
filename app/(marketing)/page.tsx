@@ -316,7 +316,7 @@ export default async function MarketingPage() {
           <Button size="xl" className="bg-sun text-ink hover:bg-sun/85" asChild>
             <Link href="/register">Start a trial test</Link>
           </Button>
-          <p className="text-sm text-white/80">www.cmeprep.me</p>
+          <p className="text-sm text-white/80">www.cmeqbank.com</p>
         </div>
       </section>
     </>

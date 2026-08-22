@@ -91,7 +91,7 @@ the provider answers with an error that surfaces on `/login?error=`.
    `npx supabase stop && npx supabase start`.
 3. **Hosted project** — in the Supabase dashboard enable **Google** under
    *Authentication → Sign In / Providers* with the same credentials, and add
-   `https://www.cmeprep.me/auth/callback` to *Authentication → URL
+   `https://www.cmeqbank.com/auth/callback` to *Authentication → URL
    Configuration* — unlisted redirect targets silently fall back to the Site
    URL. (`supabase config push` now manages that allow-list; see
    `[remotes.prod]` in `supabase/config.toml`.)

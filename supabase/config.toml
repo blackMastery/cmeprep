@@ -216,10 +216,10 @@ additional_redirect_urls = [
   "http://localhost:3000/auth/confirm",
   "http://localhost:3000/auth/confirm?next=/reset-password",
   "http://localhost:3000/auth/callback",
-  "https://www.cmeprep.me",
-  "https://www.cmeprep.me/auth/confirm",
-  "https://www.cmeprep.me/auth/confirm?next=/reset-password",
-  "https://www.cmeprep.me/auth/callback",
+  "https://www.cmeqbank.com",
+  "https://www.cmeqbank.com/auth/confirm",
+  "https://www.cmeqbank.com/auth/confirm?next=/reset-password",
+  "https://www.cmeqbank.com/auth/callback",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -532,15 +532,15 @@ enabled = true
 project_id = "fldozhiapwphgxetzmwg"
 
 [remotes.prod.auth]
-site_url = "https://www.cmeprep.me"
+site_url = "https://www.cmeqbank.com"
 # Production drops the localhost entries: this list is a redirect allow-list,
 # and an attacker-supplied ?next= pointing at localhost is only ever noise in
 # prod. /auth/confirm stays listed explicitly for the same reason as above.
 additional_redirect_urls = [
-  "https://www.cmeprep.me",
-  "https://www.cmeprep.me/auth/confirm",
-  "https://www.cmeprep.me/auth/confirm?next=/reset-password",
-  "https://www.cmeprep.me/auth/callback",
+  "https://www.cmeqbank.com",
+  "https://www.cmeqbank.com/auth/confirm",
+  "https://www.cmeqbank.com/auth/confirm?next=/reset-password",
+  "https://www.cmeqbank.com/auth/callback",
 ]
 # Directory under `supabase/` where declarative files are written.
 # declarative_schema_path = "./database"

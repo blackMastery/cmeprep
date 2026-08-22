@@ -13,7 +13,7 @@
 -- SQL editor:
 --
 --   select vault.create_secret(
---     'https://www.cmeprep.me/api/cron/reconcile', 'reconcile_url');
+--     'https://www.cmeqbank.com/api/cron/reconcile', 'reconcile_url');
 --   select vault.create_secret('<same value as CRON_SECRET>',
 --     'reconcile_cron_secret');
 --

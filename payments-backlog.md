@@ -147,7 +147,7 @@ that cannot be delivered.
 Setup, once per hosted environment — the sweep does nothing until both exist:
 
 ```sql
-select vault.create_secret('https://www.cmeprep.me/api/cron/reconcile', 'reconcile_url');
+select vault.create_secret('https://www.cmeqbank.com/api/cron/reconcile', 'reconcile_url');
 select vault.create_secret('<same value as the CRON_SECRET env var>', 'reconcile_cron_secret');
 ```
 
@@ -157,7 +157,7 @@ POSTing `{"mode":"backfill"}` to `/api/admin/analytics/rollup` (as an admin)
 repeatedly until it reports `done: true`:
 
 ```sql
-select vault.create_secret('https://www.cmeprep.me/api/cron/rollup', 'analytics_rollup_url');
+select vault.create_secret('https://www.cmeqbank.com/api/cron/rollup', 'analytics_rollup_url');
 ```
 
 Checks:

@@ -22,7 +22,7 @@
 -- per environment, in the SQL editor:
 --
 --   select vault.create_secret(
---     'https://www.cmeprep.me/api/cron/rollup', 'analytics_rollup_url');
+--     'https://www.cmeqbank.com/api/cron/rollup', 'analytics_rollup_url');
 --
 -- The bearer reuses the existing 'reconcile_cron_secret' — both routes check
 -- the same CRON_SECRET env var, and a second copy of one value is a drift trap.
