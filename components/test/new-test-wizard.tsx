@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, Loader2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Lock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { LockedExamRow } from "@/components/test/locked-exam-row";
 
@@ -277,10 +282,15 @@ export function NewTestWizard({
     }
   }
 
+  // Every size stays visible: the over-cap ones are the upsell (a locked
+  // chip opens a Buy-now bubble), the same way locked exams are listed.
   const questionCap = selectedExam?.questionCap ?? null;
-  const counts = (osceMode ? OSCE_COUNTS : COUNTS).filter(
-    (n) => questionCap === null || n <= questionCap
-  );
+  const counts = osceMode ? OSCE_COUNTS : COUNTS;
+  const countLocked = (n: number) => questionCap !== null && n > questionCap;
+  const checkoutHref =
+    upsellPlanId && selectedExam
+      ? `/checkout/${upsellPlanId}?exam=${selectedExam.id}`
+      : null;
 
   const examReady =
     selectedExam !== null &&
@@ -585,17 +595,26 @@ export function NewTestWizard({
                   {osceMode ? "How many stations?" : "How many questions?"}
                 </legend>
                 <div className="flex flex-wrap gap-2">
-                  {counts.map((n) => (
-                    <Chip
-                      key={n}
-                      label={String(n)}
-                      selected={numQuestions === n}
-                      onClick={() => {
-                        setNumQuestions(n);
-                        setDurationMin(Math.max(5, Math.round(n * 1.5)));
-                      }}
-                    />
-                  ))}
+                  {counts.map((n) =>
+                    countLocked(n) ? (
+                      <LockedCountChip
+                        key={n}
+                        label={String(n)}
+                        cap={questionCap!}
+                        checkoutHref={checkoutHref}
+                      />
+                    ) : (
+                      <Chip
+                        key={n}
+                        label={String(n)}
+                        selected={numQuestions === n}
+                        onClick={() => {
+                          setNumQuestions(n);
+                          setDurationMin(Math.max(5, Math.round(n * 1.5)));
+                        }}
+                      />
+                    )
+                  )}
                 </div>
                 {questionCap !== null && !osceMode && (
                   <p className="mt-2 text-sm text-muted-foreground">
@@ -756,6 +775,58 @@ export function NewTestWizard({
         </div>
       </footer>
     </div>
+  );
+}
+
+/**
+ * An over-cap session size for a trial user. Not `disabled` — a disabled
+ * button can't be clicked, and the click IS the upsell: it opens a bubble
+ * with the Buy-now link. Presentation only; /api/tests clamps regardless.
+ */
+function LockedCountChip({
+  label,
+  cap,
+  checkoutHref,
+}: {
+  label: string;
+  cap: number;
+  checkoutHref: string | null;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        aria-label={`${label} questions — paid plans only`}
+        className={cn(
+          "inline-flex min-h-11 items-center gap-1.5 rounded-full border border-dashed border-border bg-muted/40 px-4 text-sm font-medium text-muted-foreground transition-colors",
+          "hover:border-primary/50 hover:text-foreground",
+          "focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+        )}
+      >
+        <Lock className="size-3.5" aria-hidden="true" />
+        {label}
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-64 gap-2 p-3">
+        <p className="font-display text-sm font-semibold">
+          Full-length sessions are part of the paid plan
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Trial sessions are {cap} questions each. Unlock {label}-question
+          papers and the whole bank.
+        </p>
+        {checkoutHref ? (
+          <Button size="sm" asChild>
+            <Link href={checkoutHref}>
+              Buy now
+              <ArrowRight data-icon="inline-end" />
+            </Link>
+          </Button>
+        ) : (
+          <Button size="sm" asChild>
+            <Link href="/#pricing">View plans</Link>
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
