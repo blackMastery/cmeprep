@@ -295,6 +295,27 @@ function relsPathFor(path: string): string {
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 1;
+/**
+ * 429/503 are the host saying "not this fast", not "no" — six workers
+ * hitting one image host trips its rate limit and used to kill the whole
+ * all-or-nothing commit on a transient. Honour Retry-After when it is a
+ * sane number of seconds, otherwise back off progressively; give up after
+ * MAX_RATE_LIMIT_RETRIES so a genuinely throttled host still fails fast
+ * enough to stay inside the route's maxDuration.
+ */
+const MAX_RATE_LIMIT_RETRIES = 2;
+const RATE_LIMIT_BASE_DELAY_MS = 1_000;
+const RATE_LIMIT_MAX_DELAY_MS = 5_000;
+
+function rateLimitDelayMs(response: Response, attempt: number): number {
+  const retryAfter = Number(response.headers.get("retry-after"));
+  const fallback = RATE_LIMIT_BASE_DELAY_MS * (attempt + 1);
+  const chosen =
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : fallback;
+  return Math.min(chosen, RATE_LIMIT_MAX_DELAY_MS);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Download an image an admin referenced by URL.
@@ -317,6 +338,7 @@ export async function fetchImageFromUrl(url: string): Promise<EmbeddedImage> {
     return { ok: false, message: `the image URL "${url}" is not a valid URL.` };
   }
 
+  let rateLimitRetries = 0;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const parsed = new URL(current);
     if (parsed.protocol !== "https:") {
@@ -352,6 +374,19 @@ export async function fetchImageFromUrl(url: string): Promise<EmbeddedImage> {
       }
       current = new URL(location, parsed).toString();
       continue;
+    }
+
+    if (response.status === 429 || response.status === 503) {
+      if (rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+        await sleep(rateLimitDelayMs(response, rateLimitRetries));
+        rateLimitRetries++;
+        hop--; // retry the same URL; this was not a redirect hop
+        continue;
+      }
+      return {
+        ok: false,
+        message: `the image host rate-limited the import (HTTP ${response.status}, even after retrying). Wait a minute and commit again.`,
+      };
     }
 
     if (!response.ok || !response.body) {
