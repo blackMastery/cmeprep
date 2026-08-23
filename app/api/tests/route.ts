@@ -9,7 +9,11 @@ import {
   uuid,
 } from "@/lib/validation";
 import { examAccessFrom } from "@/lib/entitlements";
-import { canAccessExam, consumesTrialCredit } from "@/lib/entitlements-core";
+import {
+  canAccessExam,
+  consumesTrialCredit,
+  maxQuestionsFor,
+} from "@/lib/entitlements-core";
 import { countsTowardDeptAssignment, guyanaDay, mondayOf } from "@/lib/orgs-core";
 import {
   pickSessionQuestions,
@@ -204,7 +208,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const { examId, subjectIds, difficulty, numQuestions, durationMin, mode } =
+  const {
+    examId,
+    subjectIds,
+    difficulty,
+    numQuestions: requestedQuestions,
+    durationMin,
+    mode,
+  } =
     assignment
       ? {
           examId: assignment.config.exam_id ?? "",
@@ -287,6 +298,11 @@ export async function POST(request: Request) {
   // rides the trial" — org-covered trial-role members pass (the org paid).
   // Known seam: a just-paid user whose role hasn't synced from 'trial' yet is
   // briefly blocked here.
+  // ── Trial sessions are short: clamp rather than reject, so a plan
+  // prescription (SESSION_QUESTIONS) or an older wizard still starts a test
+  // instead of dead-ending. Assignments are org-covered and never clamped.
+  const numQuestions = maxQuestionsFor(consumesTrial, requestedQuestions);
+
   if (mode === "osce" && consumesTrial) {
     return NextResponse.json(
       {

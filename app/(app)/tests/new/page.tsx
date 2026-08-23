@@ -7,6 +7,7 @@ import { getExamAccess } from "@/lib/entitlements";
 import {
   canAccessExam,
   consumesTrialCredit,
+  TRIAL_MAX_QUESTIONS,
   visibleExamsFor,
 } from "@/lib/entitlements-core";
 import { NewTestWizard } from "@/components/test/new-test-wizard";
@@ -65,6 +66,10 @@ export default async function NewTestPage() {
         osceQuestionCount: osceCountBySubject.get(subject.id) ?? 0,
       })),
     }));
+    const metered = consumesTrialCredit(user.profile.role, access, {
+      id: exam.id,
+      orgId: exam.orgId,
+    });
     return {
       id: exam.id,
       name: exam.name,
@@ -79,10 +84,10 @@ export default async function NewTestPage() {
           })),
       // OSCE is paid-only (every grade is an AI call): honest presentation of
       // the /api/tests gate, which enforces with the same predicate.
-      osceLocked: consumesTrialCredit(user.profile.role, access, {
-        id: exam.id,
-        orgId: exam.orgId,
-      }),
+      osceLocked: metered,
+      // Same predicate again: a metered session is trial-sized. /api/tests
+      // clamps regardless; this keeps the count chips honest.
+      questionCap: metered ? TRIAL_MAX_QUESTIONS : null,
       osceQuestionCount: specialties
         .flatMap((sp) => sp.subjects)
         .reduce((sum, s) => sum + s.osceQuestionCount, 0),

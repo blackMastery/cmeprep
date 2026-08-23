@@ -29,9 +29,11 @@ export type WizardExam = {
   /** OSCE is paid-only; presentation of the /api/tests gate. */
   osceLocked: boolean;
   osceQuestionCount: number;
+  /** Trial sessions are short (TRIAL_MAX_QUESTIONS); null when unmetered. */
+  questionCap: number | null;
 };
 
-const COUNTS = [10, 20, 40, 60];
+const COUNTS = [5, 10, 20, 40, 60];
 /** Free-text stations take minutes each — smaller sessions than MCQ. */
 const OSCE_COUNTS = [5, 10, 20];
 const DIFFICULTIES = [
@@ -94,7 +96,13 @@ export function NewTestWizard({
     unlocked.length === 1 ? unlocked[0].id : null
   );
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [numQuestions, setNumQuestions] = useState(20);
+  // A preselected metered exam starts at its cap, not 20 — selectExam never
+  // runs for it, so nothing else would clamp the default.
+  const [numQuestions, setNumQuestions] = useState(() =>
+    unlocked.length === 1 && unlocked[0].questionCap !== null
+      ? Math.min(20, unlocked[0].questionCap)
+      : 20
+  );
   const [difficulty, setDifficulty] =
     useState<(typeof DIFFICULTIES)[number]["value"]>("mixed");
   const [durationMin, setDurationMin] = useState(30);
@@ -195,9 +203,12 @@ export function NewTestWizard({
     // each). Carrying a count across leaves the Format step with no chip
     // highlighted — in BOTH directions, which is why this runs before the
     // early return below.
-    const counts: readonly number[] = next === "osce" ? OSCE_COUNTS : COUNTS;
+    const cap = selectedExam?.questionCap ?? null;
+    const counts: readonly number[] = (
+      next === "osce" ? OSCE_COUNTS : COUNTS
+    ).filter((n) => cap === null || n <= cap);
     if (!counts.includes(numQuestions)) {
-      const fallback = next === "osce" ? 10 : 20;
+      const fallback = Math.min(next === "osce" ? 10 : 20, cap ?? Infinity);
       setNumQuestions(fallback);
       setDurationMin(Math.max(5, Math.round(fallback * 1.5)));
     }
@@ -258,7 +269,18 @@ export function NewTestWizard({
     setExamId(exam.id);
     // Selections belong to the previous exam's tree.
     setSubjectIds([]);
+    // A metered exam offers only the trial-sized session; the server clamps
+    // anyway, but the Format step should never show a stale larger pick.
+    if (exam.questionCap !== null && numQuestions > exam.questionCap) {
+      setNumQuestions(exam.questionCap);
+      setDurationMin(Math.max(5, Math.round(exam.questionCap * 1.5)));
+    }
   }
+
+  const questionCap = selectedExam?.questionCap ?? null;
+  const counts = (osceMode ? OSCE_COUNTS : COUNTS).filter(
+    (n) => questionCap === null || n <= questionCap
+  );
 
   const examReady =
     selectedExam !== null &&
@@ -563,7 +585,7 @@ export function NewTestWizard({
                   {osceMode ? "How many stations?" : "How many questions?"}
                 </legend>
                 <div className="flex flex-wrap gap-2">
-                  {(osceMode ? OSCE_COUNTS : COUNTS).map((n) => (
+                  {counts.map((n) => (
                     <Chip
                       key={n}
                       label={String(n)}
@@ -575,6 +597,12 @@ export function NewTestWizard({
                     />
                   ))}
                 </div>
+                {questionCap !== null && !osceMode && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Trial sessions are {questionCap} questions each. Upgrade
+                    for full-length papers.
+                  </p>
+                )}
               </fieldset>
 
               <fieldset>
