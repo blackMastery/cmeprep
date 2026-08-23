@@ -22,6 +22,10 @@ export type AdminUserRow = {
   profile: Profile;
   email: string | null;
   latestSubscription: Subscription | null;
+  /** Submitted answers (attempts rows) — same figure as the detail page. */
+  questionsAttempted: number;
+  /** Tests started, any status — matches getUserDetail's testsCount. */
+  testsCount: number;
 };
 
 /** Escape ilike wildcards so a search for "100%" matches literally. */
@@ -90,21 +94,37 @@ export async function listUsers(filters: UserListFilters): Promise<{
 
   const emailById = new Map<string, string | null>();
   const latestSubByUser = new Map<string, Subscription>();
+  const attemptedByUser = new Map<string, number>();
+  const testsByUser = new Map<string, number>();
 
   if (pageIds.length > 0) {
-    const [{ data: emails }, { data: subs }] = await Promise.all([
-      admin.from("user_emails").select("id, email").in("id", pageIds),
-      admin
-        .from("subscriptions")
-        .select("*")
-        .in("user_id", pageIds)
-        .order("created_at", { ascending: false }),
-    ]);
+    // user_stats is security_invoker and the admin client bypasses RLS, so
+    // it must be filtered to the page explicitly (see getUserDetail). Test
+    // counts are tallied here: PostgREST has no GROUP BY, and one page is
+    // at most 20 users' worth of id-only rows.
+    const [{ data: emails }, { data: subs }, { data: stats }, { data: tests }] =
+      await Promise.all([
+        admin.from("user_emails").select("id, email").in("id", pageIds),
+        admin
+          .from("subscriptions")
+          .select("*")
+          .in("user_id", pageIds)
+          .order("created_at", { ascending: false }),
+        admin
+          .from("user_stats")
+          .select("user_id, attempted")
+          .in("user_id", pageIds),
+        admin.from("tests").select("user_id").in("user_id", pageIds),
+      ]);
 
     for (const e of emails ?? []) emailById.set(e.id, e.email);
     for (const s of (subs ?? []) as Subscription[]) {
       // Rows are newest-first; first one wins per user.
       if (!latestSubByUser.has(s.user_id)) latestSubByUser.set(s.user_id, s);
+    }
+    for (const st of stats ?? []) attemptedByUser.set(st.user_id, st.attempted);
+    for (const t of tests ?? []) {
+      testsByUser.set(t.user_id, (testsByUser.get(t.user_id) ?? 0) + 1);
     }
   }
 
@@ -113,6 +133,8 @@ export async function listUsers(filters: UserListFilters): Promise<{
       profile,
       email: emailById.get(profile.id) ?? null,
       latestSubscription: latestSubByUser.get(profile.id) ?? null,
+      questionsAttempted: attemptedByUser.get(profile.id) ?? 0,
+      testsCount: testsByUser.get(profile.id) ?? 0,
     })),
     total,
     page,

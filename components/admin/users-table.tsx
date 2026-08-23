@@ -62,6 +62,20 @@ function PlanBits({ row }: { row: AdminUserRow }) {
   );
 }
 
+const numberFormatter = new Intl.NumberFormat("en-GB");
+
+/** "12 questions · 3 tests" on phones; the table splits them into columns. */
+function ActivityBits({ row }: { row: AdminUserRow }) {
+  return (
+    <span className="text-xs text-muted-foreground">
+      {numberFormatter.format(row.questionsAttempted)} question
+      {row.questionsAttempted === 1 ? "" : "s"} ·{" "}
+      {numberFormatter.format(row.testsCount)} test
+      {row.testsCount === 1 ? "" : "s"}
+    </span>
+  );
+}
+
 function ViewLink({ row }: { row: AdminUserRow }) {
   return (
     <Button variant="ghost" size="sm" asChild>
@@ -105,6 +119,7 @@ export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
                   <RoleBadge row={row} />
                   <PlanBits row={row} />
                 </div>
+                <ActivityBits row={row} />
                 <div className="flex items-center justify-between border-t border-border pt-2">
                   <span className="text-xs text-muted-foreground">
                     Joined {dateFormatter.format(new Date(row.profile.created_at))}
@@ -127,6 +142,8 @@ export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Plan</TableHead>
+                <TableHead className="text-right">Questions</TableHead>
+                <TableHead className="text-right">Tests</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right">
                   <span className="sr-only">Actions</span>
@@ -147,6 +164,12 @@ export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
                   </TableCell>
                   <TableCell>
                     <PlanBits row={row} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {numberFormatter.format(row.questionsAttempted)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {numberFormatter.format(row.testsCount)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {dateFormatter.format(new Date(row.profile.created_at))}
