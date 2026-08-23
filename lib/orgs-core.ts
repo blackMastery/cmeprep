@@ -126,6 +126,31 @@ export function orgGrantHolds(
   return orgSubscriptionState(subs, now) !== "locked";
 }
 
+/**
+ * Why an org-covered start was refused, in words a MEMBER can act on.
+ * "Your subscription doesn't include that examination" is actively wrong
+ * for an assignment: the member never chose the exam and cannot buy their
+ * way in — the org did, or didn't. Distinguishes never-paid from lapsed
+ * from suspended so the member knows whether to nag their org-admin or
+ * just wait for a renewal.
+ */
+export function orgDeniedMessage(
+  org: { suspended_at: string | null; subs: readonly SubscriptionLike[] },
+  now: Date
+): string {
+  if (org.suspended_at !== null) {
+    return "Your organisation's account is suspended, so organisation access is paused.";
+  }
+  if (org.subs.length === 0) {
+    return "Your organisation hasn't purchased a plan yet — ask your organisation admin to choose one.";
+  }
+  if (orgSubscriptionState(org.subs, now) === "locked") {
+    return "Your organisation's plan has ended — access is paused until it renews.";
+  }
+  // Org is active/grace but this exam isn't among what it bought.
+  return "Your organisation's plan doesn't include this examination.";
+}
+
 /** An invite row as the seat and acceptance rules see it. */
 export type InviteLike = {
   expires_at: string;

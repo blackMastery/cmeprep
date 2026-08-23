@@ -10,6 +10,7 @@ import {
   maskEmail,
   memberReadiness,
   mondayOf,
+  orgDeniedMessage,
   orgExamAlerts,
   orgGraceEnd,
   orgGrantHolds,
@@ -148,6 +149,41 @@ describe("orgGrantHolds", () => {
 
   it("does not grant once locked", () => {
     expect(orgGrantHolds({ suspended_at: null }, [sub(PAST)], NOW)).toBe(false);
+  });
+});
+
+describe("orgDeniedMessage", () => {
+  it("says the org has never paid when no subscription exists", () => {
+    expect(
+      orgDeniedMessage({ suspended_at: null, subs: [] }, NOW)
+    ).toMatch(/hasn't purchased a plan yet/);
+  });
+
+  it("says the plan ended for a lapsed-past-grace org", () => {
+    expect(
+      orgDeniedMessage({ suspended_at: null, subs: [sub(PAST)] }, NOW)
+    ).toMatch(/plan has ended/);
+  });
+
+  it("suspension trumps billing state", () => {
+    // Even a live subscription: suspension is the platform kill switch.
+    expect(
+      orgDeniedMessage({ suspended_at: PAST, subs: [sub(FUTURE)] }, NOW)
+    ).toMatch(/suspended/);
+  });
+
+  it("falls back to exam coverage for an active org", () => {
+    // The org pays, but this exam isn't among its per-exam purchases.
+    expect(
+      orgDeniedMessage({ suspended_at: null, subs: [sub(FUTURE)] }, NOW)
+    ).toMatch(/doesn't include this examination/);
+  });
+
+  it("treats a grace-period org as still covered, not lapsed", () => {
+    // Grace rows still grant, so a denial then can only be exam coverage.
+    expect(
+      orgDeniedMessage({ suspended_at: null, subs: [sub(IN_GRACE)] }, NOW)
+    ).toMatch(/doesn't include this examination/);
   });
 });
 

@@ -8,13 +8,18 @@ import {
   startPlanGoalSchema,
   uuid,
 } from "@/lib/validation";
-import { examAccessFrom } from "@/lib/entitlements";
+import { examAccessFrom, orgGrantContextFrom } from "@/lib/entitlements";
 import {
   canAccessExam,
   consumesTrialCredit,
   maxQuestionsFor,
 } from "@/lib/entitlements-core";
-import { countsTowardDeptAssignment, guyanaDay, mondayOf } from "@/lib/orgs-core";
+import {
+  countsTowardDeptAssignment,
+  guyanaDay,
+  mondayOf,
+  orgDeniedMessage,
+} from "@/lib/orgs-core";
 import {
   pickSessionQuestions,
   prescriptionForGoal,
@@ -253,11 +258,19 @@ export async function POST(request: Request) {
     admin.from("exams").select("id, org_id").eq("id", examId).maybeSingle(),
   ]);
   if (!exam || !canAccessExam(access, { id: exam.id, orgId: exam.org_id })) {
+    // Default copy assumes a personal purchase is the fix. When the block is
+    // org-shaped — an assignment (the ORG chose this exam), or the caller's
+    // own org's private bank — say what the org's billing state actually is
+    // instead, so members don't go looking for a plan they can't buy.
+    let message = "Your subscription doesn't include that examination.";
+    if (exam && (assignment || exam.org_id !== null)) {
+      const orgCtx = await orgGrantContextFrom(admin, user.id);
+      if (orgCtx && (exam.org_id === null || exam.org_id === orgCtx.org_id)) {
+        message = orgDeniedMessage(orgCtx, new Date());
+      }
+    }
     return NextResponse.json(
-      {
-        error: "exam_locked",
-        message: "Your subscription doesn't include that examination.",
-      },
+      { error: "exam_locked", message },
       { status: 403 }
     );
   }
