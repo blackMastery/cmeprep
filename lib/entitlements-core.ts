@@ -213,11 +213,12 @@ export function consumesTrialCredit(
 /**
  * Trial sessions are capped at this many questions. A trial credit buys a
  * taste of the bank, not a full-length paper: with the default two credits
- * a trial sees 10 questions in total, never 200. Stated once: /api/tests
- * clamps to it and the wizard offers only this size. Org-covered exams are
- * unmetered and so uncapped (the org paid) — see consumesTrialCredit.
+ * a trial sees 20 questions in total, never 200. Stated once: /api/tests
+ * clamps to it and the wizard locks larger sizes behind the upsell.
+ * Org-covered exams are unmetered and so uncapped (the org paid) — see
+ * consumesTrialCredit.
  */
-export const TRIAL_MAX_QUESTIONS = 5;
+export const TRIAL_MAX_QUESTIONS = 10;
 
 /** Largest session a request may ask for, given whether it rides the trial. */
 export function maxQuestionsFor(consumesTrial: boolean, requested: number): number {

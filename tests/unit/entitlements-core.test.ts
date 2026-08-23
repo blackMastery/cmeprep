@@ -546,10 +546,10 @@ describe("expiryWarnings", () => {
 
 describe("maxQuestionsFor", () => {
   it("clamps metered sessions to TRIAL_MAX_QUESTIONS", () => {
-    expect(TRIAL_MAX_QUESTIONS).toBe(5);
-    expect(maxQuestionsFor(true, 60)).toBe(5);
+    expect(TRIAL_MAX_QUESTIONS).toBe(10);
+    expect(maxQuestionsFor(true, 60)).toBe(10);
+    expect(maxQuestionsFor(true, 10)).toBe(10);
     expect(maxQuestionsFor(true, 5)).toBe(5);
-    expect(maxQuestionsFor(true, 3)).toBe(3);
   });
   it("leaves unmetered sessions alone", () => {
     expect(maxQuestionsFor(false, 60)).toBe(60);
