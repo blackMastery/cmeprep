@@ -12,6 +12,8 @@ import { LockedExamRow } from "@/components/test/locked-exam-row";
 type WizardSubject = {
   id: string;
   name: string;
+  /** Published MCQs in this subject (0 hides it in exam/tutor mode). */
+  questionCount: number;
   /** Published OSCE stations in this subject (0 hides it in OSCE mode). */
   osceQuestionCount: number;
 };
@@ -146,16 +148,31 @@ export function NewTestWizard({
     return exam.osceLocked || exam.osceQuestionCount === 0;
   }
 
+  /** An exam that holds only OSCE stations is a dead end for exam/tutor
+   * mode — /api/tests deals MCQs only there and would 422 at the last step.
+   * Mirrors examBlockedForOsce so both directions are explained up front. */
+  function examBlockedForMcq(exam: WizardExam) {
+    return exam.questionCount === 0;
+  }
+
+  /** The count that matters for the chosen mode: the candidate filter in
+   * /api/tests is type-exclusive both ways, so a subject with only stations
+   * is empty to exam/tutor mode and vice versa. */
+  function subjectCountFor(subject: WizardSubject) {
+    return osceMode ? subject.osceQuestionCount : subject.questionCount;
+  }
+
   /** Subjects of the chosen exam, grouped by specialty for the headings.
-   * OSCE mode only offers subjects that actually have stations. */
+   * Each mode only offers subjects that actually have questions of its
+   * type — exams may legitimately mix MCQs and stations. */
   const specialtyGroups = useMemo(
     () =>
       (selectedExam?.specialties ?? [])
         .map((sp) => ({
           ...sp,
-          subjects: osceMode
-            ? sp.subjects.filter((s) => s.osceQuestionCount > 0)
-            : sp.subjects,
+          subjects: sp.subjects.filter((s) =>
+            osceMode ? s.osceQuestionCount > 0 : s.questionCount > 0
+          ),
         }))
         .filter((sp) => sp.subjects.length > 0),
     [selectedExam, osceMode]
@@ -185,21 +202,25 @@ export function NewTestWizard({
       setDurationMin(Math.max(5, Math.round(fallback * 1.5)));
     }
 
-    if (next !== "osce") return;
-    // Prior selections may be invalid in OSCE mode (paid-only exam, subjects
-    // without stations).
-    if (selectedExam && examBlockedForOsce(selectedExam)) {
+    // Prior selections may be invalid in the new mode: a paid-only or
+    // stations-less exam for OSCE, an OSCE-only exam for exam/tutor, and
+    // subjects with no questions of the new type either way.
+    const osce = next === "osce";
+    if (
+      selectedExam &&
+      (osce ? examBlockedForOsce(selectedExam) : examBlockedForMcq(selectedExam))
+    ) {
       setExamId(null);
       setSubjectIds([]);
       return;
     }
-    const withStations = new Set(
+    const offered = new Set(
       (selectedExam?.specialties ?? [])
         .flatMap((sp) => sp.subjects)
-        .filter((s) => s.osceQuestionCount > 0)
+        .filter((s) => (osce ? s.osceQuestionCount : s.questionCount) > 0)
         .map((s) => s.id)
     );
-    setSubjectIds((prev) => prev.filter((id) => withStations.has(id)));
+    setSubjectIds((prev) => prev.filter((id) => offered.has(id)));
   }
 
   async function start() {
@@ -242,7 +263,9 @@ export function NewTestWizard({
   const examReady =
     selectedExam !== null &&
     !selectedExam.locked &&
-    (!osceMode || !examBlockedForOsce(selectedExam));
+    (osceMode
+      ? !examBlockedForOsce(selectedExam)
+      : !examBlockedForMcq(selectedExam));
 
   const canAdvance =
     currentStep === "Mode"
@@ -387,7 +410,7 @@ export function NewTestWizard({
                           : null
                       }
                     />
-                  ) : osceMode && e.osceQuestionCount === 0 ? (
+                  ) : (osceMode ? e.osceQuestionCount : e.questionCount) === 0 ? (
                     <div
                       key={e.id}
                       className="flex items-center gap-3 rounded-xl border border-border px-4 py-3.5 opacity-60"
@@ -401,7 +424,13 @@ export function NewTestWizard({
                           {e.name}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          No OSCE stations yet
+                          {osceMode
+                            ? e.questionCount > 0
+                              ? "No OSCE stations yet — switch to Tutor or Exam mode for its questions"
+                              : "No OSCE stations yet"
+                            : e.osceQuestionCount > 0
+                              ? "OSCE stations only — switch to OSCE stations mode"
+                              : "No questions published yet"}
                         </span>
                       </span>
                     </div>
@@ -436,18 +465,18 @@ export function NewTestWizard({
                         <span className="block font-medium wrap-break-word">
                           {e.name}
                         </span>
+                        {/* Both counts in every mode: an exam may mix MCQs
+                            and stations, and the split tells the student
+                            what each mode will deal. */}
                         <span className="block text-xs text-muted-foreground">
-                          {osceMode ? (
+                          {e.subjectCount} subject
+                          {e.subjectCount === 1 ? "" : "s"} ·{" "}
+                          {e.questionCount.toLocaleString()} question
+                          {e.questionCount === 1 ? "" : "s"}
+                          {e.osceQuestionCount > 0 && (
                             <>
-                              {e.osceQuestionCount.toLocaleString()} OSCE station
-                              {e.osceQuestionCount === 1 ? "" : "s"}
-                            </>
-                          ) : (
-                            <>
-                              {e.subjectCount} subject
-                              {e.subjectCount === 1 ? "" : "s"} ·{" "}
-                              {e.questionCount.toLocaleString()} question
-                              {e.questionCount === 1 ? "" : "s"}
+                              {" "}· {e.osceQuestionCount.toLocaleString()} OSCE
+                              station{e.osceQuestionCount === 1 ? "" : "s"}
                             </>
                           )}
                         </span>
@@ -490,11 +519,7 @@ export function NewTestWizard({
                         {sp.subjects.map((s) => (
                           <Chip
                             key={s.id}
-                            label={
-                              osceMode
-                                ? `${s.name} (${s.osceQuestionCount})`
-                                : s.name
-                            }
+                            label={`${s.name} (${subjectCountFor(s)})`}
                             selected={subjectIds.includes(s.id)}
                             onClick={() =>
                               setSubjectIds(toggle(subjectIds, s.id))
@@ -510,9 +535,7 @@ export function NewTestWizard({
                   {examSubjects.map((s) => (
                     <Chip
                       key={s.id}
-                      label={
-                        osceMode ? `${s.name} (${s.osceQuestionCount})` : s.name
-                      }
+                      label={`${s.name} (${subjectCountFor(s)})`}
                       selected={subjectIds.includes(s.id)}
                       onClick={() => setSubjectIds(toggle(subjectIds, s.id))}
                     />
@@ -524,8 +547,10 @@ export function NewTestWizard({
                 <p className="text-sm text-muted-foreground">
                   {osceMode
                     ? "No OSCE stations have been published yet"
-                    : "No subjects have been published yet"}
+                    : "No questions have been published yet"}
                   {selectedExam ? ` for ${selectedExam.name}` : ""}.
+                  {!osceMode && (selectedExam?.osceQuestionCount ?? 0) > 0 &&
+                    " Switch to OSCE stations mode to practise its stations."}
                 </p>
               )}
             </fieldset>
@@ -604,6 +629,13 @@ export function NewTestWizard({
               locked/greyed row, but it does not exist when the catalogue has
               a single exam — without this the wizard would just refuse to
               start and say nothing. */}
+          {!osceMode && selectedExam && examBlockedForMcq(selectedExam) && (
+            <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
+              {selectedExam.osceQuestionCount > 0
+                ? `${selectedExam.name} only has OSCE stations so far — switch to OSCE stations mode to practise them.`
+                : `No questions have been published for ${selectedExam.name} yet.`}
+            </p>
+          )}
           {osceMode && selectedExam && examBlockedForOsce(selectedExam) && (
             <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
               {selectedExam.osceLocked ? (

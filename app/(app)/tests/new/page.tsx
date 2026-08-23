@@ -61,6 +61,7 @@ export default async function NewTestPage() {
       subjects: specialty.subjects.map((subject) => ({
         id: subject.id,
         name: subject.name,
+        questionCount: subject.questionCount,
         osceQuestionCount: osceCountBySubject.get(subject.id) ?? 0,
       })),
     }));
