@@ -63,7 +63,16 @@ export async function createOrgExam(
     })
     .select("id")
     .single();
-  if (error || !data) return { error: "Could not create the exam." };
+  if (error || !data) {
+    // Unique within the org (exams_org_name_key) — the one failure a user
+    // can actually act on, so name it rather than the generic fallback.
+    return {
+      error:
+        error?.code === "23505"
+          ? "You already have an exam with that name."
+          : "Could not create the exam.",
+    };
+  }
 
   await audit(
     session.user.id,
@@ -96,7 +105,14 @@ export async function renameOrgExam(
     .from("exams")
     .update({ name: name.data })
     .eq("id", id.data);
-  if (error) return { error: "Could not rename the exam." };
+  if (error) {
+    return {
+      error:
+        error.code === "23505"
+          ? "You already have an exam with that name."
+          : "Could not rename the exam.",
+    };
+  }
 
   await audit(
     session.user.id,
