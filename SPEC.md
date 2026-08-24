@@ -427,6 +427,24 @@ Two grant paths from day one, both idempotent, both landing in
 - Assignments are hidden (not deleted) when the org locks; soft-delete for
   admin removal. Removing a member removes them from target lists implicitly
   (membership join).
+- **Editing** (`updateAssignment`; rules in `lib/orgs-core.ts`):
+  - The prescription (exam, subjects, difficulty, length, mode, timer) is
+    **locked once any member has a test on the assignment** — launched tests
+    snapshot the config, so a change would not break them, it would make the
+    report show one title over completions of different tests. Title,
+    instructions, due date and audience stay editable.
+  - An edit may **never un-address someone who has already started**
+    (`unaddressedByEdit`): their completion would vanish from the report and
+    the assignment from their list. Narrowing the audience or moving to a
+    department that excludes an attempt-holder is refused.
+  - Due-date moves follow **live** semantics: `assignmentStatus` judges late
+    against the current deadline, and department cohorts against
+    `department_changed_at < due_at`. Both directions are allowed; the audit
+    row records from/to and the form says so.
+  - `updated_at` is an optimistic-concurrency token (form → action → pinned
+    UPDATE), and the member list shows "Updated" when it differs from
+    `created_at` — the only signal a member gets, since there is no
+    notification channel.
 
 ---
 

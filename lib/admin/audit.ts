@@ -112,6 +112,9 @@ export type AuditAction =
   | "org_subscription.update"
   | "org_subscription.cancel"
   | "org.assignment_create"
+  // meta.changes is a per-field {from,to} diff — an edit can flip members'
+  // late/overdue standing, and this row is how an admin explains why.
+  | "org.assignment_update"
   | "org.assignment_delete"
   // Courses (course-spec.md). Structure edits are frequent while authoring,
   // so lesson/question saves audit as one row per save, not per field;

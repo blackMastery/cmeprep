@@ -67,6 +67,18 @@ export default async function OrgAssignmentsPage() {
     label: row.profile?.full_name ?? row.email ?? row.member.user_id,
   }));
 
+  // Names for the locked-config summary come from the full tree, not the
+  // entitlement-filtered `exams`: a lapsed plan must not turn a locked
+  // assignment's exam into "Unknown" on the edit form.
+  const examName = new Map(tree.map((exam) => [exam.id, exam.name]));
+  const subjectName = new Map(
+    tree.flatMap((exam) =>
+      exam.specialties.flatMap((sp) =>
+        sp.subjects.map((s) => [s.id, `${sp.name} · ${s.name}`] as const)
+      )
+    )
+  );
+
   const rows: AssignmentRow[] = progress.map(
     ({
       assignment,
@@ -75,11 +87,24 @@ export default async function OrgAssignmentsPage() {
       late,
       completedTutor,
       departmentName,
+      started,
+      targetIds,
     }) => ({
       id: assignment.id,
       title: assignment.title,
+      description: assignment.description,
       dueAt: assignment.due_at,
+      updatedAt: assignment.updated_at,
       audience: assignment.audience,
+      departmentId: assignment.department_id,
+      targetIds,
+      examId: assignment.config.exam_id ?? "",
+      examName: examName.get(assignment.config.exam_id ?? "") ?? "Unknown exam",
+      subjectIds: assignment.config.subject_ids,
+      subjectNames: assignment.config.subject_ids.map(
+        (id) => subjectName.get(id) ?? "Removed subject"
+      ),
+      difficulty: assignment.config.difficulty,
       numQuestions: assignment.config.num_questions,
       mode: assignment.config.mode ?? "exam",
       durationMin:
@@ -91,6 +116,7 @@ export default async function OrgAssignmentsPage() {
       late,
       completedTutor,
       departmentName,
+      started,
     })
   );
 

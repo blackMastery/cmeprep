@@ -502,6 +502,9 @@ export type OrgAssignment = {
   department_id: string | null;
   created_by: string | null;
   created_at: string;
+  /** Optimistic-concurrency token for edits; equals created_at until the
+   * first edit, which is how the member list knows to say "updated". */
+  updated_at: string;
   deleted_at: string | null;
 };
 

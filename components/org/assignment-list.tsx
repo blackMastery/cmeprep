@@ -13,6 +13,9 @@ export type AssignmentListItem = {
   title: string;
   description: string | null;
   dueAt: string;
+  /** Set when the org edited the assignment after setting it — there is no
+   * notification channel, so this line is how a moved deadline is noticed. */
+  updatedAt: string | null;
   numQuestions: number;
   /** The org's prescribed mode; the member may start in the other one. */
   mode: "exam" | "tutor";
@@ -134,6 +137,11 @@ export function AssignmentList({ items }: { items: AssignmentListItem[] }) {
                 {item.description && (
                   <p className="text-sm text-muted-foreground">
                     {item.description}
+                  </p>
+                )}
+                {item.updatedAt && (
+                  <p className="text-xs text-sun-deep">
+                    Updated {longDate(item.updatedAt)} — check the due date.
                   </p>
                 )}
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

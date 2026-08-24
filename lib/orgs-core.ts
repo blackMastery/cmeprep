@@ -691,6 +691,158 @@ export function countsTowardDeptAssignment(
   return new Date(member.department_changed_at) < new Date(assignment.due_at);
 }
 
+// ── Assignment editing (SPEC §7 "Editing") ───────────────────
+
+/** The assignment fields an edit may touch. `config` is the same TestConfig
+ * shape the row stores; audience/target/department are the addressing. */
+export type AssignmentEdit = {
+  title: string;
+  description: string | null;
+  dueAt: string;
+  audience: "all" | "selected" | "department";
+  departmentId: string | null;
+  /** Target user ids when audience='selected'; ignored otherwise. */
+  targetIds: readonly string[];
+  config: {
+    subject_ids: readonly string[];
+    difficulty: string;
+    num_questions: number;
+    duration_sec?: number;
+    exam_id?: string;
+    mode?: string;
+  };
+};
+
+/**
+ * Did the edit change WHAT is prescribed (exam, subjects, length, difficulty,
+ * mode, timer) as opposed to who gets it or when? Subject order is not a
+ * change — the picker submits checkboxes in DOM order, which is not the
+ * order the row stored. A missing mode reads as "exam", matching the launch
+ * route's default, so re-saving a pre-mode row does not count as a change.
+ */
+export function assignmentConfigChanged(
+  before: AssignmentEdit["config"],
+  after: AssignmentEdit["config"]
+): boolean {
+  const subjects = (c: AssignmentEdit["config"]) =>
+    [...c.subject_ids].sort().join(",");
+  return (
+    (before.exam_id ?? null) !== (after.exam_id ?? null) ||
+    subjects(before) !== subjects(after) ||
+    before.difficulty !== after.difficulty ||
+    before.num_questions !== after.num_questions ||
+    (before.mode ?? "exam") !== (after.mode ?? "exam") ||
+    (before.duration_sec ?? null) !== (after.duration_sec ?? null)
+  );
+}
+
+/**
+ * Which members who have ALREADY started or finished this assignment would
+ * stop being addressed by it after the edit? The one hard rule of editing:
+ * an edit may never un-address someone with an attempt — their test keeps
+ * its assignment_id, but the RLS select would hide the assignment from them
+ * and listAssignmentProgress would drop their completion from the report,
+ * so finished work would silently vanish. Callers refuse the edit when this
+ * is non-empty. Department cohorts use the same rule as visibility
+ * (countsTowardDeptAssignment), against the NEW due date, since moving the
+ * deadline is itself what can move someone out of the cohort.
+ */
+export function unaddressedByEdit(
+  holders: readonly {
+    user_id: string;
+    department_id: string | null;
+    department_changed_at: string | null;
+  }[],
+  after: Pick<AssignmentEdit, "audience" | "departmentId" | "targetIds" | "dueAt">
+): string[] {
+  if (after.audience === "all") return [];
+  const targets = new Set(after.targetIds);
+  return holders
+    .filter((h) =>
+      after.audience === "selected"
+        ? !targets.has(h.user_id)
+        : !countsTowardDeptAssignment(h, {
+            department_id: after.departmentId,
+            due_at: after.dueAt,
+          })
+    )
+    .map((h) => h.user_id);
+}
+
+/**
+ * The refusal rules for an assignment edit, stated once so the action and
+ * vitest agree. Null means the edit may proceed.
+ *
+ *  - Content is locked once anyone has started: launched tests snapshot the
+ *    config, so a change would not break them — it would make the report
+ *    show one title over completions of different tests.
+ *  - Nobody with an attempt may be un-addressed (see unaddressedByEdit).
+ *
+ * Moving the due date is deliberately NOT refused, even backwards: status
+ * follows the live deadline (assignmentStatus), the audit row records the
+ * old and new values, and the form says so. Refusing it would leave
+ * "extend the deadline" — the most common edit — impossible.
+ */
+export function assignmentEditBlocker(input: {
+  configChanged: boolean;
+  startedCount: number;
+  unaddressed: number;
+}): string | null {
+  if (input.configChanged && input.startedCount > 0) {
+    const n = input.startedCount;
+    return (
+      `${n} member${n === 1 ? " has" : "s have"} already started this ` +
+      "assignment, so its exam, subjects, length, difficulty and mode are " +
+      "locked. You can still change the title, instructions, due date and " +
+      "who it goes to — or remove it and set a new one."
+    );
+  }
+  if (input.unaddressed > 0) {
+    const n = input.unaddressed;
+    return (
+      `${n} of the people you're removing ${n === 1 ? "has" : "have"} ` +
+      "already started or completed this assignment. Keep them in the " +
+      "audience, or remove the assignment instead."
+    );
+  }
+  return null;
+}
+
+/** Per-field {from,to} diff for the audit row — only fields that changed,
+ * so a no-op save writes an empty diff the reader can recognise as such.
+ * Target membership is reported as counts, not ids: the audit table is
+ * read by org-admins who already have the roster, and ids would only bloat
+ * the meta column. */
+export function assignmentChanges(
+  before: AssignmentEdit,
+  after: AssignmentEdit
+): {
+  changes: Record<string, { from: unknown; to: unknown }>;
+  targetsAdded: string[];
+  targetsRemoved: string[];
+} {
+  const out: Record<string, { from: unknown; to: unknown }> = {};
+  const scalar = (key: "title" | "description" | "dueAt" | "audience" | "departmentId") => {
+    if (before[key] !== after[key]) out[key] = { from: before[key], to: after[key] };
+  };
+  scalar("title");
+  scalar("description");
+  scalar("dueAt");
+  scalar("audience");
+  scalar("departmentId");
+  if (assignmentConfigChanged(before.config, after.config)) {
+    out.config = { from: before.config, to: after.config };
+  }
+  const b = new Set(before.audience === "selected" ? before.targetIds : []);
+  const a = new Set(after.audience === "selected" ? after.targetIds : []);
+  const targetsAdded = [...a].filter((id) => !b.has(id));
+  const targetsRemoved = [...b].filter((id) => !a.has(id));
+  if (targetsAdded.length > 0 || targetsRemoved.length > 0) {
+    out.targets = { from: b.size, to: a.size };
+  }
+  return { changes: out, targetsAdded, targetsRemoved };
+}
+
 /** Rounded mean over the non-null values; null when none. Stated once —
  * orgHeadline and departmentSummaries must agree on the same numbers. */
 export function roundedMean(values: readonly (number | null)[]): number | null {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignmentChanges,
+  assignmentConfigChanged,
+  assignmentEditBlocker,
   assignmentStatus,
   countsTowardDeptAssignment,
   departmentSummaries,
@@ -26,6 +29,7 @@ import {
   type InviteLike,
   type MemberReadinessInput,
   type WeeklyModeBucket,
+  unaddressedByEdit,
 } from "@/lib/orgs-core";
 import type { SubscriptionLike } from "@/lib/subscriptions-core";
 
@@ -845,5 +849,145 @@ describe("maskEmail", () => {
   it("does not crash on garbage", () => {
     expect(maskEmail("not-an-email")).toBe("***");
     expect(maskEmail("@lost.local")).toBe("***");
+  });
+});
+
+describe("assignment editing", () => {
+  const CONFIG = {
+    exam_id: "exam-1",
+    subject_ids: ["s1", "s2"],
+    difficulty: "mixed",
+    num_questions: 20,
+    duration_sec: 1800,
+    mode: "exam",
+  };
+  const BASE = {
+    title: "Week 6 mock",
+    description: null,
+    dueAt: "2026-08-20T23:59:59Z",
+    audience: "all" as const,
+    departmentId: null,
+    targetIds: [],
+    config: CONFIG,
+  };
+
+  describe("assignmentConfigChanged", () => {
+    it("ignores subject order and a missing mode", () => {
+      expect(
+        assignmentConfigChanged(CONFIG, { ...CONFIG, subject_ids: ["s2", "s1"] })
+      ).toBe(false);
+      const noMode = { ...CONFIG, mode: undefined };
+      expect(assignmentConfigChanged(noMode, CONFIG)).toBe(false);
+    });
+
+    it("sees every prescribed field", () => {
+      expect(assignmentConfigChanged(CONFIG, { ...CONFIG, num_questions: 21 })).toBe(true);
+      expect(assignmentConfigChanged(CONFIG, { ...CONFIG, difficulty: "hard" })).toBe(true);
+      expect(assignmentConfigChanged(CONFIG, { ...CONFIG, exam_id: "exam-2" })).toBe(true);
+      expect(assignmentConfigChanged(CONFIG, { ...CONFIG, subject_ids: ["s1"] })).toBe(true);
+      const tutor = { ...CONFIG, mode: "tutor", duration_sec: undefined };
+      expect(assignmentConfigChanged(CONFIG, tutor)).toBe(true);
+      expect(assignmentConfigChanged(CONFIG, { ...CONFIG, duration_sec: 1860 })).toBe(true);
+    });
+  });
+
+  describe("unaddressedByEdit", () => {
+    const holders = [
+      { user_id: "u1", department_id: "d1", department_changed_at: "2026-08-01T00:00:00Z" },
+      { user_id: "u2", department_id: "d2", department_changed_at: "2026-08-01T00:00:00Z" },
+      { user_id: "u3", department_id: "d1", department_changed_at: "2026-08-25T00:00:00Z" },
+    ];
+
+    it("never un-addresses anyone when the audience is everyone", () => {
+      expect(unaddressedByEdit(holders, { ...BASE, audience: "all" })).toEqual([]);
+    });
+
+    it("lists attempt-holders dropped from a selected list", () => {
+      expect(
+        unaddressedByEdit(holders, {
+          ...BASE,
+          audience: "selected",
+          targetIds: ["u2"],
+        })
+      ).toEqual(["u1", "u3"]);
+    });
+
+    it("applies the department cohort rule against the NEW due date", () => {
+      // u2 is in another department; u3 moved into d1 after the deadline.
+      expect(
+        unaddressedByEdit(holders, {
+          ...BASE,
+          audience: "department",
+          departmentId: "d1",
+        })
+      ).toEqual(["u2", "u3"]);
+      // Extending the deadline past u3's move brings them into the cohort.
+      expect(
+        unaddressedByEdit(holders, {
+          ...BASE,
+          audience: "department",
+          departmentId: "d1",
+          dueAt: "2026-08-30T23:59:59Z",
+        })
+      ).toEqual(["u2"]);
+    });
+  });
+
+  describe("assignmentEditBlocker", () => {
+    it("locks the config once anyone has started", () => {
+      expect(
+        assignmentEditBlocker({ configChanged: true, startedCount: 0, unaddressed: 0 })
+      ).toBeNull();
+      expect(
+        assignmentEditBlocker({ configChanged: true, startedCount: 1, unaddressed: 0 })
+      ).toMatch(/1 member has already started/);
+      expect(
+        assignmentEditBlocker({ configChanged: false, startedCount: 5, unaddressed: 0 })
+      ).toBeNull();
+    });
+
+    it("refuses to un-address someone with an attempt", () => {
+      expect(
+        assignmentEditBlocker({ configChanged: false, startedCount: 2, unaddressed: 2 })
+      ).toMatch(/2 of the people you're removing have already/);
+    });
+  });
+
+  describe("assignmentChanges", () => {
+    it("writes an empty diff for a no-op save", () => {
+      const result = assignmentChanges(BASE, { ...BASE });
+      expect(result.changes).toEqual({});
+      expect(result.targetsAdded).toEqual([]);
+      expect(result.targetsRemoved).toEqual([]);
+    });
+
+    it("records from/to per changed field and the target churn", () => {
+      const before = { ...BASE, audience: "selected" as const, targetIds: ["u1", "u2"] };
+      const after = {
+        ...before,
+        title: "Week 7 mock",
+        dueAt: "2026-08-27T23:59:59Z",
+        targetIds: ["u2", "u3"],
+        config: { ...CONFIG, num_questions: 30 },
+      };
+      const result = assignmentChanges(before, after);
+      expect(result.changes.title).toEqual({ from: "Week 6 mock", to: "Week 7 mock" });
+      expect(result.changes.dueAt).toEqual({
+        from: "2026-08-20T23:59:59Z",
+        to: "2026-08-27T23:59:59Z",
+      });
+      expect(result.changes.config).toEqual({ from: CONFIG, to: after.config });
+      expect(result.changes.targets).toEqual({ from: 2, to: 2 });
+      expect(result.targetsAdded).toEqual(["u3"]);
+      expect(result.targetsRemoved).toEqual(["u1"]);
+      expect(result.changes.description).toBeUndefined();
+    });
+
+    it("treats leaving a selected audience as removing every target", () => {
+      const before = { ...BASE, audience: "selected" as const, targetIds: ["u1"] };
+      const result = assignmentChanges(before, { ...before, audience: "all", targetIds: [] });
+      expect(result.changes.audience).toEqual({ from: "selected", to: "all" });
+      expect(result.targetsRemoved).toEqual(["u1"]);
+    });
   });
 });

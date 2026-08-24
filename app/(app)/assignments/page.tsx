@@ -26,6 +26,11 @@ export default async function AssignmentsPage() {
     title: row.assignment.title,
     description: row.assignment.description,
     dueAt: row.assignment.due_at,
+    // Backfilled equal to created_at, so "edited" is exactly "differs".
+    updatedAt:
+      row.assignment.updated_at !== row.assignment.created_at
+        ? row.assignment.updated_at
+        : null,
     numQuestions: row.assignment.config.num_questions,
     mode: row.assignment.config.mode ?? "exam",
     durationMin:

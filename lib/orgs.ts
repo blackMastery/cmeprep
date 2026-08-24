@@ -398,6 +398,12 @@ export type AssignmentProgress = {
   /** For department audiences: the department's name, or null when it was
    * hard-deleted — render "Department deleted". Null on other audiences. */
   departmentName: string | null;
+  /** Distinct members with ANY test on this assignment, submitted or not.
+   * Non-zero locks the prescription against edits (assignmentEditBlocker). */
+  started: number;
+  /** Current target user ids (audience='selected' only) — the edit form's
+   * pre-ticked members. */
+  targetIds: string[];
 };
 
 /** Per-assignment completion counts for the org-admin list. */
@@ -424,8 +430,7 @@ export async function listAssignmentProgress(
         .select(
           "assignment_id, user_id, submitted_at, status, mode, total_questions, answered_questions"
         )
-        .in("assignment_id", ids)
-        .eq("status", "submitted"),
+        .in("assignment_id", ids),
     ]);
 
   // Department cohorts need each member's department_id + changed_at, plus
@@ -457,9 +462,21 @@ export async function listAssignmentProgress(
     }
   }
 
-  const targetCount = new Map<string, number>();
+  const targetIdsOf = new Map<string, string[]>();
   for (const t of targets ?? []) {
-    targetCount.set(t.assignment_id, (targetCount.get(t.assignment_id) ?? 0) + 1);
+    const list = targetIdsOf.get(t.assignment_id) ?? [];
+    list.push(t.user_id);
+    targetIdsOf.set(t.assignment_id, list);
+  }
+
+  // Every status counts as "started" — an in-progress attempt is enough to
+  // lock the config, since that member's test already snapshotted it.
+  const startedBy = new Map<string, Set<string>>();
+  for (const t of tests ?? []) {
+    if (!t.assignment_id) continue;
+    const set = startedBy.get(t.assignment_id) ?? new Set<string>();
+    set.add(t.user_id);
+    startedBy.set(t.assignment_id, set);
   }
 
   // One completion per member per assignment; latest QUALIFYING submission
@@ -471,6 +488,8 @@ export async function listAssignmentProgress(
   >();
   for (const t of tests ?? []) {
     if (!t.assignment_id || !t.submitted_at) continue;
+    // qualifies… also requires status='submitted', which the read above no
+    // longer filters on (it now feeds `started` too).
     if (!qualifiesAsAssignmentCompletion(t)) continue;
     const perUser =
       submittedBy.get(t.assignment_id) ??
@@ -514,7 +533,7 @@ export async function listAssignmentProgress(
           ? (memberCount ?? 0)
           : cohort !== null
             ? cohort.size
-            : (targetCount.get(assignment.id) ?? 0),
+            : (targetIdsOf.get(assignment.id)?.length ?? 0),
       completed,
       late,
       completedTutor,
@@ -522,6 +541,8 @@ export async function listAssignmentProgress(
         assignment.department_id !== null
           ? (departmentName.get(assignment.department_id) ?? null)
           : null,
+      started: startedBy.get(assignment.id)?.size ?? 0,
+      targetIds: targetIdsOf.get(assignment.id) ?? [],
     };
   });
 }
