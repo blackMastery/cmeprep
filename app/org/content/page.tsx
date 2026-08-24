@@ -9,7 +9,7 @@ import { ReportsLink } from "@/components/admin/question-reports-page";
 import { Button } from "@/components/ui/button";
 import { OrgExamCards, type OrgExamCard } from "@/components/org/exam-cards";
 
-export const metadata: Metadata = { title: "Organisation content" };
+export const metadata: Metadata = { title: "Content" };
 
 export default async function OrgContentPage() {
   const session = await requireOrgAdmin();

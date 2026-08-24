@@ -15,7 +15,7 @@ import {
   type MemberOption,
 } from "@/components/org/assignments-manager";
 
-export const metadata: Metadata = { title: "Organisation assignments" };
+export const metadata: Metadata = { title: "Assignments" };
 
 export default async function OrgAssignmentsPage() {
   const session = await requireOrgAdmin();

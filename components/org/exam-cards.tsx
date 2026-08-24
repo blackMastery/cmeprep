@@ -3,8 +3,8 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus } from "lucide-react";
-import { createOrgExam } from "@/app/(app)/org/(manage)/content/actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import { createOrgExam } from "@/app/org/content/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,

@@ -13,7 +13,7 @@ import { QuestionsTable } from "@/components/admin/questions-table";
 import { QuestionFilters } from "@/components/admin/question-filters";
 import { ExportButton } from "@/components/admin/export-button";
 
-export const metadata: Metadata = { title: "Organisation questions" };
+export const metadata: Metadata = { title: "Questions" };
 
 const BASE = "/org/content/questions";
 

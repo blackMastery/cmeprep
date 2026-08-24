@@ -16,7 +16,7 @@ import {
   type MemberItem,
 } from "@/components/org/members-manager";
 
-export const metadata: Metadata = { title: "Organisation members" };
+export const metadata: Metadata = { title: "Members" };
 
 export default async function OrgMembersPage() {
   const session = await requireOrgAdmin();

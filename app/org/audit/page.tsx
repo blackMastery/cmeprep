@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export const metadata: Metadata = { title: "Organisation audit log" };
+export const metadata: Metadata = { title: "Audit log" };
 
 const PAGE = 100;
 

@@ -13,7 +13,7 @@ import {
   type AssignmentEdit,
 } from "@/lib/orgs-core";
 import { orgAssignmentSchema, uuid } from "@/lib/validation";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import type { OrgAssignment, TestConfig } from "@/lib/supabase/types";
 import { z } from "zod";
 

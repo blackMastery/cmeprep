@@ -41,7 +41,7 @@ const ADMIN_ITEM: SideNavItem = {
 };
 
 const ORG_ITEM: SideNavItem = {
-  href: "/org/members",
+  href: "/org",
   label: "Organisation",
   icon: Building2,
 };

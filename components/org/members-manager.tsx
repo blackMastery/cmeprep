@@ -10,8 +10,8 @@ import {
   revokeInvite,
   setMemberRole,
   type OrgActionState,
-} from "@/app/(app)/org/(manage)/members/actions";
-import { setMemberDepartment } from "@/app/(app)/org/(manage)/members/department-actions";
+} from "@/app/org/members/actions";
+import { setMemberDepartment } from "@/app/org/members/department-actions";
 import {
   AdminSelect,
   AdminSubmit,

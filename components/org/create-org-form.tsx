@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { createOrg } from "@/app/(app)/org/new/actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import { AdminField } from "@/components/admin/form-parts";
 import { FormMessage, SubmitButton } from "@/components/auth/form-parts";
 

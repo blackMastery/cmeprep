@@ -21,7 +21,7 @@ import { ExamChoice } from "@/components/checkout/exam-choice";
 import { ExamDetailPanel } from "@/components/checkout/exam-detail-panel";
 import { OrgPayPalButtons } from "@/components/org/org-paypal-buttons";
 
-export const metadata: Metadata = { title: "Organisation billing" };
+export const metadata: Metadata = { title: "Billing" };
 
 function longDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {

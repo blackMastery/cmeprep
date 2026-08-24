@@ -11,7 +11,7 @@ import {
 } from "@/lib/storage";
 import { orgExamDateSchema, orgNameSchema } from "@/lib/validation";
 import { listOrgEntitledExams } from "@/lib/orgs";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 
 /** requireOrgAdmin() first, outside try/catch — house rule. */
 

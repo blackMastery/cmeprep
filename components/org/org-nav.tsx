@@ -1,53 +1,41 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import {
+  ClipboardList,
+  CreditCard,
+  History,
+  LayoutDashboard,
+  ListChecks,
+  Settings,
+  Users,
+} from "lucide-react";
+import {
+  MobileNavSheet,
+  Sidebar,
+  type SideNavItem,
+} from "@/components/side-nav";
 
 /**
- * Horizontal tabs for the org-admin area. Grows a tab per shipped SPEC
- * section (dashboard, assignments, content, audit, settings).
+ * Navigation for the org-admin area, one item per shipped SPEC section. The
+ * shared side-nav matches on the LONGEST href prefix, so "/org" yields to
+ * "/org/content" on nested content pages without an exact-match special case.
  */
-const TABS: readonly { href: string; label: string }[] = [
-  { href: "/org", label: "Dashboard" },
-  { href: "/org/members", label: "Members" },
-  { href: "/org/assignments", label: "Assignments" },
-  { href: "/org/content", label: "Content" },
-  { href: "/org/billing", label: "Billing" },
-  { href: "/org/audit", label: "Audit" },
-  { href: "/org/settings", label: "Settings" },
+const ORG_NAV_ITEMS: readonly SideNavItem[] = [
+  { href: "/org", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/org/members", label: "Members", icon: Users },
+  { href: "/org/assignments", label: "Assignments", icon: ClipboardList },
+  { href: "/org/content", label: "Content", icon: ListChecks },
+  { href: "/org/billing", label: "Billing", icon: CreditCard },
+  { href: "/org/audit", label: "Audit", icon: History },
+  { href: "/org/settings", label: "Settings", icon: Settings },
 ];
 
-export function OrgNav() {
-  const pathname = usePathname();
+/** Desktop rail for the org-admin area. */
+export function OrgSidebar() {
+  return <Sidebar items={ORG_NAV_ITEMS} />;
+}
 
-  return (
-    <nav
-      aria-label="Organisation"
-      className="flex gap-1 overflow-x-auto border-b border-border"
-    >
-      {TABS.map((tab) => {
-        // "/org" would prefix-match every tab; it alone is exact.
-        const active =
-          tab.href === "/org"
-            ? pathname === "/org"
-            : pathname.startsWith(tab.href);
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+/** Hamburger + sheet for narrow screens. */
+export function OrgMobileNav() {
+  return <MobileNavSheet items={ORG_NAV_ITEMS} logoHref="/org" />;
 }

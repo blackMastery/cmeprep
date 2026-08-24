@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { listOrgEntitledExams, requireOrgAdmin } from "@/lib/orgs";
 import { OrgSettingsForm } from "@/components/org/org-settings-form";
 
-export const metadata: Metadata = { title: "Organisation settings" };
+export const metadata: Metadata = { title: "Settings" };
 
 export default async function OrgSettingsPage() {
   const session = await requireOrgAdmin();

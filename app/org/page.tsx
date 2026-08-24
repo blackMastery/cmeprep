@@ -42,7 +42,7 @@ import {
   ReasonChips,
 } from "@/components/org/readiness-badges";
 
-export const metadata: Metadata = { title: "Organisation dashboard" };
+export const metadata: Metadata = { title: "Dashboard" };
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {

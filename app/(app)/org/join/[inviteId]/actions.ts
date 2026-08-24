@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
 import { uuid } from "@/lib/validation";
 import type { OrgInvite } from "@/lib/supabase/types";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 
 /**
  * Accepting is the one org mutation a NON-admin performs, so the guard is

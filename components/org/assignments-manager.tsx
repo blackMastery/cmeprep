@@ -6,8 +6,8 @@ import {
   createAssignment,
   deleteAssignment,
   updateAssignment,
-} from "@/app/(app)/org/(manage)/assignments/actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+} from "@/app/org/assignments/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import {
   AdminField,
   AdminSelect,

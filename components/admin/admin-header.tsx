@@ -1,19 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, LogOut, User as UserIcon, UserRound } from "lucide-react";
-import { logout } from "@/app/(auth)/actions";
+import { ArrowLeft } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
+import { AccountMenu } from "@/components/app/account-menu";
 import { AdminMobileNav, type AdminNavBadges } from "@/components/admin/admin-nav";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 export function AdminHeader({
   user,
@@ -44,41 +36,7 @@ export function AdminHeader({
               leaving /admin first, and the address the header used to print
               was hidden below lg — so on a phone you could not even tell
               which account you were administering as. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Account menu">
-                <UserIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <span className="block truncate font-medium">
-                  {user.profile.full_name ?? "Your account"}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {user.email}
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/profile" className="flex items-center gap-2">
-                  <UserRound className="size-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <form action={logout} className="w-full">
-                  <button
-                    type="submit"
-                    className="flex w-full items-center gap-2"
-                  >
-                    <LogOut className="size-4" />
-                    Log out
-                  </button>
-                </form>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <AccountMenu user={user} />
         </div>
       </div>
     </header>

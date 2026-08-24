@@ -6,7 +6,7 @@ import { getOrgMembership } from "@/lib/orgs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
 import { orgNameSchema } from "@/lib/validation";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 
 /**
  * Path A, step one (SPEC §5): the org exists BEFORE any money moves, so the

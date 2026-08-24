@@ -21,7 +21,7 @@ export default async function NewOrgPage() {
   const membership = await getOrgMembership(user.id);
   if (membership) {
     redirect(
-      membership.membership.role === "admin" ? "/org/members" : "/dashboard"
+      membership.membership.role === "admin" ? "/org" : "/dashboard"
     );
   }
 

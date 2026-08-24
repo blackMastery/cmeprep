@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { FormMessage, SubmitButton } from "@/components/auth/form-parts";
 import { acceptInvite } from "@/app/(app)/org/join/[inviteId]/actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 
 /**
  * The acceptable-invite happy path. Dead invites (revoked/expired/mismatch)

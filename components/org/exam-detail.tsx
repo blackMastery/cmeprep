@@ -12,8 +12,8 @@ import {
   renameOrgExam,
   renameOrgSpecialty,
   renameOrgSubject,
-} from "@/app/(app)/org/(manage)/content/actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+} from "@/app/org/content/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

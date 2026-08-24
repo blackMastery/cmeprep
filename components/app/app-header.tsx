@@ -1,20 +1,9 @@
-import Link from "next/link";
-import { LogOut, User as UserIcon, UserRound } from "lucide-react";
-import { logout } from "@/app/(auth)/actions";
 import type { SessionUser } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/format";
+import { AccountMenu } from "@/components/app/account-menu";
 import { MobileNav } from "@/components/app/app-nav";
 import { Logo } from "@/components/brand/logo";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 
 export function AppHeader({
@@ -62,47 +51,7 @@ export function AppHeader({
           </Badge>
 
           <ThemeToggle />
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Account menu">
-                <UserIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <span className="block truncate font-medium">
-                  {profile.full_name ?? "Your account"}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {user.email}
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {profile.role === "trial" && (
-                <DropdownMenuItem disabled className="text-xs">
-                  Trials used: {profile.trials_used}/{profile.trials_limit}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem asChild>
-                <Link href="/profile" className="flex items-center gap-2">
-                  <UserRound className="size-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <form action={logout} className="w-full">
-                  <button
-                    type="submit"
-                    className="flex w-full items-center gap-2"
-                  >
-                    <LogOut className="size-4" />
-                    Log out
-                  </button>
-                </form>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <AccountMenu user={user} />
         </div>
       </div>
     </header>

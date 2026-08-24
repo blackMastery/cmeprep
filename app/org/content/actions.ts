@@ -11,7 +11,7 @@ import {
   subjectInScope,
 } from "@/lib/admin/content-scope";
 import { nextPosition } from "@/lib/admin/taxonomy";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import { uuid } from "@/lib/validation";
 import { z } from "zod";
 

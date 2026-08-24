@@ -5,8 +5,8 @@ import {
   createDepartment,
   deleteDepartment,
   renameDepartment,
-} from "@/app/(app)/org/(manage)/members/department-actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+} from "@/app/org/members/department-actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import { AdminField, AdminSubmit } from "@/components/admin/form-parts";
 import { FormMessage } from "@/components/auth/form-parts";
 import { Button } from "@/components/ui/button";

@@ -7,8 +7,8 @@ import {
   saveOrgLogo,
   updateOrgExamDate,
   updateOrgSettings,
-} from "@/app/(app)/org/(manage)/settings/actions";
-import type { OrgActionState } from "@/app/(app)/org/(manage)/members/actions";
+} from "@/app/org/settings/actions";
+import type { OrgActionState } from "@/app/org/members/actions";
 import { createClient } from "@/lib/supabase/client";
 import {
   ALLOWED_IMAGE_TYPES,
