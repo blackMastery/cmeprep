@@ -58,9 +58,11 @@ export function PastTests({ tests }: { tests: Test[] }) {
 
         <Table>
           <TableHeader>
+            {/* Questions hides on phones so the row fits without the
+                sideways scroll that hid Resume/View entirely. */}
             <TableRow>
               <TableHead>Date</TableHead>
-              <TableHead>Questions</TableHead>
+              <TableHead className="max-sm:hidden">Questions</TableHead>
               <TableHead>Score</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
@@ -75,7 +77,7 @@ export function PastTests({ tests }: { tests: Test[] }) {
                   <TableCell className="whitespace-nowrap">
                     {dateFormatter.format(new Date(test.started_at))}
                   </TableCell>
-                  <TableCell className="tabular-nums">
+                  <TableCell className="tabular-nums max-sm:hidden">
                     {test.total_questions}
                     {test.mode !== "exam" && (
                       <Badge variant="secondary" className="ml-2">

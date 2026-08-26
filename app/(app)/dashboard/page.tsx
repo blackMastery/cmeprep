@@ -227,11 +227,14 @@ export default async function DashboardPage() {
         />
       </div>
 
+      {/* min-w-0 on both columns: grid tracks otherwise grow to the
+          past-tests table's min-content width and push the page wider than
+          small viewports, defeating the table's own overflow-x scroll. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <PastTests tests={(tests ?? []) as Test[]} />
         </div>
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {planCard && <PlanCard data={planCard} />}
           {courseCard && <ContinueLearningCard data={courseCard} />}
           {ownReadiness && <ReadinessCard own={ownReadiness} />}

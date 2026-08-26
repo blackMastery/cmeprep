@@ -24,7 +24,13 @@ export function AppHeader({
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
       <div className="flex h-(--app-header-h) w-full items-center gap-2 px-4 sm:gap-4">
         <MobileNav user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
-        <Logo href="/dashboard" tagline="inline" />
+        <Logo
+          href="/dashboard"
+          tagline="inline"
+          /* The banner image already says "smarter prep"; the 7px text line
+             under it just crowded the 64px bar next to the menu button. */
+          taglineClassName="max-sm:hidden"
+        />
         {orgBrand && (
           <span className="hidden min-w-0 items-center gap-2 border-l border-border pl-3 sm:flex">
             {orgBrand.logoUrl && (

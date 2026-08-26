@@ -44,7 +44,10 @@ export default async function TutorPage() {
   if (!tutorApiUrl()) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-12">
-        <LockedCard message="The AI tutor isn't switched on yet. Check back shortly." />
+        <LockedCard
+          message="The AI tutor isn't switched on yet. Check back shortly."
+          showPlans={false}
+        />
       </div>
     );
   }
@@ -60,7 +63,14 @@ export default async function TutorPage() {
   );
 }
 
-function LockedCard({ message }: { message: string }) {
+function LockedCard({
+  message,
+  showPlans = true,
+}: {
+  message: string;
+  /** Off for the service-unconfigured state: a plan won't unlock it. */
+  showPlans?: boolean;
+}) {
   return (
     <Card className="[--card-spacing:--spacing(7)]">
       <CardContent className="space-y-5 text-center">
@@ -76,9 +86,11 @@ function LockedCard({ message }: { message: string }) {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-          <Button size="lg" asChild>
-            <Link href="/#pricing">View plans</Link>
-          </Button>
+          {showPlans && (
+            <Button size="lg" asChild>
+              <Link href="/#pricing">View plans</Link>
+            </Button>
+          )}
           <Button size="lg" variant="outline" asChild>
             <Link href="/dashboard">Back to dashboard</Link>
           </Button>

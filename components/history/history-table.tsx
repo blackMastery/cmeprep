@@ -42,11 +42,14 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
       <CardContent>
         <Table>
           <TableHeader>
+            {/* Questions and Status hide on phones: the table otherwise
+                out-scrolls the card and buries Resume/View off-screen.
+                Resume vs View still tells in-progress from finished. */}
             <TableRow>
               <TableHead>Date</TableHead>
-              <TableHead>Questions</TableHead>
+              <TableHead className="max-sm:hidden">Questions</TableHead>
               <TableHead>Score</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="max-sm:hidden">Status</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -62,7 +65,7 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                   <TableCell className="whitespace-nowrap">
                     {dateFormatter.format(new Date(test.started_at))}
                   </TableCell>
-                  <TableCell className="tabular-nums">
+                  <TableCell className="tabular-nums max-sm:hidden">
                     {test.total_questions}
                     {test.mode !== "exam" && (
                       <Badge variant="secondary" className="ml-2">
@@ -86,7 +89,7 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                             perfect full paper. */}
                         {test.mode !== "exam" &&
                           test.answered_questions != null && (
-                            <span className="ml-1.5 font-normal text-muted-foreground">
+                            <span className="ml-1.5 font-normal text-muted-foreground max-sm:hidden">
                               · {test.answered_questions}/{test.total_questions}{" "}
                               {test.mode === "osce" ? "graded" : "answered"}
                             </span>
@@ -94,7 +97,7 @@ export function HistoryTable({ tests }: { tests: Test[] }) {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-sm:hidden">
                     <Badge variant={badge.variant}>{badge.label}</Badge>
                   </TableCell>
                   <TableCell className="text-right">

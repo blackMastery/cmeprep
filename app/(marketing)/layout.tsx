@@ -18,9 +18,11 @@ export default async function MarketingLayout({
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 md:gap-6">
           <MarketingMobileNav loggedIn={Boolean(user)} />
+          {/* Tagline waits for lg: at md the five-link nav appears too, and
+              at 768px the pair collide — the tagline wraps over "Features". */}
           <Logo
             tagline="inline"
-            taglineClassName="max-md:hidden"
+            taglineClassName="max-lg:hidden"
           />
           <nav className="ml-auto hidden items-center gap-1 md:flex">
             <Button variant="ghost" size="sm" asChild>
