@@ -409,7 +409,9 @@ export async function POST(request: Request) {
         )
       : shuffle(candidates).slice(0, target);
 
-  // ── Freeze option order per question
+  // ── Freeze option order per question — in authored (position) order.
+  // Explanations reference options by their imported letters ("choice B"),
+  // so shuffling here would desynchronise the prose from the screen.
   const { data: options, error: optError } = await admin
     .from("question_options")
     .select("id, question_id")
@@ -417,7 +419,8 @@ export async function POST(request: Request) {
     .in(
       "question_id",
       picked.map((q) => q.id)
-    );
+    )
+    .order("position");
 
   if (optError || !options) {
     await refundTrial(consumesTrial, user.id, user.profile.trials_used);
@@ -478,7 +481,7 @@ export async function POST(request: Request) {
     test_id: test.id,
     question_id: q.id,
     position: index,
-    option_order: shuffle(optionsByQuestion.get(q.id) ?? []),
+    option_order: optionsByQuestion.get(q.id) ?? [],
   }));
 
   const { error: linkError } = await admin.from("test_questions").insert(rows);
