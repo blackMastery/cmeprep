@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   mergeTranscript,
@@ -400,6 +400,15 @@ export function useConversationStore({
     freshAtRef.current = Date.now();
   }, []);
 
+  // The callbacks are stable, so the object holding them must be too:
+  // consumers depend on `actions` (the provider's memo, the page's seed
+  // effect), and a fresh object per render re-fires that effect, which sets
+  // state, which renders, which... "Maximum update depth exceeded".
+  const actions = useMemo<ConversationActions>(
+    () => ({ ask, newConversation, loadState, seed, setDraft }),
+    [ask, newConversation, loadState, seed]
+  );
+
   return [
     {
       turns,
@@ -417,6 +426,6 @@ export function useConversationStore({
       signedOut,
       features,
     },
-    { ask, newConversation, loadState, seed, setDraft },
+    actions,
   ];
 }
