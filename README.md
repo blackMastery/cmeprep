@@ -1,13 +1,13 @@
-# cmeprep.me
+# cmeqbank.com
 
 Practice questions and timed mock exams for medical board and exit
 examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
 
 ## What's built
 
-- **Design system** — brand tokens (coral `#E85D42`, teal `#3EBFA0`, sun
-  `#FFD34E`, ink, blush) in Tailwind v4 `@theme inline`, the coral→teal
-  gradient wash, Poppins for the wordmark/headings/question stems with
+- **Design system** — brand tokens (crimson `#7A1429`, teal `#1D9E75`, sun
+  `#F5C944`, gold `#FDC391`, ink, blush) in Tailwind v4 `@theme inline`,
+  Poppins for the wordmark/headings/question stems with
   Public Sans on body copy, the stethoscope logo lockup, ECG motif, pill
   buttons, light + dark.
 - **Marketing page** — photo hero under a brand scrim, stats row, device shot

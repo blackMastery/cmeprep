@@ -21,7 +21,7 @@ import { priceLabel } from "@/lib/format";
 
 function stats(startingPrice: string | null) {
   return [
-    { value: "700+", label: "Doctors", note: "using cmeprep.me" },
+    { value: "700+", label: "Doctors", note: "using cmeqbank.com" },
     {
       value: "UNLIMITED",
       label: "Questions across 7 question banks",
@@ -97,13 +97,14 @@ export default async function MarketingPage() {
         startingPrice={lowestCents !== null ? lowestCents / 100 : undefined}
       />
       {/* ── Hero ─────────────────────────────────────────── */}
-      <section className="relative isolate overflow-hidden bg-coral">
+      <section className="relative isolate overflow-hidden bg-brand-surface">
         {/* Photograph under a near-opaque brand scrim: warmth and context
-            without competing with the headline. This uses the vivid --coral
-            rather than --brand-surface because the ink layer below supplies
-            the extra darkening — measured at 4.62:1 for white text against a
-            worst-case white photo. A flat band with no scrim can't rely on
-            that, which is why the CTA section still uses --brand-surface. */}
+            without competing with the headline. --brand-surface rather than
+            the --crimson primitive because the marketing pages are not
+            theme-forced and the primitive lifts to rose in dark mode. The
+            crimson is dark enough that no extra ink layer is needed: a
+            worst-case white photo under the 90% scrim lands at ~#872b3e,
+            8.6:1 for white text. */}
         <Image
           src={unsplashUrl(HERO_IMAGE.src, 2000)}
           alt=""
@@ -115,17 +116,22 @@ export default async function MarketingPage() {
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-coral/88"
+          className="absolute inset-0 -z-10 bg-brand-surface/90"
         />
-        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-ink/25" />
 
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:py-24">
           <div className="max-w-2xl text-white">
+            {/* The lockup image carries its own crimson field, which is
+                darker than or equal to this band everywhere; `lighten` keeps
+                the per-channel maximum, so the field dissolves into the band
+                while the white wordmark, coral tile and gold tagline survive.
+                The section is `isolate`, so the blend can't reach outside. */}
             <Logo
               href={null}
               size="lg"
               tagline="stacked"
               taglineClassName="text-white/90"
+              className="mix-blend-lighten"
             />
 
             <h1 className="mt-8 font-display text-4xl leading-[1.12] font-semibold tracking-tight sm:text-5xl lg:text-[3.4rem]">
@@ -133,7 +139,7 @@ export default async function MarketingPage() {
               <br />
               and Exit Examinations
               <br />
-              <span className="text-sun">Today!</span>
+              <span className="text-gold">Today!</span>
             </h1>
 
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/90">
@@ -142,9 +148,11 @@ export default async function MarketingPage() {
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              {/* A crimson focus ring on a crimson band is invisible, so the
+                  gold CTAs ring in white. */}
               <Button
                 size="xl"
-                className="bg-sun text-ink hover:bg-sun/85"
+                className="bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50"
                 asChild
               >
                 <Link href="/register">Start a trial test</Link>
@@ -274,7 +282,7 @@ export default async function MarketingPage() {
             <div className="mt-10 flex flex-col gap-6 bg-brand-surface p-8 text-white sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:py-9">
               <div className="flex gap-4">
                 <Building2
-                  className="mt-0.5 size-8 shrink-0 text-sun"
+                  className="mt-0.5 size-8 shrink-0 text-gold"
                   aria-hidden="true"
                 />
                 <div>
@@ -285,14 +293,14 @@ export default async function MarketingPage() {
                     Org accounts, SSO, private question banks and shared
                     analytics for hospitals, schools and training programs.
                   </p>
-                  <p className="mt-2 text-xs font-medium tracking-wide text-sun uppercase">
+                  <p className="mt-2 text-xs font-medium tracking-wide text-gold uppercase">
                     Coming soon
                   </p>
                 </div>
               </div>
               <Button
                 size="lg"
-                className="shrink-0 bg-sun text-ink hover:bg-sun/85"
+                className="shrink-0 bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50"
                 asChild
               >
                 <Link href="/teams">Learn more</Link>
@@ -313,7 +321,7 @@ export default async function MarketingPage() {
           <p className="text-lg text-white/90">
             Ten free questions and two practice tests — no card required.
           </p>
-          <Button size="xl" className="bg-sun text-ink hover:bg-sun/85" asChild>
+          <Button size="xl" className="bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50" asChild>
             <Link href="/register">Start a trial test</Link>
           </Button>
           <p className="text-sm text-white/80">www.cmeqbank.com</p>

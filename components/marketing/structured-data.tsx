@@ -5,6 +5,7 @@ import {
   SITE_URL,
   SUPPORT_EMAIL,
 } from "@/lib/site";
+import { LOGO_SRC } from "@/components/brand/logo";
 
 /**
  * Schema.org JSON-LD for the marketing home page.
@@ -28,7 +29,7 @@ export function MarketingStructuredData({
     "@id": absoluteUrl("/#organization"),
     name: SITE_NAME,
     url: SITE_URL,
-    logo: absoluteUrl("/logo.jpg"),
+    logo: absoluteUrl(LOGO_SRC),
     description: SITE_DESCRIPTION,
     contactPoint: {
       "@type": "ContactPoint",

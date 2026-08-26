@@ -1,8 +1,8 @@
-# Production readiness review — cmeprep.me
+# Production readiness review — cmeqbank.com
 
 ## Context
 
-cmeprep.me is **live** with real users, all currently on the `trial` role, and
+cmeqbank.com is **live** with real users, all currently on the `trial` role, and
 has **taken no payments yet**. This review ranks what stands between the app as
 deployed today and a system that can safely take money and be operated.
 

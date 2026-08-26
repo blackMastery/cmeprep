@@ -17,6 +17,7 @@ import {
 
 const NAV_LINKS = [
   { href: "/#features", label: "Features" },
+  { href: "/#tutor", label: "AI tutor" },
   { href: "/#examinations", label: "Examinations" },
   { href: "/#pricing", label: "Pricing" },
   { href: "/teams", label: "Enterprise & Teams" },
@@ -48,7 +49,7 @@ export function MarketingMobileNav({
         <SheetHeader className="border-b border-border px-4 py-3">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SheetDescription className="sr-only">
-            Links to the main areas of cmeprep.me.
+            Links to the main areas of cmeqbank.com.
           </SheetDescription>
           <span onClickCapture={close}>
             <Logo href="/" size="sm" />

@@ -16,17 +16,20 @@ import {
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
+  Stethoscope,
   Timer,
   UserCog,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OG_IMAGE, SITE_NAME, TWITTER_IMAGE } from "@/lib/site";
+import { TUTOR_DAILY_CAP } from "@/lib/tutor-core";
 import { Button } from "@/components/ui/button";
 
 const TEAMS_TITLE = "Teams & Enterprises";
 const TEAMS_DESCRIPTION =
-  `Bring ${SITE_NAME} to your hospital or training program: org accounts, SSO/SCIM, private question banks, audit logs, admin dashboards and volume pricing.`;
+  `Bring ${SITE_NAME} to your hospital or training program: org accounts, SSO/SCIM, private question banks, an AI tutor for every seat, audit logs, admin dashboards and volume pricing.`;
 
 export const metadata: Metadata = {
   title: TEAMS_TITLE,
@@ -49,7 +52,7 @@ export const metadata: Metadata = {
 };
 
 const CONTACT_HREF =
-  "mailto:support@cmeprep.me?subject=" +
+  "mailto:support@cmeqbank.com?subject=" +
   encodeURIComponent("Teams & Enterprises inquiry");
 
 type OrgPlan = {
@@ -73,6 +76,8 @@ const ORG_PLANS: OrgPlan[] = [
       "Full access to one examination's question bank and mock exams",
       "Add more examinations any time — each is its own purchase",
       "Shared analytics for program directors",
+      "AI tutor for every member — cited answers from the course materials",
+      "AI-graded OSCE stations, in examinations that include them",
       "Private question banks",
       "Audit logs",
     ],
@@ -85,6 +90,22 @@ type Feature = {
   title: string;
   body: string;
 };
+
+/** The AI features every seat gets. Org members are covered by their seat,
+ * not the trial allowance (lib/tutor-core.ts) — so the daily cap is the only
+ * number worth quoting here. */
+const AI_STUDY_TOOLS: Feature[] = [
+  {
+    icon: Sparkles,
+    title: "An AI tutor for every seat",
+    body: `Every member can ask the tutor up to ${TUTOR_DAILY_CAP} questions a day. It answers only from curated course materials and cites the file and page, so your cohort gets consistent, checkable teaching — not internet guesses.`,
+  },
+  {
+    icon: Stethoscope,
+    title: "AI-graded OSCE stations",
+    body: "Staff write out OSCE answers in their own words and an AI examiner marks them against the model answer in seconds — practical-exam practice without an examiner in the room, and every grade counts in their stats.",
+  },
+];
 
 const CUSTOMIZATION: Feature[] = [
   {
@@ -249,17 +270,17 @@ export default function TeamsPage() {
             <h1 className="mt-6 font-display text-4xl leading-[1.12] font-semibold tracking-tight sm:text-5xl">
               CMEPrep for teams
               <br />
-              and <span className="text-sun">enterprises</span>
+              and <span className="text-gold">enterprises</span>
             </h1>
 
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/90">
-              Org accounts, SSO, private question banks and org-wide analytics —
-              everything your institution needs to prepare staff for their board
-              examinations.
+              Org accounts, SSO, private question banks, org-wide analytics and
+              an AI tutor for every seat — everything your institution needs to
+              prepare staff for their board examinations.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button size="xl" className="bg-sun text-ink hover:bg-sun/85" asChild>
+              <Button size="xl" className="bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50" asChild>
                 <a href={CONTACT_HREF}>Contact sales</a>
               </Button>
               <Button
@@ -273,6 +294,15 @@ export default function TeamsPage() {
           </div>
         </div>
       </section>
+
+      <FeatureGrid
+        muted
+        id="ai"
+        title="AI study tools, included"
+        intro="Teaching capacity that scales with the cohort — an AI tutor and an AI examiner on call for every member, at no extra cost."
+        items={AI_STUDY_TOOLS}
+        cols={2}
+      />
 
       <FeatureGrid
         id="customization"
@@ -445,10 +475,10 @@ export default function TeamsPage() {
           <p className="text-lg text-white/90">
             Tell us about your team and we&apos;ll put together the right plan.
           </p>
-          <Button size="xl" className="bg-sun text-ink hover:bg-sun/85" asChild>
+          <Button size="xl" className="bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50" asChild>
             <a href={CONTACT_HREF}>Contact sales</a>
           </Button>
-          <p className="text-sm text-white/80">Or email support@cmeprep.me</p>
+          <p className="text-sm text-white/80">Or email support@cmeqbank.com</p>
         </div>
       </section>
     </>

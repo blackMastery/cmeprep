@@ -156,7 +156,7 @@ export async function buildExportBuffer(
   EXPORT_COLUMNS.forEach((column, index) => {
     const cell = headerRow.getCell(index + 1);
     cell.note = column.note;
-    if (column.required) cell.font = { bold: true, color: { argb: "FFC44A18" } };
+    if (column.required) cell.font = { bold: true, color: { argb: "FF7A1429" } };
   });
 
   const dataRowCount = Math.max(questions.length, 1);

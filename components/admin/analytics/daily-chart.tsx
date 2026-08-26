@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  */
 
 const TONE_CLASS = {
-  coral: "text-primary",
+  crimson: "text-primary",
   teal: "text-teal-deep",
   sun: "text-sun",
   ink: "text-foreground",
@@ -183,7 +183,7 @@ export function DailyChart({
               const tone =
                 TONE_CLASS[
                   s.tone ??
-                    (["teal", "coral", "sun", "ink"] as const)[
+                    (["teal", "crimson", "sun", "ink"] as const)[
                       si % 4
                     ]
                 ];
@@ -220,7 +220,7 @@ export function DailyChart({
                 className={cn(
                   "inline-block h-0.5 w-4 rounded-full bg-current",
                   TONE_CLASS[
-                    s.tone ?? (["teal", "coral", "sun", "ink"] as const)[si % 4]
+                    s.tone ?? (["teal", "crimson", "sun", "ink"] as const)[si % 4]
                   ]
                 )}
                 aria-hidden="true"

@@ -5,7 +5,7 @@
  * next.config.ts). The Unsplash License permits commercial use without
  * attribution, but it does NOT grant model or property releases — these
  * shots may not be used in a way that implies the people in them endorse
- * cmeprep.me. Crediting the photographer is optional but appreciated.
+ * cmeqbank.com. Crediting the photographer is optional but appreciated.
  *
  * To swap the hero, change HERO_IMAGE to another entry.
  */

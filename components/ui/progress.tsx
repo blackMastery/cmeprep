@@ -13,7 +13,7 @@ function Progress({
 }: React.ComponentProps<typeof ProgressPrimitive.Root> & {
   /**
    * Re-tones the fill. A bar's colour depends on what filling it MEANS —
-   * progress through a paper is teal, trial credits running out stay coral —
+   * progress through a paper is teal, trial credits running out stay crimson —
    * and that is the caller's knowledge, not this component's.
    */
   indicatorClassName?: string

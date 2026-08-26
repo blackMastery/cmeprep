@@ -16,8 +16,7 @@ export const OG_SIZE = { width: 1200, height: 630 };
 export const OG_CONTENT_TYPE = "image/png";
 
 const CREAM = "#faf6f1";
-const CORAL = "#e85d24";
-const CORAL_DEEP = "#c44a18";
+const CRIMSON = "#7a1429";
 const INK = "#1a1a1a";
 const INK_MUTED = "#6b6b6b";
 
@@ -44,7 +43,7 @@ export function renderOgImage(input: {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ display: "flex", fontSize: 44, color: INK }}>
             <span style={{ fontWeight: 700 }}>cmeqbank</span>
-            <span style={{ fontWeight: 400, color: CORAL_DEEP }}>.com</span>
+            <span style={{ fontWeight: 400, color: CRIMSON }}>.com</span>
           </div>
           {input.eyebrow && (
             <div
@@ -54,7 +53,7 @@ export function renderOgImage(input: {
                 padding: "6px 18px",
                 borderRadius: 999,
                 backgroundColor: "#f5efe6",
-                color: CORAL_DEEP,
+                color: CRIMSON,
                 fontSize: 24,
                 fontWeight: 600,
               }}
@@ -97,7 +96,7 @@ export function renderOgImage(input: {
               width: 120,
               height: 8,
               borderRadius: 999,
-              backgroundColor: CORAL,
+              backgroundColor: CRIMSON,
             }}
           />
           <div style={{ display: "flex", fontSize: 24, color: INK_MUTED }}>

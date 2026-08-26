@@ -4,7 +4,7 @@ Copy everything below the line into Claude Design.
 
 ---
 
-Design a complete UI for **CME Prep (cmeprep.me)** — a question bank + timed mock exam web app for Guyana's Medical Board and Exit Examinations, built with Next.js, Tailwind, and shadcn/ui. Medical graduates and interns use it to practice MCQs and OSCEs by subject and topic, take timed mock tests, and track progress. Three roles: Trial (10 questions, 2 tests), Student (paid), Admin.
+Design a complete UI for **CME Prep (cmeqbank.com)** — a question bank + timed mock exam web app for Guyana's Medical Board and Exit Examinations, built with Next.js, Tailwind, and shadcn/ui. Medical graduates and interns use it to practice MCQs and OSCEs by subject and topic, take timed mock tests, and track progress. Three roles: Trial (10 questions, 2 tests), Student (paid), Admin.
 
 ## Brand system (already established — follow exactly)
 - **Palette:** deep crimson `#93273B` (primary, hover `#6E1B2B`), surgical teal `#2F7E74` (success/correct answers ONLY — used sparingly), ink `#22252E`, clinical off-white background `#FBFAF8`, card white `#FFFFFF`, blush tint `#F6ECEA` for tinted sections, border `#E7DFDA`.

@@ -20,7 +20,7 @@ export default function AuthLayout({
       </main>
       <footer className="pb-8 text-center text-xs text-muted-foreground">
         <Link href="/" className="hover:text-foreground">
-          ← Back to cmeprep.me
+          ← Back to cmeqbank.com
         </Link>
       </footer>
     </div>

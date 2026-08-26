@@ -21,11 +21,12 @@ export function PhoneMockup() {
           {/* Notch */}
           <div className="absolute top-2 left-1/2 z-10 h-5 w-28 -translate-x-1/2 rounded-full bg-ink" />
 
-          {/* Branded app header */}
-          <div className="bg-brand-surface px-5 pt-10 pb-8 text-white">
+          {/* Branded app header. `isolate` contains the logo's blend mode
+              (see the hero in app/(marketing)/page.tsx for why `lighten`). */}
+          <div className="isolate bg-brand-surface px-5 pt-10 pb-8 text-white">
             <div className="flex items-center justify-between text-[0.7rem]">
               <span aria-hidden="true">☰</span>
-              <Logo href={null} size="sm" />
+              <Logo href={null} size="sm" className="mix-blend-lighten" />
             </div>
 
             <h3 className="mt-6 font-display text-xl leading-snug font-semibold">
@@ -36,7 +37,7 @@ export function PhoneMockup() {
               questions.
             </p>
 
-            <span className="mt-4 inline-flex rounded-full bg-sun px-4 py-2 text-[0.7rem] font-semibold text-ink">
+            <span className="mt-4 inline-flex rounded-full bg-gold px-4 py-2 text-[0.7rem] font-semibold text-ink">
               START A TRIAL TEST
             </span>
           </div>

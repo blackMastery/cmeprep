@@ -16,8 +16,8 @@ const publicSans = Public_Sans({
 });
 
 // Brand typeface — carries the wordmark, headings and question stems. The
-// wordmark relies on the weight contrast between a bold "cmeprep" and a
-// light ".me", so both ends of the range are loaded.
+// wordmark relies on the weight contrast between a bold "cmeqbank" and a
+// light ".com", so both ends of the range are loaded.
 const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin"],
@@ -102,7 +102,7 @@ export const metadata: Metadata = {
 
 /**
  * Browser chrome colour. These track the page background per theme rather
- * than the brand coral — the address bar sits directly above the page, so a
+ * than the brand crimson — the address bar sits directly above the page, so a
  * contrasting bar reads as a rendering seam.
  */
 export const viewport: Viewport = {

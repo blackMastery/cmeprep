@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @AGENTS.md
 
-cmeprep.me — practice questions and timed mock exams for medical board/exit
+cmeqbank.com — practice questions and timed mock exams for medical board/exit
 examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui +
 PayPal. See [README.md](README.md) for what is and isn't built and the local
 setup steps.
@@ -157,9 +157,11 @@ preview and commit cannot drift; `IMPORT_ROW_CAP`, `CHUNK_SIZE` and the routes'
 - `@/*` path alias for everything; validation via zod in `lib/validation.ts`,
   using `uuid()` (`z.guid()`) rather than `z.uuid()` — Postgres accepts any
   8-4-4-4-12 hex value.
-- Brand tokens (coral/teal/sun/ink/blush), Poppins for headings/wordmark,
-  Public Sans for body, defined in `app/globals.css` under Tailwind v4
-  `@theme inline`. shadcn components live in `components/ui/` (style
+- Brand tokens (crimson/teal/sun/gold/ink/blush), Poppins for headings/
+  wordmark, Public Sans for body, defined in `app/globals.css` under Tailwind
+  v4 `@theme inline`. `gold` is the brand accent on crimson bands; `sun` means
+  caution (warning banners, the 50–75% accuracy tier) — never swap them.
+  shadcn components live in `components/ui/` (style
   `radix-nova`) — regenerate via the shadcn CLI rather than editing by hand
   where practical.
 - Comments in this codebase explain *why* a non-obvious choice was made

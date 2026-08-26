@@ -80,7 +80,7 @@ export function EngagementSection({
               <DailyChart
                 kind="line"
                 ariaLabel="Daily active users over the selected range"
-                series={[{ label: "DAU", tone: "coral", points: data.dauByDay }]}
+                series={[{ label: "DAU", tone: "crimson", points: data.dauByDay }]}
               />
             </CardContent>
           </Card>

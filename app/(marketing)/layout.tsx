@@ -77,8 +77,8 @@ export default async function MarketingLayout({
                 taglineClassName="text-[#a9a29b]"
               />
               <p className="mt-4 text-sm text-[#a9a29b]">
-                Practice questions and timed mock exams for medical board and
-                exit examinations.
+                Practice questions, timed mock exams and an AI tutor for
+                medical board and exit examinations.
               </p>
               <SocialLinks
                 className="mt-4 -ml-2"
@@ -90,6 +90,9 @@ export default async function MarketingLayout({
                 <p className="font-medium text-white">Product</p>
                 <Link href="/#pricing" className="block text-[#a9a29b] hover:text-white">
                   Pricing
+                </Link>
+                <Link href="/#tutor" className="block text-[#a9a29b] hover:text-white">
+                  AI tutor
                 </Link>
                 <Link href="/teams" className="block text-[#a9a29b] hover:text-white">
                   Teams &amp; Enterprises
@@ -127,7 +130,7 @@ export default async function MarketingLayout({
             </div>
           </div>
           <p className="mt-10 border-t border-white/10 pt-6 text-xs text-[#6f6a72]">
-            © {new Date().getFullYear()} cmeprep.me
+            © {new Date().getFullYear()} cmeqbank.com
           </p>
         </div>
       </footer>

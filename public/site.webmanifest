@@ -7,7 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#c44a18",
+  "theme_color": "#7a1429",
   "background_color": "#faf6f1",
   "categories": ["education", "medical"],
   "icons": [

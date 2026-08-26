@@ -100,7 +100,7 @@ export default async function VerifyCertificatePage({
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/">Back to cmeprep.me</Link>
+          <Link href="/">Back to cmeqbank.com</Link>
         </Button>
       </p>
     </div>

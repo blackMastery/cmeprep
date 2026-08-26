@@ -589,7 +589,7 @@ export async function buildTemplateBuffer(): Promise<ArrayBuffer> {
     const cell = headerRow.getCell(index + 1);
     cell.note = column.note;
     if (column.required) {
-      cell.font = { bold: true, color: { argb: "FFC44A18" } };
+      cell.font = { bold: true, color: { argb: "FF7A1429" } };
     }
   });
 

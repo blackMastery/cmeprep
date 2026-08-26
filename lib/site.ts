@@ -29,9 +29,9 @@ export const SITE_TAGLINE =
  * characters — Google truncates search snippets around there.
  */
 export const SITE_DESCRIPTION =
-  "CME question bank: practice questions and timed mock exams for medical board and exit examinations — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE. Start free.";
+  "CME question bank: practice questions, mock exams and an AI tutor for medical board and exit exams — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE. Start free.";
 
-export const SUPPORT_EMAIL = "support@cmeprep.me";
+export const SUPPORT_EMAIL = "support@cmeqbank.com";
 
 /**
  * WhatsApp contact.

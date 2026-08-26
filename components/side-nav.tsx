@@ -141,7 +141,7 @@ export function MobileNavSheet({
         <SheetHeader className="border-b border-sidebar-border px-4 py-3">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SheetDescription className="sr-only">
-            Links to the main areas of cmeprep.me.
+            Links to the main areas of cmeqbank.com.
           </SheetDescription>
           <span onClickCapture={close}>
             <Logo href={logoHref} size="sm" />

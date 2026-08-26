@@ -22,7 +22,7 @@ export default function BannedPage() {
         </h1>
         <p className="max-w-sm text-sm text-muted-foreground">
           Access to CME Prep has been paused for this account. If you believe
-          this is a mistake, contact support@cmeprep.me.
+          this is a mistake, contact support@cmeqbank.com.
         </p>
       </div>
       <form action={logout}>

@@ -28,7 +28,7 @@ export function OrgAdminAccessBanner({
         <AlertTriangle className="size-5 shrink-0 text-destructive" aria-hidden="true" />
         <p className="min-w-0 flex-1 text-sm">
           This organisation is <span className="font-semibold">suspended</span>{" "}
-          — members have no access. Contact support@cmeprep.me.
+          — members have no access. Contact support@cmeqbank.com.
         </p>
       </div>
     );

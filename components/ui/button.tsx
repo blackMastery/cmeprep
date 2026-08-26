@@ -10,8 +10,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         // --primary-hover is defined per theme: darker on light, lighter on
-        // dark. A single "darker" step would drop the dark theme's dark label
-        // to 3.88:1.
+        // dark. A single "darker" step would push the dark theme's dark label
+        // toward the AA floor and lose the hover lift.
         default:
           "bg-primary text-primary-foreground hover:bg-primary-hover",
         outline:

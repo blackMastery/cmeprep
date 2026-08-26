@@ -159,7 +159,7 @@ export default async function OrgBillingPage(
           {catalog.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No examinations are on sale right now — contact
-              support@cmeprep.me.
+              support@cmeqbank.com.
             </p>
           )}
         </CardContent>
@@ -222,7 +222,7 @@ export default async function OrgBillingPage(
         {plans.length === 0 && (
           <p className="text-sm text-muted-foreground">
             No organisation plans are on sale right now — contact
-            support@cmeprep.me for terms.
+            support@cmeqbank.com for terms.
           </p>
         )}
       </div>

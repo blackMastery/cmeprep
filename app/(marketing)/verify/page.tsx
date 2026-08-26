@@ -23,7 +23,7 @@ export default function VerifyIndexPage() {
           Verify a certificate
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Enter the certificate ID printed on a cmeprep.me certificate of
+          Enter the certificate ID printed on a cmeqbank.com certificate of
           completion.
         </p>
       </header>

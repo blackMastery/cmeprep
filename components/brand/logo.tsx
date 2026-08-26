@@ -1,10 +1,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import logoImage from "@/public/logo.jpg";
 
-const LOGO_SRC = "/logo.jpg";
-const LOGO_WIDTH = 1952;
-const LOGO_HEIGHT = 528;
+/**
+ * Statically imported rather than referenced as "/logo.jpg" so Next emits a
+ * content-hashed URL (/_next/static/media/logo.<hash>.jpg). That is the
+ * cache-buster: the image optimizer keys its cache on the URL and serves
+ * expired entries stale-while-revalidating for `minimumCacheTTL` (4h), and
+ * browsers/CDNs cache the variants on top. Swapping the file at the same
+ * path once left the retired cmeprep.me lockup on every page for hours. The
+ * import also carries the intrinsic width/height, so they are never
+ * hand-maintained. Next rejects query-string cache-busters on local images
+ * (images.localPatterns), so the hash is the sanctioned route.
+ */
+export const LOGO_SRC = logoImage.src;
+const LOGO_WIDTH = logoImage.width;
+const LOGO_HEIGHT = logoImage.height;
 
 type LogoSize = "sm" | "md" | "lg";
 
@@ -15,10 +27,10 @@ const SIZES: Record<LogoSize, { height: number; className: string }> = {
 };
 
 /**
- * The cmeprep.me lockup — brand mark, wordmark and tagline as a single asset.
+ * The cmeqbank.com lockup — brand mark, wordmark and tagline as a single asset.
  *
  * `withTagline`, `withMark` and `onDark` are kept for call-site compatibility;
- * the image already includes the mark and tagline on its own coral field.
+ * the image already includes the mark and tagline on its own crimson field.
  */
 export function LogoMark({
   size = "md",
@@ -40,7 +52,7 @@ export function LogoMark({
       aria-hidden="true"
     >
       <Image
-        src={LOGO_SRC}
+        src={logoImage}
         alt=""
         fill
         className="object-cover object-left"
@@ -75,10 +87,8 @@ export function Logo({
 
   const image = (
     <Image
-      src={LOGO_SRC}
-      alt="cmeprep.me — Smarter prep. Better outcomes"
-      width={LOGO_WIDTH}
-      height={LOGO_HEIGHT}
+      src={logoImage}
+      alt="cmeqbank.com — Smarter prep. Better outcomes"
       className={cn(
         s.className,
         // Compact lockup on phones: smaller banner so the one-line tagline
@@ -124,7 +134,7 @@ export function Logo({
   return (
     <Link
       href={href}
-      aria-label="cmeprep.me home"
+      aria-label="cmeqbank.com home"
       className="inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
     >
       {lockup}

@@ -42,8 +42,7 @@ export class UnprintableNameError extends Error {
 }
 
 const CREAM = hex("#faf6f1");
-const CORAL = hex("#e85d24");
-const CORAL_DEEP = hex("#c44a18");
+const CRIMSON = hex("#7a1429");
 const INK = hex("#1a1a1a");
 const INK_MUTED = hex("#6b6b6b");
 
@@ -82,7 +81,7 @@ function drawRule(page: PDFPage, y: number, width: number) {
     y,
     width,
     height: 1,
-    color: CORAL,
+    color: CRIMSON,
   });
 }
 
@@ -142,9 +141,9 @@ export async function renderCertificatePdf(
   ]);
 
   pdf.setTitle(`Certificate of Completion — ${courseTitle}`);
-  pdf.setAuthor("cmeprep.me");
+  pdf.setAuthor("cmeqbank.com");
   pdf.setSubject("CME course certificate of completion");
-  pdf.setCreator("cmeprep.me");
+  pdf.setCreator("cmeqbank.com");
 
   const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
 
@@ -160,7 +159,7 @@ export async function renderCertificatePdf(
     y: 26,
     width: PAGE_WIDTH - 52,
     height: PAGE_HEIGHT - 52,
-    borderColor: CORAL,
+    borderColor: CRIMSON,
     borderWidth: 2.5,
   });
   page.drawRectangle({
@@ -168,30 +167,30 @@ export async function renderCertificatePdf(
     y: 34,
     width: PAGE_WIDTH - 68,
     height: PAGE_HEIGHT - 68,
-    borderColor: CORAL,
+    borderColor: CRIMSON,
     borderWidth: 0.75,
   });
 
-  // Wordmark: bold "cmeprep" + ".me" in coral, the weight/colour contrast the
-  // Logo component and the OG card both use.
+  // Wordmark: bold "cmeqbank" + ".com" in crimson, the weight/colour contrast
+  // the OG card uses.
   const markSize = 19;
   const markWidth =
-    helveticaBold.widthOfTextAtSize("cmeprep", markSize) +
-    helvetica.widthOfTextAtSize(".me", markSize);
+    helveticaBold.widthOfTextAtSize("cmeqbank", markSize) +
+    helvetica.widthOfTextAtSize(".com", markSize);
   const markX = (PAGE_WIDTH - markWidth) / 2;
-  page.drawText("cmeprep", {
+  page.drawText("cmeqbank", {
     x: markX,
     y: 512,
     size: markSize,
     font: helveticaBold,
     color: INK,
   });
-  page.drawText(".me", {
-    x: markX + helveticaBold.widthOfTextAtSize("cmeprep", markSize),
+  page.drawText(".com", {
+    x: markX + helveticaBold.widthOfTextAtSize("cmeqbank", markSize),
     y: 512,
     size: markSize,
     font: helvetica,
-    color: CORAL_DEEP,
+    color: CRIMSON,
   });
 
   // Standard-14 fonts carry no letter-spacing control, so the eyebrow is
@@ -200,7 +199,7 @@ export async function renderCertificatePdf(
     font: timesBold,
     size: 27,
     y: 452,
-    color: CORAL_DEEP,
+    color: CRIMSON,
   });
   drawRule(page, 432, 150);
 

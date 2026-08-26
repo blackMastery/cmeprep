@@ -51,7 +51,7 @@ export function EcgDivider({
       className={cn(
         // Teal by default so the motif lives in one place. A caller passing
         // its own text-* still wins through cn(), which is how the few
-        // deliberately-coral placements stay coral.
+        // deliberately-crimson placements (text-primary) stay crimson.
         "flex w-full items-center gap-0 text-teal/40",
         className
       )}

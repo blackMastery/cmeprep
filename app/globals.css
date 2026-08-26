@@ -47,11 +47,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  /* cmeprep.me brand */
-  --color-coral: var(--coral);
-  --color-coral-light: var(--coral-light);
-  --color-coral-deep: var(--coral-deep);
-  --color-coral-deeper: var(--coral-deeper);
+  /* cmeqbank.com brand */
+  --color-crimson: var(--crimson);
+  --color-crimson-light: var(--crimson-light);
+  --color-crimson-deep: var(--crimson-deep);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
   --color-primary-hover: var(--primary-hover);
   --color-brand-surface: var(--brand-surface);
   --color-teal-light: var(--teal-light);
@@ -74,17 +75,18 @@
 }
 
 :root {
-  /* Brand primitives — taken from CMEPrep_Mockups.html v1. */
-  /* #E85D24 is the brand coral, but white-on-coral is only 3.49:1 — fine for
-     large display text (>=3:1), short of AA for button labels. So the filled
-     steps below carry text, and --coral stays for headings, icons, borders
-     and decorative fills. Every value here is from the mockup except
-     --coral-deeper, which extends the same ramp for hover/badge text. */
-  --coral: #e85d24;
-  --coral-light: #f37844;
-  --coral-deep: #c44a18; /* mockup --coral-dark; button fill, 4.84:1 on white */
-  --coral-deeper: #a63d12; /* hover fill + text on blush */
-  /* The brand green, and the same story as --coral above: on the cream
+  /* Brand primitives. Crimson is sampled from the logo field (public/logo.jpg:
+     #550c1f at the edges, #7a1429 at the centre); teal, sun, ink and blush
+     are from CMEPrep_Mockups.html v1. */
+  /* Unlike the coral it replaced (3.49:1 under white), #7a1429 clears AA
+     under white text at ~10:1, so the base step is both the vivid brand
+     colour AND the button fill — one ramp, not a display step plus a text
+     step. --crimson-light is the lifted step for focus rings and hairlines;
+     --crimson-deep is the hover fill. */
+  --crimson: #7a1429;
+  --crimson-light: #93273b;
+  --crimson-deep: #5f0e20;
+  /* The brand green, and a different story from --crimson: on the cream
      background --teal is 3.15:1, which clears WCAG 1.4.11 (3:1) for icons,
      bars, borders and fills but falls short of AA for text. Teal TEXT uses
      --teal-deep (4.92:1). Green here means "progress toward passing" —
@@ -93,15 +95,23 @@
   --teal: #1d9e75;
   --teal-light: #2bb888;
   --teal-deep: #167a5b;
-  --sun: #f5c944; /* mockup --yellow */
+  --sun: #f5c944; /* mockup --yellow: caution banners, the 50–75% accuracy tier */
   --sun-deep: #e0b22e;
+  /* The logo's tagline gold. Brand accent on crimson bands ONLY (hero
+     headline, gold CTAs) — anything that means "warning" stays --sun, so the
+     two never blur into one warm tint. Ink on gold is 11:1, gold on crimson
+     6.8:1. */
+  --gold: #fdc391;
+  --gold-deep: #f3a86a;
   --ink: #1a1a1a;
   --ink-soft: #2c2c2c;
   --blush: #f5efe6; /* mockup --bg-warm: warm tinted sections */
 
-  /* Full-bleed brand fields (hero, CTA band). Body copy sits on these, so
-     they use the text-safe step rather than the vivid --coral. */
-  --brand-surface: #c44a18;
+  /* Full-bleed brand fields (hero, CTA bands, the phone-mockup header). A
+     literal rather than var(--crimson) because the primitive lifts to rose in
+     .dark and these bands carry white text; and the logo image's own field is
+     this crimson, so the lockup blends into them in both themes. */
+  --brand-surface: #7a1429;
 
   /* Semantic tokens */
   --background: #faf6f1; /* warm cream, not near-white */
@@ -110,31 +120,33 @@
   --card-foreground: var(--ink);
   --popover: #ffffff;
   --popover-foreground: var(--ink);
-  --primary: var(--coral-deep);
+  --primary: var(--crimson);
   --primary-foreground: #ffffff;
   /* Hover darkens on light, lightens on dark — a single 'deeper' step would
      fail contrast against the dark theme's dark label. */
-  --primary-hover: var(--coral-deeper);
+  --primary-hover: var(--crimson-deep);
   --secondary: var(--blush);
-  --secondary-foreground: var(--coral-deeper);
+  --secondary-foreground: var(--crimson);
   --muted: #f0ebe3; /* mockup --border-soft, as a subtle fill */
   --muted-foreground: #6b6b6b;
   --accent: var(--blush);
-  --accent-foreground: var(--coral-deeper);
+  --accent-foreground: var(--crimson);
   /* Answer correctness needs to read as green/red at a glance, so these are
      true green (hue 142°) and true red (hue 0°) rather than brand hues. The
-     old values sat at 161° (teal) and 8° (rust) — the rust was only 9° from
-     the coral primary, so "incorrect" looked like brand highlighting rather
-     than an error. Icons (check/cross) still carry the meaning for anyone
-     who can't separate the two by colour. */
+     crimson primary sits at ~348°, so hue alone no longer separates
+     "incorrect" from "selected"; what does is lightness and saturation
+     (scarlet ~l44/s66 against wine ~l28/s72) plus the check/cross icons,
+     which carry the meaning for anyone who can't separate the two by colour. */
   --destructive: #bc2626;
   --destructive-foreground: #ffffff;
   --success: #15803d;
   --success-foreground: #ffffff;
   --border: #e8e2d8;
   --input: #e8e2d8;
-  --ring: var(--coral);
-  --chart-1: var(--coral);
+  /* One step lighter than border-primary, so a focused selected option shows
+     two distinct edges instead of one thicker one. */
+  --ring: var(--crimson-light);
+  --chart-1: var(--crimson);
   --chart-2: var(--teal);
   --chart-3: var(--sun);
   --chart-4: var(--ink);
@@ -142,32 +154,34 @@
   --radius: 0.625rem; /* mockup --radius: 10px */
   --sidebar: #ffffff;
   --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--coral-deep);
+  --sidebar-primary: var(--crimson);
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: var(--blush);
-  --sidebar-accent-foreground: var(--coral-deeper);
+  --sidebar-accent-foreground: var(--crimson);
   --sidebar-border: #e8e2d8;
-  --sidebar-ring: var(--coral);
+  --sidebar-ring: var(--crimson-light);
 }
 
-/* The mockup ships light only, so dark is derived from the same hues: the
-   lighter brand steps (--coral-light, --teal-light) become the dark-mode
-   base, and the neutrals carry the palette's warmth rather than going
+/* The mockup ships light only, so dark is derived from the same hues. The
+   crimson cannot simply be reused — #7a1429 is 1.65:1 on the dark background
+   — so the dark primary is a LIFTED rose of the same hue (hover lightens
+   further), and the neutrals carry the palette's warmth rather than going
    blue-grey, so the two themes read as one brand. */
 .dark {
-  --coral: #f37844; /* mockup --coral-light */
-  --coral-light: #f79268;
-  --coral-deep: #e85d24; /* mockup --coral, darker than the lifted base */
-  --coral-deeper: #c44a18;
-  --brand-surface: #c44a18;
+  --crimson: #ec7390; /* rose, 6.3:1 on --background */
+  --crimson-light: #f08aa1;
+  --crimson-deep: #d94f70; /* decorative fills and borders only */
+  --brand-surface: #7a1429; /* theme-stable on purpose — see :root */
   --teal: #2bb888; /* mockup --teal-light */
   --teal-light: #46cfa0;
   --teal-deep: #1d9e75;
   --sun: #f5c944;
   --sun-deep: #e0b22e;
+  --gold: #fdc391;
+  --gold-deep: #f3a86a;
   --ink: #1a1a1a;
   --ink-soft: #2c2c2c;
-  --blush: #33261b;
+  --blush: #2f1a1f; /* plum, so rose text sits on a same-hue tint */
 
   --background: #1a1815; /* warm dark, echoing the cream light theme */
   --foreground: #f6f1ea;
@@ -175,37 +189,39 @@
   --card-foreground: #f6f1ea;
   --popover: #221f1a;
   --popover-foreground: #f6f1ea;
-  --primary: var(--coral);
-  --primary-foreground: #1f0d05;
-  --primary-hover: var(--coral-light);
+  --primary: var(--crimson);
+  --primary-foreground: #2a0a12;
+  --primary-hover: var(--crimson-light);
   --secondary: var(--blush);
-  --secondary-foreground: #f8c3a6;
+  --secondary-foreground: #f5b8c4;
   --muted: #292521;
   --muted-foreground: #a8a29a;
   --accent: var(--blush);
-  --accent-foreground: #f8c3a6;
-  /* Lifted for dark surfaces. The red also has to stay separable from the
-     dark-mode coral (#F37844, hue 18°) — at hue 0° it reads clearly red. */
-  --destructive: #ff6b6b;
+  --accent-foreground: #f5b8c4;
+  /* Lifted for dark surfaces. The rose primary (hue 346°) has the same
+     lightness a lifted red would, so destructive moves to hue 7° (toward
+     orange-red): that ~20° gap is what keeps a destructive button from
+     reading as a default one. */
+  --destructive: #ff6b57;
   --destructive-foreground: #1f0d05;
   --success: #3dbe6b;
   --success-foreground: #04231a;
   --border: rgb(255 255 255 / 10%);
   --input: rgb(255 255 255 / 14%);
-  --ring: var(--coral);
-  --chart-1: var(--coral);
+  --ring: var(--crimson-light);
+  --chart-1: var(--crimson);
   --chart-2: var(--teal);
   --chart-3: var(--sun);
   --chart-4: #d8d2c8;
   --chart-5: #6f6a62;
   --sidebar: #221f1a;
   --sidebar-foreground: #f6f1ea;
-  --sidebar-primary: var(--coral);
-  --sidebar-primary-foreground: #1f0d05;
+  --sidebar-primary: var(--crimson);
+  --sidebar-primary-foreground: #2a0a12;
   --sidebar-accent: #292521;
-  --sidebar-accent-foreground: #f7b9a6;
+  --sidebar-accent-foreground: #f5b8c4;
   --sidebar-border: rgb(255 255 255 / 10%);
-  --sidebar-ring: var(--coral);
+  --sidebar-ring: var(--crimson-light);
 }
 
 @layer base {
@@ -218,12 +234,12 @@
   html {
     @apply font-sans antialiased;
   }
-  /* Uses --coral, not the retired --crimson. A var() that resolves to
-     nothing is invalid at computed-value time, which makes `background`
+  /* The token here must exist in BOTH :root and .dark. A var() that resolves
+     to nothing is invalid at computed-value time, which makes `background`
      compute to its initial value (transparent) rather than falling back to
      the browser default — i.e. selection becomes invisible, not blue. */
   ::selection {
-    background: color-mix(in srgb, var(--coral) 28%, transparent);
+    background: color-mix(in srgb, var(--crimson) 28%, transparent);
     color: var(--foreground);
   }
 }
