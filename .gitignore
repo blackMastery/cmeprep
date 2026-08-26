@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# database dumps — contain auth tokens and user PII; never commit
+/data.sql
+/*.dump
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
