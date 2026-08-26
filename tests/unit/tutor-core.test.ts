@@ -2,15 +2,21 @@ import { describe, expect, it } from "vitest";
 import { tutorFeedbackSchema } from "@/lib/validation";
 import type { ExamAccess } from "@/lib/entitlements-core";
 import {
+  isTakeRoute,
+  mergeTranscript,
   stripCitation,
   stripLinks,
+  turnsFromHistory,
   tutorAccessFor,
   tutorCapWindowStart,
+  tutorLauncherVisible,
   validateQuestion,
   TUTOR_DAILY_CAP,
   TUTOR_MAX_QUESTION_CHARS,
   TUTOR_TRIAL_ALLOWANCE,
   type RawCitation,
+  type TranscriptTurn,
+  type TutorTurn,
 } from "@/lib/tutor-core";
 
 const trial: ExamAccess = { kind: "all", reason: "trial", org: null };
@@ -320,5 +326,94 @@ describe("tutorFeedbackSchema", () => {
     expect(
       tutorFeedbackSchema.safeParse({ messageId: "nope", rating: "up" }).success
     ).toBe(false);
+  });
+});
+
+describe("isTakeRoute", () => {
+  it("matches only the take screen itself", () => {
+    expect(isTakeRoute("/tests/abc/take")).toBe(true);
+    expect(isTakeRoute("/tests/abc/results")).toBe(false);
+    expect(isTakeRoute("/tests/abc/review")).toBe(false);
+    expect(isTakeRoute("/tests/new")).toBe(false);
+    expect(isTakeRoute("/tests/abc/take/extra")).toBe(false);
+  });
+});
+
+describe("tutorLauncherVisible", () => {
+  const on = { available: true, hostRegistered: false };
+
+  it("hides everything when the service is unconfigured", () => {
+    expect(
+      tutorLauncherVisible({ available: false, pathname: "/dashboard", hostRegistered: true })
+    ).toBe(false);
+  });
+
+  it("yields to the full page on /tutor", () => {
+    expect(tutorLauncherVisible({ ...on, pathname: "/tutor" })).toBe(false);
+  });
+
+  it("hides on a take route until a runner opts in", () => {
+    // Default hidden, not shown: an exam-mode paper must never flash the
+    // launcher in the moment before its runner mounts.
+    expect(tutorLauncherVisible({ ...on, pathname: "/tests/t1/take" })).toBe(false);
+    expect(
+      tutorLauncherVisible({ ...on, pathname: "/tests/t1/take", hostRegistered: true })
+    ).toBe(true);
+  });
+
+  it("shows everywhere else", () => {
+    for (const pathname of ["/dashboard", "/tests/t1/review", "/bookmarks", "/profile"]) {
+      expect(tutorLauncherVisible({ ...on, pathname })).toBe(true);
+    }
+  });
+});
+
+describe("mergeTranscript", () => {
+  const history = (id: string, role: "user" | "assistant", content: string): TutorTurn => ({
+    id,
+    role,
+    content,
+    createdAt: "2026-08-26T12:00:00Z",
+  });
+
+  it("makes history assistant turns ratable by their row id", () => {
+    const turns = turnsFromHistory([history("u1", "user", "q"), history("a1", "assistant", "a")]);
+    expect(turns[0].messageId).toBeUndefined();
+    expect(turns[1].messageId).toBe("a1");
+  });
+
+  it("keeps this session's citations on a turn the fetch also holds", () => {
+    const local: TranscriptTurn[] = [
+      { id: "u1", role: "user", content: "q" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "a",
+        messageId: "a1",
+        citations: [{ n: 1, file_name: "Merck.pdf", page: 3, kind: "text", image_url: null }],
+      },
+    ];
+    const merged = mergeTranscript(local, [history("u1", "user", "q"), history("a1", "assistant", "a")]);
+    expect(merged[1].citations?.[0].file_name).toBe("Merck.pdf");
+    expect(merged[1].messageId).toBe("a1");
+  });
+
+  it("takes the server's order and membership — other-surface questions appear, local-only ids go", () => {
+    const local: TranscriptTurn[] = [
+      { id: "local-ask-1", role: "user", content: "q" },
+      { id: "a1", role: "assistant", content: "a", messageId: "a1" },
+    ];
+    const merged = mergeTranscript(local, [
+      history("u1", "user", "q"),
+      history("a1", "assistant", "a"),
+      history("u2", "user", "asked on the page"),
+      history("a2", "assistant", "answered there"),
+    ]);
+    expect(merged.map((t) => t.id)).toEqual(["u1", "a1", "u2", "a2"]);
+  });
+
+  it("is a plain load when nothing is held locally", () => {
+    const merged = mergeTranscript([], [history("u1", "user", "q")]);
+    expect(merged).toEqual([{ id: "u1", role: "user", content: "q", messageId: undefined }]);
   });
 });

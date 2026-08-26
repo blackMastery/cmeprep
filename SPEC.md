@@ -734,3 +734,240 @@ all reads null/"—") and has-a-plan-this-week — on the readiness roster,
 member detail and CSV. Goals, intensity and personal sitting dates stay
 private. Losing exam access hides the plan surface; rows are retained and a
 fresh week resumes on re-entitlement.
+
+---
+
+## 18. Floating AI tutor
+
+The AI tutor (`/tutor`, README "AI tutor") becomes reachable from every page of the
+authenticated app through a floating launcher and a popup chat. It is the SAME tutor —
+same thread, same caps, same proxy — re-shelled, not a second one. Phase 1 is a pure
+re-shell in this repo; phase 2 ("ask about this question") also changes the
+`cmeprep-ai-tutor` service and is gated separately so either repo can deploy first.
+
+### Scope
+
+**In (phase 1):** launcher + panel mounted once in `app/(app)/layout.tsx`; ONE
+conversation store (`TutorWidgetProvider`) that the `/tutor` page and the panel are both
+views of; lazy state loading through `GET /api/tutor/state`; streaming that survives
+closing the panel and soft navigation; a runner opt-in so the launcher appears in
+tutor-mode tests only.
+
+**Phase 2:** an "Ask the tutor about this question" button on the explanation strip
+(tutor-runner reveal + post-test review) for MCQ questions, server-assembled question
+context, an optional `context` field on the tutor service's `ChatRequest`, a
+`chat_messages.context` column.
+
+**Explicitly out:** a separate "quick" thread for the widget (one thread per student
+stays the model — the LangGraph checkpointer is keyed on `user_id`); a hide-the-button
+preference; recording which surface a question came from; client analytics; a hint mode
+before reveal; OSCE stations as context (later — a second payload shape and the revoked
+model-answer table); a global keyboard shortcut; the `/org` and `/admin` trees (own
+chrome, not study surfaces).
+
+### Where it appears (`tutorLauncherVisible`, pure)
+
+The launcher renders inside `app/(app)/layout.tsx` only, so `/org`, `/admin`, marketing
+and auth pages never show it by construction. Within the app it is hidden when:
+
+- the service is not configured — the layout passes `available = tutorApiUrl() !== null`
+  (an env read, no query, no fetch — the launcher must not pop in after a request on
+  every hard load) and the whole widget is skipped when false, matching the page's
+  "isn't switched on yet" state;
+- the pathname is `/tutor` — the page IS the maximised view. Suppression is DERIVED
+  (`effectiveOpen = open && !suppressed`), never written to the persisted flag, so leaving
+  `/tutor` finds the panel as it was;
+- the pathname is a take route (`isTakeRoute`, the one regex `AppChrome` also uses) and
+  no host has registered. Exam and OSCE runners never register: an unrestricted tutor
+  under the clock is a scoring-integrity problem, and the reveal-withholding rule (§16)
+  would be pointless with a chat window beside the paper. The tutor-mode runner registers
+  (`useTutorWidgetHost`) on mount and unregisters on unmount, which moves the launcher
+  above its mobile footer bar. Default hidden, so an exam test can never flash the
+  launcher before its runner mounts; the runner's unmount and the pathname change commit
+  together, so leaving a tutor test never flashes it either.
+
+Gated users — trial allowance spent, no subscription, daily cap — STILL see the launcher.
+Opening it shows the same locked notice as the page (server message from
+`tutorAccessFor`, plans button for 403, none for 429). Discoverability and the upsell are
+the point.
+
+### Loading state lazily (`GET /api/tutor/state`)
+
+The layout renders on every authenticated request, and the tutor page's three
+service-role queries must not become a tax on every page. The widget fetches nothing
+until first opened; then `GET /api/tutor/state` returns
+`{ verdict: TutorAccess, turns: TutorTurn[], features: { context: boolean } }` — the
+inputs `app/(app)/tutor/page.tsx` computes today, shared through `loadTutorState(user)` in
+`lib/tutor.ts` so the two cannot drift. `force-dynamic`, `Cache-Control: no-store`,
+banned check like the chat route, 503 when unconfigured.
+
+Refetch policy — because `getConversation` deliberately does not reconstruct citations,
+and because the service persists a cut-off answer asynchronously after disconnect, a
+naive "replace on every open" would erase this session's citations, feedback ids and
+partial answers. So: fetch on first open, when the last load is older than two minutes,
+or after recovering from a 401 — and never while a stream is in flight. Results are
+**merged by id**: on `done` the local assistant turn is re-keyed to the server
+`message_id`, and a fetched turn with the same id keeps the local `citations`/`messageId`.
+Every fetch carries a sequence number; a response that lands after a newer fetch or after
+a stream started is discarded (Strict Mode's double effects and open/close/open both
+produce overlapping GETs).
+
+Until the verdict has loaded, the send button is disabled but the textarea is not — the
+student can draft while the panel decides whether the composer is locked.
+
+### One store, two shells
+
+`components/tutor/tutor-chat.tsx` today owns the SSE parsing, the Strict-Mode-safe
+token append, abort-on-unmount, the truncated-stream check, cap lockout and retry — and
+also a page header and document-level scroll pinning. That logic moves into
+`useTutorConversation()`, instantiated EXACTLY ONCE inside `TutorWidgetProvider`. The
+page shell (`TutorChat`) and the panel shell (`TutorPanel`) both read the provider and
+compose the same presentational pieces — `Transcript`, `Composer`, `Thinking`,
+`EmptyState`, `BlockedNotice` — so the fixes that live in comments today (the `let
+opened` Strict-Mode bug, the graceful-EOF-without-`done` case) exist exactly once. Scroll
+pinning takes a scroll-container ref (the panel) or `null` (the page → window); the
+"sticky composer bounce" rationale applies to the window case only and the comment says
+so.
+
+The provider exposes two React contexts: **controls** (open/close, unread, host
+registry, page context — memoised, stable) and **conversation** (turns, streaming).
+Runners and the explanation strip consume only controls, so a streaming token never
+re-renders a test runner.
+
+The `/tutor` page seeds the provider from its server-rendered `turns`/`verdict` before
+paint (merged by id, so this session's citations survive) **unless a stream is in
+flight**, in which case the live store wins: the server snapshot was taken after the
+user row was written but before the assistant row exists. Until the store has adopted
+a snapshot the page renders the snapshot directly, so the transcript is in the server
+HTML and hydration shows no empty-state flash. That is what makes the widget → `/tutor`
+handoff seamless instead of a question with no answer and an unread dot on a hidden
+launcher. Seeding also clears the unread dot, and an answer that lands while the
+student is on `/tutor` never sets it.
+
+Closing the panel is *minimise*, not *cancel*: the question was counted the moment the
+proxy accepted it. The stream keeps running in the provider; a `done` or an error that
+lands while closed sets an unread dot on the launcher (errors also toast, as today),
+cleared on open. Soft navigation keeps the provider mounted, so the stream continues
+across pages. Only a full unload aborts. A hard reload loses the in-flight stream; the
+next open refetches, and the transcript shows whatever the service persisted.
+
+### Presentation
+
+- **Launcher:** `fixed` bottom-right, `size-14` round `bg-primary` button with
+  `shadow-lg`, `MessagesSquare` (the nav's tutor icon) swapping to `X` while the panel is
+  open, `aria-label="AI tutor"`, `aria-expanded`, `aria-controls`. Unread dot is `bg-gold`
+  — gold is the brand accent on crimson, which is exactly what this is. Bottom offset by
+  host: default `bottom-[calc(--spacing(5)+env(safe-area-inset-bottom))]`; with a runner
+  host (`data-host="runner"`) `bottom-[calc(4.5rem+env(safe-area-inset-bottom))]` under
+  `sm`, back to the default from `sm` up because the runner footer is `sm:hidden`. `z-40`
+  — above runner chrome (30), below sheets and dialogs (50).
+- **Desktop (`md+`):** Radix `Dialog` with `modal={false}` — non-modal Content gives
+  `role="dialog"`, Esc via the dismissable layer, no focus trap, no scroll lock, no body
+  `pointer-events`, no overlay, focus returned to the trigger. Two overrides:
+  `onInteractOutside` → `preventDefault` (clicking the page must not close a panel meant
+  to sit beside it), and `onOpenAutoFocus` → focus the composer (Radix would pick the
+  close button). Esc is gated on focus being inside the panel so it never steals Esc
+  from page components. Content: fixed bottom-right above the launcher, `w-[26rem]`,
+  `h-[min(40rem,85dvh)]`, rounded, bordered, `shadow-xl`, `z-40`, with a fade/slide-in
+  that `motion-reduce` disables.
+- **Mobile (`<md`):** the same `Dialog.Root` with `modal` flipped to true, rendering
+  `SheetContent side="bottom"` overridden to fill the viewport (the sheet's bottom
+  variant is `h-auto`). The breakpoint comes from `matchMedia("(min-width: 768px)")`
+  through `useSyncExternalStore` (server snapshot = desktop, so SSR and first paint
+  agree); when the breakpoint changes while open, the panel closes rather than flipping
+  `modal` under an open dialog. The iOS keyboard does not shrink `100dvh`, so the sheet's
+  height tracks `window.visualViewport.height` on `resize`/`scroll`; the transcript has
+  `overscroll-behavior: contain`; the composer pads `env(safe-area-inset-bottom)`. No
+  composer autofocus on mobile (the keyboard would cover the transcript, and programmatic
+  focus outside a tap is unreliable) — `onOpenAutoFocus` targets the transcript.
+- **Panel header:** "AI tutor" (`font-display`), `{left} of {limit} left` when metered,
+  New conversation (disabled while streaming), an "Open full page" link to `/tutor`,
+  close. **Body:** the shared transcript (own scroll container) with citations and
+  feedback buttons unchanged, the three starter prompts in the empty state, `Thinking`
+  with the cold-start copy. **Footer:** the composer (Enter sends, Shift+Enter newline,
+  `isComposing` guard — unchanged) and the study-aid disclaimer.
+- **Persisted open state:** `localStorage["cmeprep.tutor-widget.open"]`, read through
+  `useSyncExternalStore` with a server snapshot of `false`, so the panel always renders
+  closed on the server and may open one frame after hydration. Restored on desktop only —
+  on mobile the panel always starts closed because a full-screen sheet on load would hide
+  the page the student came for. Every storage access is try/catch'd.
+
+### Errors in the panel
+
+The page's error handling carries over through the hook (toast + retry; 403/429 lock the
+composer with the server's message). One case is new: a **401** from state, chat or
+reset — the session ended between the layout's `requireUser` and the ask, almost always a
+sign-out in another tab (`proxy.ts` refreshes cookies on `/api/*` too). The panel enters
+a `signedOut` state: the composer is replaced by "Your session has ended — sign in to keep
+going" and a link that does a full navigation to `/login?next=<pathname>` so `requireUser`
+re-runs; the persisted open flag is cleared. `available` is NOT flipped. Nothing retries
+automatically.
+
+### Phase 2 — "Ask the tutor about this question"
+
+**Entry point.** `ExplanationStrip` gains an `askTutor` slot; the tutor runner (after
+reveal) and the review list render `<AskTutorButton testId questionId position
+subjectName />` into it. The button reads the controls context and renders nothing when
+there is no provider, when `features.context` is off, when the row is `withheld`, when
+`type === 'osce'`, or for private-bank questions (`privateBank`, derived from
+`exams.org_id` on `ReviewQuestion` and `TakeQuestion` via the join `withheldQuestionIds`
+already makes). Clicking opens the widget, sets the page context, and focuses the
+composer (desktop). The client flags only hide the button; the server rule is the control.
+
+**Request.** `tutorAskSchema` gains `context?: { testId: uuid, questionId: uuid }`. The
+client never sends question text — the proxy assembles it, so a student cannot feed the
+tutor a question they have not earned the key for.
+
+**Eligibility (`canShareQuestionContext`, pure, `lib/tutor-core.ts`).** The proxy loads
+the test (`getTestForUser` — ownership), the `test_questions` link, the `test_answers`
+row, and the question's `type` and exam `org_id` (a direct read, not
+`withheldQuestionIds`, which returns empty for admins) with the service-role client.
+Allowed iff `questionInTest && !withheld && orgId === null && type !== 'osce' &&
+(status !== 'in_progress' || (mode === 'tutor' && revealedAt !== null))`. The
+`mode === 'tutor'` clause is an explicit security boundary in the reveal route's mould,
+not an inference from `revealed_at` never being set in exam mode. `lib/tutor.ts` joins
+`lib/tests.ts`, `lib/results.ts` and the reveal route in CLAUDE.md's list of correctness
+readers. Failure → 403 with a reason rendered as a toast; nothing is sent or counted.
+
+**Payload (`buildQuestionContext`, pure).** `{ position, subject, type, stem, options:
+[{ label, isCorrect, selected }], explanation }`, capped at `TUTOR_CONTEXT_MAX_CHARS =
+6000`: explanation truncated first with a marker, then stem; options never. The
+student's own message keeps its 4000-char limit. The service mirrors the caps with
+pydantic `max_length` as a backstop, as it does for `question`.
+
+**Service (`cmeprep-ai-tutor`).** `ChatRequest.context: QuestionContext | None`.
+`TutorState.context` is written on EVERY turn (`None` overwrites — graph keys without a
+reducer keep their last checkpointed value, so an un-contexted follow-up would otherwise
+inherit the previous question). `_retrieval_query` prepends the stem when context is
+present. The system prompt gains a `STUDENT'S CURRENT QUESTION` block: the answer key in
+it is authoritative — explain why it is right and why the chosen option is wrong, never
+contradict it, and say so plainly if the passages disagree; the passages rule still
+governs external facts. When context is present and retrieval finds nothing, the graph
+generates from the question block alone, with an instruction to tell the student the
+topic isn't in their materials; citations are empty. `_persist_message` stores the
+student's text unchanged and writes `chat_messages.context` (migration in THIS repo; the
+service only writes it). `getConversation` selects it so a reloaded transcript shows the
+chip.
+
+**Deploy safety.** The proxy sends `context` only when `TUTOR_CONTEXT_ENABLED` is set,
+and `/api/tutor/state` reports `features.context` from the same flag so the button is
+hidden when it is off — pydantic ignores unknown fields, and a chip that claims the tutor
+saw the question when it did not is the worst failure. Order: migration → service deploy
+→ set the flag.
+
+**Chip lifecycle.** Context is *sticky*: a chip ("Q7 · Cardiology ×") sits in the
+composer and every message carries it until the student clears it, clicks another
+question's button (replaces), starts a new conversation, steps to another question in
+the runner, or navigates away from the page that set it. User turns rendered from
+history show the same chip from the persisted column.
+
+### Testing
+
+`tests/unit/tutor-core.test.ts` pins: `isTakeRoute`; `tutorLauncherVisible`
+(unconfigured, `/tutor`, take route with and without a host, elsewhere);
+`mergeTranscript` (local citations/messageId survive a refetch; re-keying on `done`);
+`canShareQuestionContext` (owner mismatch, question not in test, private bank, OSCE,
+in-progress exam even with a `revealed_at` row, tutor-mode unrevealed, tutor-mode
+revealed, submitted exam); `buildQuestionContext` (shape, truncation order, cap).
+Schema tests for `tutorAskSchema` with and without context. No UI automation (no e2e
+suite); the manual checklist lives with the plan.

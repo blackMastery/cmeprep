@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { isTakeRoute } from "@/lib/tutor-core";
 
 /**
  * Hides the app nav while a test is being taken. The take screen has its own
@@ -10,9 +11,7 @@ import { usePathname } from "next/navigation";
  */
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isTakingTest = /^\/tests\/[^/]+\/take$/.test(pathname);
-
-  if (isTakingTest) return null;
+  if (isTakeRoute(pathname)) return null;
 
   return <>{children}</>;
 }

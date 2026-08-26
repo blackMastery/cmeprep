@@ -38,6 +38,7 @@ import { useAnswerAutosave } from "@/components/test/use-answer-autosave";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
 import { QuestionNoteEditor } from "@/components/question-note-editor";
 import { ReportQuestionDialog } from "@/components/report-question";
+import { useTutorWidgetHost } from "@/components/tutor/tutor-widget-provider";
 
 const LETTERS = "ABCDEFGH".split("");
 
@@ -61,6 +62,12 @@ export function TutorRunner({
 }) {
   const router = useRouter();
   const { test, questions } = state;
+
+  // Tutor mode is the one take screen that gets the floating AI tutor: the
+  // answer key is already revealed per question, so a chat beside it gives
+  // nothing away (SPEC §18). Exam and OSCE runners deliberately do not do
+  // this. Registering also lifts the launcher above the mobile footer bar.
+  useTutorWidgetHost("runner");
 
   const [index, setIndex] = useState(() => {
     const firstUnrevealed = questions.findIndex((q) => q.reveal === null);

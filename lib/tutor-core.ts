@@ -21,6 +21,16 @@ export const TUTOR_MIN_QUESTION_CHARS = 2;
  * means a 400 from us instead of a 422 the student can't act on. */
 export const TUTOR_MAX_QUESTION_CHARS = 4000;
 
+/** One message of the conversation, as rendered on load. `id` IS the
+ * chat_messages row id, which is what makes answers ratable after a reload.
+ * A wire type (GET /api/tutor/state) as well as a server one. */
+export type TutorTurn = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
 /** UTC instant of today's Guyana midnight — the daily window's lower bound.
  * Same civil-day convention as streaks and OSCE grading; the bounds rule
  * itself lives in analytics-core (cores cross-import rather than restate). */
@@ -213,5 +223,112 @@ export function stripLinks(): TransformStream<Uint8Array, Uint8Array> {
       buffer += decoder.decode();
       if (buffer.trim()) emit(controller, buffer);
     },
+  });
+}
+
+// ── Floating widget (SPEC §18) ───────────────────────────────────────────────
+
+/** The take screen: `/tests/[id]/take`. One regex, read by the app chrome
+ * (which hides the nav there) and the widget (which hides the launcher there
+ * unless a runner has opted in), so the two can never disagree about what
+ * counts as "taking a test". */
+export function isTakeRoute(pathname: string): boolean {
+  return /^\/tests\/[^/]+\/take$/.test(pathname);
+}
+
+/**
+ * Whether the floating launcher renders at all.
+ *
+ * - Unconfigured service: nothing to launch — the page renders its own
+ *   "isn't switched on yet" card, so the widget stays out of the way.
+ * - `/tutor` IS the maximised view; a launcher beside it would open a second
+ *   view of the same conversation.
+ * - Take routes are hidden by default and opted INTO by the tutor-mode runner.
+ *   The default is hidden, not shown, so an exam-mode paper can never flash the
+ *   launcher in the moment before its runner mounts.
+ */
+export function tutorLauncherVisible(input: {
+  available: boolean;
+  pathname: string;
+  hostRegistered: boolean;
+}): boolean {
+  if (!input.available) return false;
+  if (input.pathname === "/tutor") return false;
+  if (isTakeRoute(input.pathname)) return input.hostRegistered;
+  return true;
+}
+
+/** Capabilities a tutor surface may offer. `context` (phase 2) is switched on
+ * by env once the tutor service accepts it; until then the button stays
+ * hidden rather than sending a field the service silently ignores. */
+export type TutorFeatures = { context: boolean };
+
+/** What GET /api/tutor/state returns and the /tutor page renders from. */
+export type TutorStatePayload = {
+  verdict: TutorAccess;
+  turns: TutorTurn[];
+  features: TutorFeatures;
+};
+
+/** localStorage key for "the panel was open" — desktop only. */
+export const TUTOR_WIDGET_OPEN_KEY = "cmeprep.tutor-widget.open";
+
+/** How old a loaded transcript may be before opening the panel refetches it.
+ * Measured from the last load OR the last stream settling, so a refetch never
+ * races the service's asynchronous persist of a cut-off answer. */
+export const TUTOR_STATE_STALE_MS = 120_000;
+
+/** A turn as the client renders it: a history turn, or one created locally
+ * while an answer streams. Local ids are prefixed `local-` and can never
+ * collide with a chat_messages uuid. */
+export type TranscriptTurn = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations?: Citation[];
+  /** chat_messages id — only known for answers that can be rated. */
+  messageId?: string;
+};
+
+/** History → transcript. Assistant turns are ratable by their row id. */
+export function turnsFromHistory(turns: TutorTurn[]): TranscriptTurn[] {
+  return turns.map((t) => ({
+    id: t.id,
+    role: t.role,
+    content: t.content,
+    messageId: t.role === "assistant" ? t.id : undefined,
+  }));
+}
+
+/**
+ * Fold a freshly fetched history into the transcript already on screen.
+ *
+ * The server's order and membership win: chat_messages is the record, and a
+ * refetch is how questions asked on the other surface (the page, another tab)
+ * appear. But `getConversation` deliberately does not reconstruct citations,
+ * so a fetched turn that the client already holds keeps the client's
+ * `citations`/`messageId` — otherwise every reopen would strip the sources
+ * from this session's answers. Matching is by id, which is why a streamed
+ * answer is re-keyed to its `message_id` on `done`.
+ *
+ * Local turns absent from the fetch are dropped. In practice those are the
+ * `local-ask-*` user turns the server holds under its own id, and — never
+ * while streaming, and only after TUTOR_STATE_STALE_MS of quiet — a cut-off
+ * answer whose asynchronous persist had not landed, which the student was
+ * already told to ask again.
+ */
+export function mergeTranscript(
+  local: TranscriptTurn[],
+  fetched: TutorTurn[]
+): TranscriptTurn[] {
+  const byId = new Map(local.map((t) => [t.id, t]));
+  return turnsFromHistory(fetched).map((turn) => {
+    const held = byId.get(turn.id);
+    if (!held) return turn;
+    return {
+      ...turn,
+      citations: held.citations ?? turn.citations,
+      messageId: held.messageId ?? turn.messageId,
+    };
   });
 }

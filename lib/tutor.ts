@@ -1,12 +1,20 @@
 import "server-only";
 
-import type { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { SessionUser } from "@/lib/auth";
+import { getExamAccess } from "@/lib/entitlements";
 import type { ChatMessage } from "@/lib/supabase/types";
 import {
+  tutorAccessFor,
   tutorCapWindowStart,
   type Citation,
+  type TutorFeatures,
+  type TutorStatePayload,
+  type TutorTurn,
   type TutorUsage,
 } from "@/lib/tutor-core";
+
+export type { TutorTurn } from "@/lib/tutor-core";
 
 /**
  * Server-side wiring for the AI tutor: usage counts, conversation history and
@@ -97,13 +105,6 @@ export async function getTutorUsage(
   return { usedTotal: total.count ?? 0, usedToday: today.count ?? 0 };
 }
 
-export type TutorTurn = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string;
-};
-
 /**
  * The current conversation.
  *
@@ -149,6 +150,36 @@ export async function getConversation(
       createdAt: m.created_at,
     }))
     .reverse();
+}
+
+export type TutorState = TutorStatePayload;
+
+/** Nothing is switched on yet; phase 2 reads TUTOR_CONTEXT_ENABLED here. */
+export function tutorFeatures(): TutorFeatures {
+  return { context: false };
+}
+
+/**
+ * Everything a tutor surface needs to render: the entitlement verdict and the
+ * transcript. Shared by the /tutor page and GET /api/tutor/state so the two
+ * views of one conversation cannot compute different answers.
+ *
+ * chat_messages and tutor_threads are deny-all for `authenticated` (the tutor
+ * service writes them over a direct Postgres connection), so reads go through
+ * the service-role client, scoped to this user by hand.
+ */
+export async function loadTutorState(user: SessionUser): Promise<TutorState> {
+  const admin = createAdminClient();
+  const [access, usage, turns] = await Promise.all([
+    getExamAccess(user),
+    getTutorUsage(admin, user.id),
+    getConversation(admin, user.id),
+  ]);
+  return {
+    verdict: tutorAccessFor(user.profile.role, access, usage),
+    turns,
+    features: tutorFeatures(),
+  };
 }
 
 /**

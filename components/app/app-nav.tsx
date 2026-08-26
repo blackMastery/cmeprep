@@ -10,7 +10,7 @@ import {
   History,
   LayoutDashboard,
   ListTodo,
-  MessagesSquare, // unused while the AI tutor nav link is commented out
+  MessagesSquare,
   ShieldCheck,
   UserRound,
 } from "lucide-react";

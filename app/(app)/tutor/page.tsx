@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { getExamAccess } from "@/lib/entitlements";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { getConversation, getTutorUsage, tutorApiUrl } from "@/lib/tutor";
-import { tutorAccessFor } from "@/lib/tutor-core";
+import { loadTutorState, tutorApiUrl } from "@/lib/tutor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TutorChat } from "@/components/tutor/tutor-chat";
@@ -17,18 +14,8 @@ export const dynamic = "force-dynamic";
 
 export default async function TutorPage() {
   const user = await requireUser();
-
-  // chat_messages and tutor_threads are deny-all for `authenticated` (the
-  // tutor service writes them over a direct Postgres connection), so reads go
-  // through the service-role client, scoped to this user by hand.
-  const admin = createAdminClient();
-  const [access, usage, turns] = await Promise.all([
-    getExamAccess(user),
-    getTutorUsage(admin, user.id),
-    getConversation(admin, user.id),
-  ]);
-
-  const verdict = tutorAccessFor(user.profile.role, access, usage);
+  const state = await loadTutorState(user);
+  const { verdict } = state;
 
   if (!verdict.allowed) {
     // TrialLimitCard is deliberately not reused here: its copy counts free
@@ -54,11 +41,7 @@ export default async function TutorPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
-      <TutorChat
-        initialTurns={turns}
-        remaining={verdict.remaining}
-        limit={verdict.limit}
-      />
+      <TutorChat initial={state} />
     </div>
   );
 }

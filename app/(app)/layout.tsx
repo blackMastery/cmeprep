@@ -5,6 +5,9 @@ import { orgLogoUrl } from "@/lib/storage";
 import { AppHeader } from "@/components/app/app-header";
 import { AppChrome } from "@/components/app/app-chrome";
 import { AppSidebar } from "@/components/app/app-nav";
+import { TutorWidgetProvider } from "@/components/tutor/tutor-widget-provider";
+import { TutorWidget } from "@/components/tutor/tutor-widget";
+import { tutorApiUrl } from "@/lib/tutor";
 
 /**
  * Nothing behind auth belongs in an index. A crawler only ever sees the
@@ -40,22 +43,29 @@ export default async function AppLayout({
   // --app-header-h is the single source of truth for the sticky header's
   // height: AppHeader sizes itself from it, and full-height screens such as
   // the new-test wizard subtract it from 100dvh.
+  //
+  // The floating AI tutor (SPEC §18) lives here so one conversation store
+  // outlives page navigation. `available` is an env read — the widget must
+  // not cost a query on every authenticated page; it fetches on first open.
   return (
-    <div className="flex min-h-svh flex-col [--app-header-h:--spacing(16)]">
-      <AppChrome>
-        <AppHeader
-          user={user}
-          orgAdmin={orgAdmin}
-          orgMember={orgMember}
-          orgBrand={orgBrand}
-        />
-      </AppChrome>
-      <div className="flex flex-1">
+    <TutorWidgetProvider available={tutorApiUrl() !== null}>
+      <div className="flex min-h-svh flex-col [--app-header-h:--spacing(16)]">
         <AppChrome>
-          <AppSidebar user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
+          <AppHeader
+            user={user}
+            orgAdmin={orgAdmin}
+            orgMember={orgMember}
+            orgBrand={orgBrand}
+          />
         </AppChrome>
-        <main className="min-w-0 flex-1">{children}</main>
+        <div className="flex flex-1">
+          <AppChrome>
+            <AppSidebar user={user} orgAdmin={orgAdmin} orgMember={orgMember} />
+          </AppChrome>
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
       </div>
-    </div>
+      <TutorWidget />
+    </TutorWidgetProvider>
   );
 }

@@ -31,7 +31,10 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   entitlement and the message caps are enforced. Trial users get
   `TUTOR_TRIAL_ALLOWANCE` questions in total, subscribers `TUTOR_DAILY_CAP`
   per day. Answers can be rated good/bad with optional detail, triaged at
-  `/admin/tutor/feedback`. Requires `TUTOR_API_URL` + `TUTOR_SHARED_SECRET`.
+  `/admin/tutor/feedback`. The same conversation is also reachable from a
+  floating launcher on every authenticated page (SPEC §18) — hidden during
+  exam and OSCE tests, shown in tutor-mode ones. Requires `TUTOR_API_URL` +
+  `TUTOR_SHARED_SECRET`.
 
 - **Dashboard** — attempted / accuracy / streak, weak areas, past tests,
   trial usage with upgrade prompt.
