@@ -63,10 +63,13 @@ const SECTIONS: readonly AboutSection[] = [
   //   heading: "Our mission",
   //   body: ["…"],
   // },
-  // {
-  //   heading: "What we offer",
-  //   body: ["…"],
-  // },
+  {
+    heading: "What we offer",
+    body: [
+      "Question banks for seven examinations — CAMC, USMLE, PLAB, NCLEX, MBBS exit exams and the practical OSCE — built from past papers and intern recalls, with a written explanation on every question. Build a ten-question drill or sit a full timed paper, then let the dashboard show you where to focus.",
+      "And when a question raises a question, ask the AI tutor. It answers only from our curated course materials, cites the file and page behind every answer, and tells you when something isn't covered rather than guessing. OSCE stations are marked the same way: write the answer in your own words and an AI examiner grades it against the model answer in seconds.",
+    ],
+  },
 ];
 
 export default async function AboutPage() {

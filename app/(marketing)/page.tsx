@@ -1,11 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  Bookmark,
   BookOpen,
   Building2,
   Check,
+  Lightbulb,
   LineChart,
   SlidersHorizontal,
+  Sparkles,
   Stethoscope,
   Target,
   Timer,
@@ -14,10 +17,12 @@ import { HERO_IMAGE, unsplashUrl } from "@/lib/marketing-images";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { PhoneMockup } from "@/components/marketing/phone-mockup";
+import { TutorMockup } from "@/components/marketing/tutor-mockup";
 import { PricingCards } from "@/components/marketing/pricing-cards";
 import { MarketingStructuredData } from "@/components/marketing/structured-data";
 import { listActivePlans, paidPlans } from "@/lib/plans";
 import { priceLabel } from "@/lib/format";
+import { TUTOR_DAILY_CAP, TUTOR_TRIAL_ALLOWANCE } from "@/lib/tutor-core";
 
 function stats(startingPrice: string | null) {
   return [
@@ -45,6 +50,21 @@ const FEATURES = [
     body: "Sit under real exam conditions. The clock runs on our servers, so refreshing or closing your laptop never buys extra time — and never loses an answer.",
   },
   {
+    icon: Lightbulb,
+    title: "Tutor mode",
+    body: "Untimed practice that grades each question the moment you answer and shows the explanation right there — so you learn as you go, not after the paper.",
+  },
+  {
+    icon: Sparkles,
+    title: "AI tutor",
+    body: "Ask anything, any time. The tutor answers from curated course materials, cites the file and page it used, and says so when a topic isn't covered instead of guessing.",
+  },
+  {
+    icon: Stethoscope,
+    title: "AI-graded OSCE stations",
+    body: "Write your answer to a station in your own words. An AI examiner marks it against the model answer in seconds, then shows you the model answer to learn from.",
+  },
+  {
     icon: BookOpen,
     title: "Explanations that teach",
     body: "Every question carries a written explanation, not just a correct letter. Review your wrong answers and understand why the right one is right.",
@@ -60,10 +80,22 @@ const FEATURES = [
     body: "Questions attempted, running accuracy, day streak and a full history of past papers, all updated the moment you submit.",
   },
   {
-    icon: Stethoscope,
-    title: "OSCE station bank",
-    body: "An OSCE station bank alongside the written banks, drawn from past papers and intern recalls.",
+    icon: Bookmark,
+    title: "Bookmarks & notes",
+    body: "Bookmark the questions that caught you out and keep your own notes on any of them, so they're one click away in your last week.",
   },
+];
+
+/** Why the tutor is worth asking — every line here is a rule the product
+ * actually enforces (README "AI tutor", lib/tutor-core.ts). The allowances
+ * are imported rather than typed so the page can't promise more than the
+ * proxy route grants. */
+const TUTOR_POINTS = [
+  "Every answer cites its sources — the file and the page — so you can check it against your own copy.",
+  "If the materials don't cover something, it says so. No confident guesses, no invented doses.",
+  "Ask follow-ups. Your conversation is saved, so you can pick up tomorrow where you left off tonight.",
+  "Rate any answer good or bad — feedback goes straight to our content team.",
+  `${TUTOR_TRIAL_ALLOWANCE} questions free on trial, then ${TUTOR_DAILY_CAP} a day on any subscription.`,
 ];
 
 const EXAMINATIONS = [
@@ -134,7 +166,15 @@ export default async function MarketingPage() {
               className="mix-blend-lighten"
             />
 
-            <h1 className="mt-8 font-display text-4xl leading-[1.12] font-semibold tracking-tight sm:text-5xl lg:text-[3.4rem]">
+            <Link
+              href="#tutor"
+              className="mt-8 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-medium tracking-wide uppercase hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
+            >
+              <Sparkles className="size-3.5 text-gold" aria-hidden="true" />
+              New · an AI tutor that cites its sources
+            </Link>
+
+            <h1 className="mt-5 font-display text-4xl leading-[1.12] font-semibold tracking-tight sm:text-5xl lg:text-[3.4rem]">
               Pass your Medical Board
               <br />
               and Exit Examinations
@@ -143,8 +183,9 @@ export default async function MarketingPage() {
             </h1>
 
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/90">
-              Practice questions, timed mock exams and per-subject analytics that
-              show you exactly where to focus.
+              Practice questions, timed mock exams, AI-graded OSCE stations and
+              an AI tutor that answers from the course materials — with
+              per-subject analytics that show you exactly where to focus.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -220,6 +261,53 @@ export default async function MarketingPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* ── AI tutor ─────────────────────────────────────── */}
+      <section id="tutor" className="scroll-mt-20 border-t border-border">
+        <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:py-20 lg:grid-cols-2 lg:gap-16">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-xs font-medium tracking-wide text-primary uppercase">
+              <Sparkles className="size-3.5" aria-hidden="true" />
+              AI tutor
+            </span>
+            <h2 className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+              Your questions, answered from the syllabus
+            </h2>
+            <p className="mt-3 text-lg text-muted-foreground">
+              Stuck on a concept at 11pm? Ask the tutor. It answers only from
+              the curated course materials behind the question bank — never
+              from the open internet — so every answer is one you can trace
+              back to the page.
+            </p>
+
+            <ul className="mt-8 space-y-3">
+              {TUTOR_POINTS.map((point) => (
+                <li key={point} className="flex items-start gap-2.5">
+                  <Check
+                    className="mt-1 size-4 shrink-0 text-teal"
+                    strokeWidth={3}
+                    aria-hidden="true"
+                  />
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button size="lg" asChild>
+                <Link href="/register">Ask your first question free</Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild>
+                <Link href="#pricing">See plans</Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex justify-center">
+            <TutorMockup />
+          </div>
+        </div>
       </section>
 
       {/* ── Examinations + device shot ───────────────────── */}
@@ -319,7 +407,8 @@ export default async function MarketingPage() {
             Start today
           </h2>
           <p className="text-lg text-white/90">
-            Ten free questions and two practice tests — no card required.
+            Ten free questions, two practice tests and {TUTOR_TRIAL_ALLOWANCE}{" "}
+            AI tutor questions — no card required.
           </p>
           <Button size="xl" className="bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50" asChild>
             <Link href="/register">Start a trial test</Link>
