@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ThumbsDown, ThumbsUp } from "lucide-react";
+import Link from "next/link";
+import { Coins, ThumbsDown, ThumbsUp } from "lucide-react";
 import { listTutorFeedback } from "@/lib/admin/tutor";
 import { markTutorFeedbackHandled } from "@/app/admin/tutor/actions";
 import { Badge } from "@/components/ui/badge";
@@ -26,15 +27,25 @@ export default async function TutorFeedbackPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">
-        Tutor feedback
-      </h1>
-      <p className="mt-1 mb-6 text-muted-foreground">
-        {openCount === 0
-          ? "No negative feedback waiting on review."
-          : `${openCount} negative ${openCount === 1 ? "rating" : "ratings"} waiting on review.`}{" "}
-        {up.length > 0 && `${up.length} positive.`}
-      </p>
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            Tutor feedback
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            {openCount === 0
+              ? "No negative feedback waiting on review."
+              : `${openCount} negative ${openCount === 1 ? "rating" : "ratings"} waiting on review.`}{" "}
+            {up.length > 0 && `${up.length} positive.`}
+          </p>
+        </div>
+        <Button variant="outline-muted" asChild>
+          <Link href="/admin/tutor">
+            <Coins data-icon="inline-start" />
+            Usage
+          </Link>
+        </Button>
+      </header>
 
       {feedback.length === 0 ? (
         <Card>

@@ -1158,6 +1158,35 @@ export type Database = {
           picks: number;
         }[];
       };
+      /** AI-tutor token usage per (Guyana day, model). The model-null row
+       * carries the question count and refusals. Service-role only. */
+      tutor_usage_by_day: {
+        Args: { p_from?: string | null; p_to?: string | null };
+        Returns: {
+          day: string;
+          model: string | null;
+          questions: number;
+          answers: number;
+          measured: number;
+          prompt_tokens: number;
+          completion_tokens: number;
+        }[];
+      };
+      /** Same buckets keyed by (user, model) for the top p_limit users by
+       * total tokens. Service-role only. */
+      tutor_usage_by_user: {
+        Args: { p_from?: string | null; p_to?: string | null; p_limit?: number };
+        Returns: {
+          user_id: string;
+          model: string | null;
+          questions: number;
+          answers: number;
+          measured: number;
+          prompt_tokens: number;
+          completion_tokens: number;
+          last_at: string;
+        }[];
+      };
     };
     Enums: {
       user_role: UserRole;
