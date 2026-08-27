@@ -45,3 +45,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/agent-memory/code-reviewer/MEMORY.md
+.claude/agent-memory/code-reviewer/review-heuristics.md

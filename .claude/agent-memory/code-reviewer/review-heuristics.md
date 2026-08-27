@@ -168,3 +168,32 @@ only", expect this coercion, not a `reason !== 'trial'` check.
 table that owns storage objects orphan the bytes — `deleteExam` pre-flights
 specialties and subscriptions but nothing else, so any new child table of
 `exams` needs either its own pre-flight or a storage sweep.
+
+---
+
+Added from the floating-tutor-widget review (2026-08-26).
+
+**Verifying Tailwind v4 arbitrary classes without a build:** write a script in
+the scratchpad that imports `compile` by ABSOLUTE path from
+`<repo>/node_modules/@tailwindcss/node/dist/index.mjs` (scratchpad is outside
+the repo, so bare specifiers don't resolve), feed it
+`@import "tailwindcss"; @import "shadcn/tailwind.css";` with `base: <repo>`,
+then `compiler.build([...classes])` and grep the output. Confirmed live that
+`--spacing(n)` inside `calc()`/`max()` arbitrary values expands correctly and
+that `+` gets whitespace inserted. shadcn's `data-open:`/`data-closed:`
+variants match Radix's `[data-state="open"]` as well as `[data-open]`.
+
+**Lint constraint that shapes proposed fixes:** eslint-config-next 16 ships
+react-hooks v6 with `set-state-in-effect`; the codebase already routes around
+it (module-level external store + `useSyncExternalStore` in
+tutor-widget-provider, refs updated in effects). Don't propose
+`useEffect(() => setX(...))` fixes — propose a ref gate, a derived value, or
+the external-store pattern.
+
+**Store-outlives-page pattern (tutor widget):** conversation state lives in the
+(app) layout provider and is rendered by BOTH a popup and a full page
+(/tutor), where the popup is deliberately hidden. Any "was the student
+looking?" signal keyed on the popup's `open` alone is wrong on the full page.
+Also, moving an in-flight fetch from a page component into a layout provider
+silently drops the page's unmount-abort — check whether the old abort's
+rationale (billing) still holds for the provider's own unmount.
