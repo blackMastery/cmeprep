@@ -8,11 +8,12 @@ import type {
   QuestionType,
 } from "@/lib/supabase/types";
 import type { ExistingOption } from "@/lib/admin/option-diff";
-import type { QuestionListFilters } from "@/lib/admin/question-filters-core";
+import {
+  DEFAULT_PAGE_SIZE,
+  type QuestionListFilters,
+} from "@/lib/admin/question-filters-core";
 
 export type { QuestionListFilters };
-
-export const PAGE_SIZE = 20;
 
 /** The embed path every list/export read walks — filters and the org wall hang off it. */
 export const QUESTION_TAXONOMY_EMBED =
@@ -108,11 +109,13 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
   rows: QuestionListRow[];
   total: number;
   page: number;
+  pageSize: number;
   pageCount: number;
 }> {
   const admin = createAdminClient();
   const page = Math.max(1, filters.page ?? 1);
-  const from = (page - 1) * PAGE_SIZE;
+  const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
+  const from = (page - 1) * pageSize;
 
   const query = applyQuestionFilters(
     admin
@@ -123,7 +126,7 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
         { count: "exact" }
       )
       .order("updated_at", { ascending: false, nullsFirst: false })
-      .range(from, from + PAGE_SIZE - 1),
+      .range(from, from + pageSize - 1),
     filters
   );
 
@@ -178,7 +181,8 @@ export async function listQuestions(filters: QuestionListFilters): Promise<{
     })),
     total,
     page,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    pageSize,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
   };
 }
 

@@ -212,12 +212,30 @@ describe("question filters", () => {
       published: false,
       includeDeleted: true,
       page: 3,
+      pageSize: 20,
     });
   });
 
-  it("builds the export link without the page", () => {
+  it("only serves the listed page sizes", () => {
+    expect(questionFiltersFromSearchParams({ perPage: "50" }).pageSize).toBe(50);
+    expect(questionFiltersFromSearchParams({ perPage: ["100"] }).pageSize).toBe(100);
+    // Off-list values fall back rather than clamp — a hand-edited link must
+    // never pull thousands of rows in one request.
+    expect(questionFiltersFromSearchParams({ perPage: "5000" }).pageSize).toBe(20);
+    expect(questionFiltersFromSearchParams({ perPage: "0" }).pageSize).toBe(20);
+    expect(questionFiltersFromSearchParams({ perPage: "abc" }).pageSize).toBe(20);
+    expect(questionFiltersFromSearchParams({}).pageSize).toBe(20);
+  });
+
+  it("builds the export link without the paging keys", () => {
     expect(
-      questionFiltersQueryString({ page: "4", exam: "e1", q: "", type: ["osce"] })
+      questionFiltersQueryString({
+        page: "4",
+        perPage: "100",
+        exam: "e1",
+        q: "",
+        type: ["osce"],
+      })
     ).toBe("exam=e1&type=osce");
   });
 });

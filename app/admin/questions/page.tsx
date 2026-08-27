@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Flag, Plus } from "lucide-react";
-import { listQuestions, PAGE_SIZE } from "@/lib/admin/questions";
+import { listQuestions } from "@/lib/admin/questions";
 import { listHierarchy } from "@/lib/admin/taxonomy";
 import { pageWindow } from "@/lib/pagination";
 import { questionFiltersFromSearchParams } from "@/lib/admin/question-filters-core";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { QuestionsTable } from "@/components/admin/questions-table";
 import { QuestionFilters } from "@/components/admin/question-filters";
 import { ExportButton } from "@/components/admin/export-button";
+import { PageSizeSelect } from "@/components/admin/page-size-select";
 
 export const metadata: Metadata = { title: "Questions" };
 
@@ -59,6 +60,7 @@ export default async function AdminQuestionsPage(
       {result.total > 0 && (
         <Pager
           page={result.page}
+          pageSize={result.pageSize}
           pageCount={result.pageCount}
           total={result.total}
           shown={result.rows.length}
@@ -71,12 +73,14 @@ export default async function AdminQuestionsPage(
 
 function Pager({
   page,
+  pageSize,
   pageCount,
   total,
   shown,
   params,
 }: {
   page: number;
+  pageSize: number;
   pageCount: number;
   total: number;
   shown: number;
@@ -85,7 +89,7 @@ function Pager({
   // A page beyond the end (stale link after deletes) renders an empty list;
   // navigate relative to the real last page so Previous recovers.
   const current = Math.min(page, pageCount);
-  const first = (page - 1) * PAGE_SIZE + 1;
+  const first = (page - 1) * pageSize + 1;
 
   const href = (p: number) => {
     const qs = new URLSearchParams();
@@ -164,11 +168,17 @@ function Pager({
         </Button>
       </nav>
 
-      {shown > 0 && (
-        <p className="text-center text-xs text-muted-foreground tabular-nums">
-          Showing {first}–{first + shown - 1} of {total}
+      {/* Three equal columns keep the count centred under the page buttons
+          regardless of how wide the picker on the right renders. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <span />
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {shown > 0 && `Showing ${first}–${first + shown - 1} of ${total}`}
         </p>
-      )}
+        <div className="justify-self-end">
+          <PageSizeSelect value={pageSize} />
+        </div>
+      </div>
     </div>
   );
 }
