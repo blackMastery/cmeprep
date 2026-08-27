@@ -23,6 +23,14 @@ export const EXPORT_ROW_CAP = 50_000;
 /** Supabase/PostgREST serves at most 1,000 rows per request by default. */
 export const EXPORT_PAGE_SIZE = 1_000;
 
+/**
+ * Ids per `.in()` lookup for options / model answers. These go in the URL,
+ * and the gateway rejects request lines past ~8KB (414 locally, a bare 400
+ * through some proxies) — 300 UUIDs is already over. 150 ≈ 5.5KB, leaving
+ * room for the rest of the query string. Do NOT tie this to EXPORT_PAGE_SIZE.
+ */
+export const EXPORT_ID_BATCH = 150;
+
 export const EXPORT_SHEET_NAME = "Questions";
 
 /** What the server hands the mapper — joined taxonomy names, live options, OSCE key. */

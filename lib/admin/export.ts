@@ -6,6 +6,7 @@ import { applyQuestionFilters, QUESTION_TAXONOMY_EMBED } from "@/lib/admin/quest
 import type { QuestionListFilters } from "@/lib/admin/question-filters-core";
 import {
   EXPORT_COLUMNS,
+  EXPORT_ID_BATCH,
   EXPORT_PAGE_SIZE,
   EXPORT_ROW_CAP,
   EXPORT_SHEET_NAME,
@@ -82,9 +83,10 @@ export async function fetchQuestionsForExport(
 
   const options = new Map<string, ExportableQuestion["options"]>();
   const modelAnswers = new Map<string, string>();
-  // `.in()` goes in the URL, so keep each id list to one page's worth.
-  for (let i = 0; i < rows.length; i += EXPORT_PAGE_SIZE) {
-    const ids = rows.slice(i, i + EXPORT_PAGE_SIZE).map((r) => r.id);
+  // `.in()` goes in the URL; see EXPORT_ID_BATCH for why this is far smaller
+  // than a DB page.
+  for (let i = 0; i < rows.length; i += EXPORT_ID_BATCH) {
+    const ids = rows.slice(i, i + EXPORT_ID_BATCH).map((r) => r.id);
     const [opt, ans] = await Promise.all([
       admin
         .from("question_options")
