@@ -48,12 +48,7 @@ export default async function MarketingLayout({
               </Button>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="hidden md:inline-flex"
-                  asChild
-                >
+                <Button variant="outline" size="sm" asChild>
                   <Link href="/login">Log in</Link>
                 </Button>
                 <Button size="sm" asChild>
