@@ -17,6 +17,7 @@ import { HERO_IMAGE, unsplashUrl } from "@/lib/marketing-images";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { PhoneMockup } from "@/components/marketing/phone-mockup";
+import { SocialLinks } from "@/components/marketing/social-links";
 import { TutorMockup } from "@/components/marketing/tutor-mockup";
 import { PricingCards } from "@/components/marketing/pricing-cards";
 import { MarketingStructuredData } from "@/components/marketing/structured-data";
@@ -26,11 +27,18 @@ import { TUTOR_DAILY_CAP, TUTOR_TRIAL_ALLOWANCE } from "@/lib/tutor-core";
 
 function stats(startingPrice: string | null) {
   return [
-    { value: "700+", label: "Doctors", note: "using cmeqbank.com" },
+    {
+      value: "700+",
+      label: "Doctors",
+      note: "using the cmeqbank.com study group",
+      // The study groups live on WhatsApp/Facebook, so this tile is where a
+      // visitor expects to find the way in.
+      social: true,
+    },
     {
       value: "UNLIMITED",
-      label: "Questions across 7 question banks",
-      note: "+ 1 OSCE station bank",
+      label: "Questions answered",
+      note: "with the AI tutor",
     },
     startingPrice
       ? { value: startingPrice, label: "starting plans", note: "subscribe today!" }
@@ -225,6 +233,13 @@ export default async function MarketingPage() {
                 <span className="mt-0.5 block text-sm text-muted-foreground">
                   {stat.note}
                 </span>
+                {"social" in stat && stat.social ? (
+                  <SocialLinks
+                    label="Join our study groups"
+                    className="mt-3 justify-center"
+                    linkClassName="text-muted-foreground hover:text-foreground"
+                  />
+                ) : null}
               </dd>
             </div>
           ))}

@@ -56,7 +56,7 @@ const SECTIONS: readonly AboutSection[] = [
   {
     heading: "Who are we?",
     body: [
-      "Complete Medical Examinations Prep (CMEPrep) was created to provide high-quality, practical exam prep tools to students. With no official syllabus or past papers available, we saw frustration and low confidence among exam takers so we built the first and only interactive question bank designed just for you!",
+      "Complete Medical Examinations Prep (CMEPrep) was created to provide high-quality, practical exam prep tools to students. We offer the most recent recall questions from board exams and develop them for you. We saw frustration and low confidence among exam takers not knowing what to expect to come on exams, so we built the first and only interactive question bank designed just for you! Feel free to join our study groups.",
     ],
   },
   // {
