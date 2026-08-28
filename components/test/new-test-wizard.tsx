@@ -171,9 +171,11 @@ export function NewTestWizard({
   /** The count that matters for the chosen mode: the candidate filter in
    * /api/tests is type-exclusive both ways, so a subject with only stations
    * is empty to exam/tutor mode and vice versa. */
-  function subjectCountFor(subject: WizardSubject) {
-    return osceMode ? subject.osceQuestionCount : subject.questionCount;
-  }
+  // Commented out with the chip labels that used it — bank sizes are hidden
+  // from students. Restore together with the `(${subjectCountFor(s)})` labels.
+  // function subjectCountFor(subject: WizardSubject) {
+  //   return osceMode ? subject.osceQuestionCount : subject.questionCount;
+  // }
 
   /** Subjects of the chosen exam, grouped by specialty for the headings.
    * Each mode only offers subjects that actually have questions of its
@@ -497,18 +499,22 @@ export function NewTestWizard({
                         <span className="block font-medium wrap-break-word">
                           {e.name}
                         </span>
-                        {/* Both counts in every mode: an exam may mix MCQs
-                            and stations, and the split tells the student
-                            what each mode will deal. */}
+                        {/* Bank sizes are deliberately hidden from students;
+                            the OSCE hint stays (without a number) because an
+                            exam may mix MCQs and stations and the student
+                            needs to know the other mode has content. */}
                         <span className="block text-xs text-muted-foreground">
                           {e.subjectCount} subject
-                          {e.subjectCount === 1 ? "" : "s"} ·{" "}
-                          {e.questionCount.toLocaleString()} question
+                          {e.subjectCount === 1 ? "" : "s"}
+                          {/*
+                          {" "}· {e.questionCount.toLocaleString()} question
                           {e.questionCount === 1 ? "" : "s"}
+                          */}
                           {e.osceQuestionCount > 0 && (
                             <>
-                              {" "}· {e.osceQuestionCount.toLocaleString()} OSCE
-                              station{e.osceQuestionCount === 1 ? "" : "s"}
+                              {" "}· includes OSCE stations
+                              {/* {e.osceQuestionCount.toLocaleString()} OSCE
+                              station{e.osceQuestionCount === 1 ? "" : "s"} */}
                             </>
                           )}
                         </span>
@@ -551,7 +557,8 @@ export function NewTestWizard({
                         {sp.subjects.map((s) => (
                           <Chip
                             key={s.id}
-                            label={`${s.name} (${subjectCountFor(s)})`}
+                            // Bank size hidden from students: `${s.name} (${subjectCountFor(s)})`
+                            label={s.name}
                             selected={subjectIds.includes(s.id)}
                             onClick={() =>
                               setSubjectIds(toggle(subjectIds, s.id))
@@ -567,7 +574,8 @@ export function NewTestWizard({
                   {examSubjects.map((s) => (
                     <Chip
                       key={s.id}
-                      label={`${s.name} (${subjectCountFor(s)})`}
+                      // Bank size hidden from students: `${s.name} (${subjectCountFor(s)})`
+                      label={s.name}
                       selected={subjectIds.includes(s.id)}
                       onClick={() => setSubjectIds(toggle(subjectIds, s.id))}
                     />

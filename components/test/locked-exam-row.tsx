@@ -12,11 +12,11 @@ import { Button } from "@/components/ui/button";
 export function LockedExamRow({
   name,
   subjectCount,
-  questionCount,
   href,
 }: {
   name: string;
   subjectCount: number;
+  /** Still accepted (callers pass it) but no longer rendered — see below. */
   questionCount: number;
   /** null when nothing is purchasable — the row then just explains itself. */
   href: string | null;
@@ -30,9 +30,11 @@ export function LockedExamRow({
           {name}
         </p>
         <p className="text-xs text-muted-foreground">
-          {subjectCount} subject{subjectCount === 1 ? "" : "s"} ·{" "}
-          {questionCount.toLocaleString()} question
-          {questionCount === 1 ? "" : "s"}
+          {subjectCount} subject{subjectCount === 1 ? "" : "s"}
+          {/* Bank size is deliberately hidden from students. To restore,
+              destructure `questionCount` again and uncomment:
+          {" "}· {questionCount.toLocaleString()} question
+          {questionCount === 1 ? "" : "s"} */}
           <span className="sr-only"> — not included in your subscription</span>
         </p>
       </div>

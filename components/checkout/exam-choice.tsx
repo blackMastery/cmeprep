@@ -169,9 +169,11 @@ function ExamMeta({
   return (
     <p id={id} className="mt-1 text-sm text-muted-foreground">
       {exam.specialtyCount} specialt{exam.specialtyCount === 1 ? "y" : "ies"} ·{" "}
-      {exam.subjectCount} subject{exam.subjectCount === 1 ? "" : "s"} ·{" "}
-      {exam.questionCount.toLocaleString()} question
-      {exam.questionCount === 1 ? "" : "s"}
+      {exam.subjectCount} subject{exam.subjectCount === 1 ? "" : "s"}
+      {/* Bank size is deliberately hidden from buyers — it grows over time
+          and reads as a coverage judgement it isn't.
+      {" "}· {exam.questionCount.toLocaleString()} question
+      {exam.questionCount === 1 ? "" : "s"} */}
       {until && (
         <>
           {" "}

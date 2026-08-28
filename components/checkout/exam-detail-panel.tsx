@@ -9,9 +9,11 @@ import { SpecialtyDisclosure } from "@/components/checkout/specialty-disclosure"
  *
  * Two clicks to the whole syllabus: the stat grid and specialty list render
  * as soon as an exam is selected, and one disclosure per specialty reveals
- * its subjects together with their question counts. Subjects deliberately do
- * NOT get a second nested expander — a count is cheap once the specialty is
- * open, and two levels of hand-rolled disclosure is fiddly to operate.
+ * its subjects. Subjects deliberately do NOT get a second nested expander —
+ * two levels of hand-rolled disclosure is fiddly to operate.
+ *
+ * Question counts are deliberately not shown anywhere here: a buyer should
+ * judge coverage by the syllabus, not by a bank size that grows over time.
  *
  * Server component: the tree never enters the client bundle. Only the
  * per-specialty toggle is a client child.
@@ -19,10 +21,9 @@ import { SpecialtyDisclosure } from "@/components/checkout/specialty-disclosure"
 export function ExamDetailPanel({ exam }: { exam: CatalogExamDetail }) {
   return (
     <div className="space-y-4">
-      <dl className="grid grid-cols-3 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
+      <dl className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-center">
         <Stat label="Specialties" value={exam.specialtyCount} />
         <Stat label="Subjects" value={exam.subjectCount} />
-        <Stat label="Questions" value={exam.questionCount} />
       </dl>
 
       {exam.specialties.length === 0 ? (
@@ -46,10 +47,7 @@ export function ExamDetailPanel({ exam }: { exam: CatalogExamDetail }) {
 }
 
 function specialtySummary(specialty: CatalogSpecialty): string {
-  return [
-    `${specialty.subjectCount} subject${specialty.subjectCount === 1 ? "" : "s"}`,
-    `${specialty.questionCount} question${specialty.questionCount === 1 ? "" : "s"}`,
-  ].join(" · ");
+  return `${specialty.subjectCount} subject${specialty.subjectCount === 1 ? "" : "s"}`;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
