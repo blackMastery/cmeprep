@@ -46,6 +46,22 @@ function stats(startingPrice: string | null) {
   ];
 }
 
+/** Local files under public/images — no remotePatterns entry needed. */
+const RECOGNITION = [
+  {
+    src: "/images/image1.jpeg",
+    alt: "SelectUSA Investment Summit 2026 badge for Raule Williams, Complete Medical Examinations Prep, Guyana",
+    width: 1055,
+    height: 1280,
+  },
+  {
+    src: "/images/image2.jpeg",
+    alt: "2023–2024 Guyana Innovation Prize awardee: Raule Williams, CMEPrep",
+    width: 1080,
+    height: 1278,
+  },
+];
+
 const FEATURES = [
   {
     icon: SlidersHorizontal,
@@ -430,6 +446,26 @@ export default async function MarketingPage() {
           </Button>
           <p className="text-sm text-white/80">www.cmeqbank.com</p>
         </div>
+      </section>
+
+      {/* ── Recognition ──────────────────────────────────── */}
+      <section aria-label="Recognition" className="border-t border-border">
+        <ul className="mx-auto grid w-full max-w-4xl grid-cols-2 gap-6 px-4 py-12 sm:gap-10 sm:py-16">
+          {RECOGNITION.map((item) => (
+            <li key={item.src}>
+              <Image
+                src={item.src}
+                alt={item.alt}
+                width={item.width}
+                height={item.height}
+                sizes="(min-width: 640px) 448px, 50vw"
+                // Grayscale so two very differently-coloured photos read as
+                // one quiet strip instead of competing with the brand palette.
+                className="mx-auto h-auto w-full max-w-md rounded-xl grayscale"
+              />
+            </li>
+          ))}
+        </ul>
       </section>
     </>
   );

@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Transcript } from "@/components/tutor/transcript";
+import { TutorAvatar } from "@/components/tutor/tutor-avatar";
 import { Composer, Disclaimer } from "@/components/tutor/composer";
 import { BlockedNotice, SignedOutNotice } from "@/components/tutor/notices";
 import { useScrollPinning } from "@/components/tutor/use-scroll-pinning";
@@ -55,13 +56,16 @@ export function TutorChat({ initial }: { initial: TutorStatePayload }) {
   return (
     <div className="flex min-h-[60vh] flex-col">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
-            AI tutor
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Ask anything from your course materials.
-          </p>
+        <div className="flex items-center gap-3">
+          <TutorAvatar />
+          <div>
+            <h1 className="font-display text-3xl font-semibold tracking-tight">
+              AI tutor
+            </h1>
+            <p className="mt-1 text-muted-foreground">
+              Ask anything from your course materials.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {left !== null && limit !== null && (

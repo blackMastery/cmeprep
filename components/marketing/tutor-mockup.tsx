@@ -1,4 +1,5 @@
-import { FileText, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { FileText, ThumbsDown, ThumbsUp } from "lucide-react";
+import { TutorAvatar } from "@/components/tutor/tutor-avatar";
 
 /**
  * Marketing shot of the AI tutor: one asked-and-answered turn with the
@@ -16,9 +17,7 @@ export function TutorMockup() {
   return (
     <div className="w-full max-w-md overflow-hidden rounded-2xl bg-card shadow-xl ring-1 ring-foreground/10">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <span className="flex size-7 items-center justify-center rounded-full bg-accent text-primary">
-          <Sparkles className="size-3.5" aria-hidden="true" />
-        </span>
+        <TutorAvatar size="sm" />
         <p className="font-display text-sm font-semibold">AI tutor</p>
         <p className="ml-auto text-xs text-muted-foreground">
           Answers from the course materials
@@ -32,44 +31,47 @@ export function TutorMockup() {
         </p>
 
         {/* Tutor turn */}
-        <div className="max-w-[92%] space-y-2 text-sm leading-relaxed">
-          <p>
-            That pattern is <strong>mitral regurgitation</strong>. The
-            regurgitant jet runs from the left ventricle back into the left
-            atrium, which sits posteriorly and to the left — so the sound
-            carries towards the axilla.{" "}
-            <span className="font-medium text-muted-foreground">[1]</span>
-          </p>
-          <p>
-            In a chronic case, also look for a soft S1 and a displaced apex
-            beat.{" "}
-            <span className="font-medium text-muted-foreground">[2]</span>
-          </p>
+        <div className="flex items-start gap-3">
+          <TutorAvatar size="sm" className="mt-0.5" />
+          <div className="min-w-0 flex-1 space-y-2 text-sm leading-relaxed">
+            <p>
+              That pattern is <strong>mitral regurgitation</strong>. The
+              regurgitant jet runs from the left ventricle back into the left
+              atrium, which sits posteriorly and to the left — so the sound
+              carries towards the axilla.{" "}
+              <span className="font-medium text-muted-foreground">[1]</span>
+            </p>
+            <p>
+              In a chronic case, also look for a soft S1 and a displaced apex
+              beat.{" "}
+              <span className="font-medium text-muted-foreground">[2]</span>
+            </p>
 
-          <ul className="flex flex-wrap gap-1.5 pt-1">
-            {CITATIONS.map((c) => (
-              <li
-                key={c.n}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
-              >
-                <FileText className="size-3 shrink-0" aria-hidden="true" />
-                <span className="font-medium tabular-nums text-foreground">
-                  [{c.n}]
-                </span>
-                <span>{c.file}</span>
-                <span className="tabular-nums">p.{c.page}</span>
-              </li>
-            ))}
-          </ul>
+            <ul className="flex flex-wrap gap-1.5 pt-1">
+              {CITATIONS.map((c) => (
+                <li
+                  key={c.n}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  <FileText className="size-3 shrink-0" aria-hidden="true" />
+                  <span className="font-medium tabular-nums text-foreground">
+                    [{c.n}]
+                  </span>
+                  <span>{c.file}</span>
+                  <span className="tabular-nums">p.{c.page}</span>
+                </li>
+              ))}
+            </ul>
 
-          <div className="flex items-center gap-1 pt-1 text-muted-foreground">
-            <span className="text-xs">Was this helpful?</span>
-            <span className="flex size-6 items-center justify-center rounded-md">
-              <ThumbsUp className="size-3.5" aria-hidden="true" />
-            </span>
-            <span className="flex size-6 items-center justify-center rounded-md">
-              <ThumbsDown className="size-3.5" aria-hidden="true" />
-            </span>
+            <div className="flex items-center gap-1 pt-1 text-muted-foreground">
+              <span className="text-xs">Was this helpful?</span>
+              <span className="flex size-6 items-center justify-center rounded-md">
+                <ThumbsUp className="size-3.5" aria-hidden="true" />
+              </span>
+              <span className="flex size-6 items-center justify-center rounded-md">
+                <ThumbsDown className="size-3.5" aria-hidden="true" />
+              </span>
+            </div>
           </div>
         </div>
       </div>

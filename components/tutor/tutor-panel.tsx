@@ -7,6 +7,7 @@ import { Maximize2, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Transcript } from "@/components/tutor/transcript";
+import { TutorAvatar } from "@/components/tutor/tutor-avatar";
 import { Composer, Disclaimer } from "@/components/tutor/composer";
 import {
   BlockedNotice,
@@ -40,6 +41,7 @@ export function TutorPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <TutorAvatar size="sm" />
         <DialogPrimitive.Title className="font-display text-base font-semibold tracking-tight">
           AI tutor
         </DialogPrimitive.Title>

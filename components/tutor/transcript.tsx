@@ -1,10 +1,10 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/markdown";
 import { CitationList } from "@/components/tutor/citation-list";
 import { FeedbackButtons } from "@/components/tutor/feedback-buttons";
+import { TutorAvatar } from "@/components/tutor/tutor-avatar";
 import type { TranscriptTurn } from "@/lib/tutor-core";
 
 /** The conversation itself — shared by the /tutor page and the widget panel. */
@@ -38,12 +38,15 @@ export function Transcript({
             </p>
           </div>
         ) : (
-          <div key={turn.id} className="max-w-[95%]">
-            <Markdown className="text-sm">{turn.content}</Markdown>
-            {turn.citations && <CitationList citations={turn.citations} />}
-            {turn.messageId && <FeedbackButtons messageId={turn.messageId} />}
+          <div key={turn.id} className="flex items-start gap-3">
+            <TutorAvatar size="sm" className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <Markdown className="text-sm">{turn.content}</Markdown>
+              {turn.citations && <CitationList citations={turn.citations} />}
+              {turn.messageId && <FeedbackButtons messageId={turn.messageId} />}
+            </div>
           </div>
-        )
+        ),
       )}
 
       {/* Only until the first token lands. Leaving it under a streaming
@@ -57,17 +60,19 @@ export function Transcript({
 
 function Thinking({ wakingUp }: { wakingUp: boolean }) {
   return (
-    <div className="space-y-1.5" role="status">
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Sparkles className="size-4 animate-pulse" aria-hidden="true" />
-        Looking through your materials…
-      </p>
-      {wakingUp && (
-        <p className="text-xs text-muted-foreground">
-          The tutor is waking up — the first question after a quiet spell can
-          take up to a minute.
+    <div className="flex items-start gap-3" role="status">
+      <TutorAvatar size="sm" className="mt-0.5 animate-pulse" />
+      <div className="space-y-1.5 pt-1.5">
+        <p className="text-sm text-muted-foreground">
+          Looking through your materials…
         </p>
-      )}
+        {wakingUp && (
+          <p className="text-xs text-muted-foreground">
+            The tutor is waking up — the first question after a quiet spell can
+            take up to a minute.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
