@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { MessagesSquare, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Image from "next/image";
+import { X } from "lucide-react";
 import { SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { useTutorWidget } from "@/components/tutor/tutor-widget-provider";
+import launcherIcon from "@/public/images/aitutor.png";
 
 /**
  * The floating launcher and its popup (SPEC §18). One Radix Dialog root:
@@ -41,38 +42,76 @@ export function TutorWidget() {
 function Launcher() {
   const { open, unread, hostKind } = useTutorWidget();
   return (
-    <DialogPrimitive.Trigger asChild>
-      <Button
-        size="icon-lg"
-        data-host={hostKind ?? undefined}
-        aria-label={open ? "Close AI tutor" : "AI tutor"}
-        className={cn(
-          "fixed right-5 z-40 size-14 shadow-lg",
-          // Safe-area padded so the home indicator never covers it.
-          "bottom-[calc(--spacing(5)+env(safe-area-inset-bottom))]",
-          // Above the tutor-mode runner's sticky footer on phones; that bar
-          // is sm:hidden, so the offset drops away with it.
-          "max-sm:data-[host=runner]:bottom-[calc(4.5rem+env(safe-area-inset-bottom))]"
-        )}
-      >
-        {open ? (
-          <X className="size-6" aria-hidden="true" />
-        ) : (
-          <MessagesSquare className="size-6" aria-hidden="true" />
-        )}
-        {unread && !open && (
-          <>
-            {/* Gold IS the accent on crimson (globals.css) — not `sun`,
-                which means caution. */}
+    <div
+      data-host={hostKind ?? undefined}
+      className={cn(
+        "fixed right-5 z-40",
+        // Safe-area padded so the home indicator never covers it.
+        "bottom-[calc(--spacing(5)+env(safe-area-inset-bottom))]",
+        // Above the tutor-mode runner's sticky footer on phones; that bar
+        // is sm:hidden, so the offset drops away with it.
+        "max-sm:data-[host=runner]:bottom-[calc(4.5rem+env(safe-area-inset-bottom))]"
+      )}
+    >
+      {/* One trigger holding both the label and the disc: clicking the
+          label opens the tutor too, and there is a single tab stop. The
+          disc, not the whole column, carries the focus ring and shadow. */}
+      <DialogPrimitive.Trigger asChild>
+        <button
+          type="button"
+          aria-label={open ? "Close AI tutor" : "Ask the AI tutor"}
+          className="group/launcher flex flex-col items-end gap-2 outline-none select-none"
+        >
+          {/* A bare avatar could pass for "message support", so the
+              launcher names itself. Hidden while open: the panel stacks
+              right here. */}
+          {!open && (
             <span
-              className="absolute top-1 right-1 size-3 rounded-full bg-gold ring-2 ring-background"
               aria-hidden="true"
-            />
-            <span className="sr-only">New answer</span>
-          </>
-        )}
-      </Button>
-    </DialogPrimitive.Trigger>
+              className="rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-crimson shadow-md transition-colors group-hover/launcher:bg-muted"
+            >
+              AI Tutor
+            </span>
+          )}
+          <span
+            className={cn(
+              "relative flex size-14 items-center justify-center overflow-hidden rounded-full shadow-lg transition-all",
+              "group-focus-visible/launcher:ring-3 group-focus-visible/launcher:ring-ring/50 group-active/launcher:translate-y-px",
+              open
+                ? "bg-primary text-primary-foreground group-hover/launcher:bg-primary-hover"
+                : // Closed, the tutor's face IS the button — the same artwork
+                  // as TutorAvatar, so launcher and panel read as one person.
+                  "ring-2 ring-background group-hover/launcher:brightness-95"
+            )}
+          >
+            {open ? (
+              <X className="size-6" aria-hidden="true" />
+            ) : (
+              // The PNG is a rounded square with light corners around a
+              // green disc; the circular clip plus a slight zoom crops to
+              // the disc (mirrors TutorAvatar).
+              <Image
+                src={launcherIcon}
+                alt=""
+                sizes="56px"
+                className="size-full scale-110 object-cover"
+              />
+            )}
+            {unread && !open && (
+              <>
+                {/* Gold IS the accent on crimson (globals.css) — not `sun`,
+                    which means caution. */}
+                <span
+                  className="absolute top-1 right-1 size-3 rounded-full bg-gold ring-2 ring-background"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">New answer</span>
+              </>
+            )}
+          </span>
+        </button>
+      </DialogPrimitive.Trigger>
+    </div>
   );
 }
 
