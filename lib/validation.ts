@@ -236,14 +236,15 @@ export type QuestionInput = z.infer<typeof questionSchema>;
 /**
  * Ids for a bulk action on the questions list.
  *
- * Capped at one page (lib/admin/questions.ts PAGE_SIZE) because selection is
- * page-scoped — anything larger arrived by hand-crafting the request, not by
- * ticking boxes, and a bulk delete is not something to accept on trust.
+ * Deliberately uncapped: selection is page-scoped and the page size is
+ * admin-selectable (lib/admin/question-filters-core.ts PAGE_SIZE_OPTIONS), so
+ * a fixed cap here silently broke "select all" on larger pages. The actions
+ * run one `.in("id", ids)` query per step and write one audit row, so size
+ * does not change their cost; deletes are soft, so a large one is reversible.
  */
 export const bulkQuestionIdsSchema = z
   .array(uuid())
-  .min(1, "Select at least one question")
-  .max(20, "Too many questions for one action");
+  .min(1, "Select at least one question");
 
 export const examSchema = z.object({
   name: z.string().trim().min(2, "Exam name is too short").max(80),
