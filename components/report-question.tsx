@@ -9,6 +9,7 @@ import {
   REPORT_CATEGORIES,
   REPORT_CATEGORY_LABELS,
   REPORT_NOTE_MAX,
+  reportCategoriesFor,
 } from "@/lib/question-reports-core";
 import type { QuestionReportCategory } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,8 @@ export async function postReport(body: {
   testId?: string;
   category?: QuestionReportCategory;
   note?: string;
+  /** The translation on screen when filed. */
+  language?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch("/api/question-reports", {
@@ -87,12 +90,15 @@ export function ReportQuestionTap({
   questionId,
   report,
   onChange,
+  language,
 }: {
   testId: string;
   questionId: string;
   /** The student's open report on this question, if any. */
   report: OpenReport | null;
   onChange: (next: OpenReport | null) => void;
+  /** Translation on screen at the tap — a cheap triage signal. */
+  language?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const reported = report !== null;
@@ -110,7 +116,7 @@ export function ReportQuestionTap({
     setBusy(true);
     try {
       if (!reported) {
-        const { ok, error } = await postReport({ questionId, testId });
+        const { ok, error } = await postReport({ questionId, testId, language });
         if (!ok) throw new Error(error ?? "report");
         onChange({ questionId, testId, category: null });
       } else if (withdrawable) {
@@ -161,12 +167,15 @@ export function ReportQuestionDialog({
   testId,
   reported,
   onReported,
+  translationLanguage = null,
 }: {
   questionId: string;
   /** Where the student met it; omitted on /bookmarks. */
   testId?: string;
   reported: boolean;
   onReported: () => void;
+  /** The translation on screen, which unlocks "Translation is wrong". */
+  translationLanguage?: string | null;
 }) {
   if (reported) {
     return <span className="text-xs text-muted-foreground">You reported this</span>;
@@ -184,6 +193,7 @@ export function ReportQuestionDialog({
           questionId={questionId}
           testId={testId}
           onReported={onReported}
+          translationLanguage={translationLanguage}
         />
       </DialogContent>
     </Dialog>
@@ -194,10 +204,12 @@ function ReportForm({
   questionId,
   testId,
   onReported,
+  translationLanguage,
 }: {
   questionId: string;
   testId?: string;
   onReported: () => void;
+  translationLanguage: string | null;
 }) {
   const [category, setCategory] = useState<QuestionReportCategory | null>(null);
   const [note, setNote] = useState("");
@@ -216,6 +228,7 @@ function ReportForm({
       testId,
       category,
       note: note.trim() || undefined,
+      language: translationLanguage ?? undefined,
     });
     setSubmitting(false);
     if (!result.ok) {
@@ -242,6 +255,9 @@ function ReportForm({
         name={`report-${questionId}`}
         value={category}
         onChange={setCategory}
+        categories={reportCategoriesFor({
+          translationShown: translationLanguage !== null,
+        })}
       />
 
       <div className="space-y-1.5">
@@ -254,7 +270,11 @@ function ReportForm({
           onChange={(e) => setNote(e.target.value)}
           maxLength={REPORT_NOTE_MAX}
           rows={3}
-          placeholder="What should it say instead?"
+          placeholder={
+            category === "translation"
+              ? "What did the translation get wrong?"
+              : "What should it say instead?"
+          }
         />
       </div>
 
@@ -281,14 +301,17 @@ export function CategoryPicker({
   name,
   value,
   onChange,
+  categories = REPORT_CATEGORIES,
 }: {
   name: string;
   value: QuestionReportCategory | null;
   onChange: (c: QuestionReportCategory) => void;
+  /** Defaults to every category; the review/reveal forms narrow it. */
+  categories?: readonly QuestionReportCategory[];
 }) {
   return (
     <div role="radiogroup" aria-label="What's wrong?" className="flex flex-wrap gap-2">
-      {REPORT_CATEGORIES.map((c) => {
+      {categories.map((c) => {
         const active = value === c;
         return (
           <button

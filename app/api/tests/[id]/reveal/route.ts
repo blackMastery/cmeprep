@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { revealAnswerSchema } from "@/lib/validation";
 import { getTestForUser } from "@/lib/tests";
+import { loadTranslationsFor, translatedRevealFields } from "@/lib/translations";
+import { revealFieldsAllowed } from "@/lib/translation-core";
 import { correctOptionsInTest, isSelectionCorrect } from "@/lib/scoring";
 
 type RevealPayload = {
@@ -11,6 +13,11 @@ type RevealPayload = {
   selectedOptionIds: string[];
   correctOptionIds: string[];
   explanation: string;
+  /** Cached translation of the explanation, when the paper has a language
+   * and a current row exists — gated by the same reveal as the English one
+   * (translatedRevealFields; getTakeState and the translate route apply the
+   * identical rule when re-serving a revealed question). */
+  translatedExplanation?: string;
   /** True when a concurrent reveal won — the STORED selection was graded. */
   alreadyRevealed: boolean;
 };
@@ -109,6 +116,18 @@ export async function POST(
   }
 
   const now = new Date().toISOString();
+
+  // Independent of the lock outcome (either way the question is revealed
+  // from here on); a cache read, never OpenAI. Tutor + revealed → the
+  // explanation only, per the one gate.
+  const translated = test.language
+    ? translatedRevealFields(
+        (await loadTranslationsFor(admin, [questionId], test.language)).get(
+          questionId
+        ),
+        revealFieldsAllowed(test, true)
+      )
+    : {};
 
   // ── Take the reveal lock ──────────────────────────────────
   // Supabase upsert cannot express "update only if revealed_at is null", so:
@@ -209,6 +228,7 @@ export async function POST(
       selectedOptionIds: storedSelection,
       correctOptionIds,
       explanation: question.explanation,
+      ...translated,
       alreadyRevealed: true,
     } satisfies RevealPayload);
   }
@@ -240,6 +260,7 @@ export async function POST(
     selectedOptionIds,
     correctOptionIds,
     explanation: question.explanation,
+    ...translated,
     alreadyRevealed: false,
   } satisfies RevealPayload);
 }

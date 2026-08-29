@@ -4,6 +4,7 @@ import { listActivePlans, paidPlans, upsellPlan } from "@/lib/plans";
 import { listExamCatalogTree } from "@/lib/catalog";
 import { createClient } from "@/lib/supabase/server";
 import { getExamAccess } from "@/lib/entitlements";
+import { listEnabledLanguageCodes } from "@/lib/translations";
 import {
   canAccessExam,
   consumesTrialCredit,
@@ -20,16 +21,18 @@ export default async function NewTestPage() {
   const user = await requireUser();
 
   const supabase = await createClient();
-  const [tree, access, plans, { data: osceCounts }] = await Promise.all([
-    listExamCatalogTree(),
-    getExamAccess(user),
-    listActivePlans(),
-    // Published OSCE stations per subject — the wizard only offers OSCE mode
-    // where stations actually exist. RLS-safe view, so the user client is fine.
-    supabase
-      .from("subject_osce_question_counts")
-      .select("subject_id, question_count"),
-  ]);
+  const [tree, access, plans, { data: osceCounts }, enabledLanguageCodes] =
+    await Promise.all([
+      listExamCatalogTree(),
+      getExamAccess(user),
+      listActivePlans(),
+      // Published OSCE stations per subject — the wizard only offers OSCE mode
+      // where stations actually exist. RLS-safe view, so the user client is fine.
+      supabase
+        .from("subject_osce_question_counts")
+        .select("subject_id, question_count"),
+      listEnabledLanguageCodes(),
+    ]);
   const osceCountBySubject = new Map(
     (osceCounts ?? []).map((r) => [r.subject_id, r.question_count])
   );
@@ -111,7 +114,12 @@ export default async function NewTestPage() {
     // (landscape-phone) viewports `tall:` doesn't match and the page scrolls
     // normally instead of squeezing the content into a sliver.
     <div className="mx-auto flex w-full max-w-3xl flex-col tall:h-[calc(100dvh-var(--app-header-h))] sm:p-4 sm:py-6 sm:tall:h-auto sm:tall:max-h-[calc(100dvh-var(--app-header-h))]">
-      <NewTestWizard exams={exams} upsellPlanId={upsellPlanId} />
+      <NewTestWizard
+        exams={exams}
+        upsellPlanId={upsellPlanId}
+        enabledLanguageCodes={enabledLanguageCodes}
+        defaultLanguage={user.profile.preferred_language}
+      />
     </div>
   );
 }

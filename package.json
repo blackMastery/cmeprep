@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:functions": "deno check supabase/functions/translate-question/index.ts"
   },
   "dependencies": {
     "@paypal/react-paypal-js": "^8.9.2",

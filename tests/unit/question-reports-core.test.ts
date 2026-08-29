@@ -8,7 +8,9 @@ import {
   lastRuling,
   rankRollups,
   reportCapWindowStart,
+  reportCategoriesFor,
   reportRate,
+  REPORT_CATEGORIES,
   REPORT_RATE_FLOOR,
   splitPicks,
 } from "@/lib/question-reports-core";
@@ -194,5 +196,16 @@ describe("needsElaboration", () => {
     expect(needsElaboration({ testId: "t1", category: "typo" }, "t1")).toBe(false);
     expect(needsElaboration({ testId: "t0", category: null }, "t1")).toBe(false);
     expect(needsElaboration({ testId: null, category: null }, "t1")).toBe(false);
+  });
+});
+
+describe("reportCategoriesFor", () => {
+  it("offers 'Translation is wrong' only while a translation is on screen", () => {
+    expect(reportCategoriesFor({ translationShown: true })).toContain("translation");
+    expect(reportCategoriesFor({ translationShown: false })).not.toContain("translation");
+    // Nothing else is dropped.
+    expect(reportCategoriesFor({ translationShown: false })).toEqual(
+      REPORT_CATEGORIES.filter((c) => c !== "translation")
+    );
   });
 });

@@ -37,6 +37,11 @@ import {
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ExplanationStrip } from "@/components/test/explanation-strip";
 import { QuestionPalette } from "@/components/test/question-palette";
+import { TranslateControl } from "@/components/test/translate-control";
+import { TranslationNotice } from "@/components/test/translation-notice";
+import { TranslationChrome } from "@/components/test/translation-chrome";
+import { useQuestionTranslation } from "@/components/test/use-question-translation";
+import { seedTakeTranslations, translatedAttrs } from "@/lib/translation-ui-core";
 import { AutosaveIndicator } from "@/components/test/autosave-indicator";
 import { useAnswerAutosave } from "@/components/test/use-answer-autosave";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
@@ -55,10 +60,16 @@ export function OsceRunner({
   state,
   initialBookmarkedIds,
   notesByQuestion,
+  enabledLanguageCodes = [],
+  initialLanguage = null,
 }: {
   state: TakeState;
   initialBookmarkedIds: string[];
   notesByQuestion: Record<string, string>;
+  /** Translation languages the admin has switched on; empty = feature off. */
+  enabledLanguageCodes?: string[];
+  /** tests.language, else the profile default. */
+  initialLanguage?: string | null;
 }) {
   const router = useRouter();
   const { test, questions } = state;
@@ -103,6 +114,19 @@ export function OsceRunner({
   const [missedOnly, setMissedOnly] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Per-question Translate: the station text now, the model answer and
+  // explanation with the grade (same gate as the English ones). The judge is
+  // told server-side that the answer may be in this language.
+  const translation = useQuestionTranslation({
+    testId: test.id,
+    enabledLanguageCodes,
+    initialLanguage,
+    initial: () => seedTakeTranslations(questions),
+  });
+  // Stable (they read the latest state through a ref): grade() and the key
+  // handler depend on them without re-subscribing on every state change.
+  const { merge: mergeTranslation, toggle: toggleTranslation } = translation;
 
   const current = questions[index];
 
@@ -151,6 +175,8 @@ export function OsceRunner({
           answerText: string;
           modelAnswer: string;
           explanation: string;
+          translatedExplanation?: string;
+          translatedModelAnswer?: string;
         } = await res.json();
 
         // Locked server-side only now — cleaning before the request would
@@ -170,13 +196,34 @@ export function OsceRunner({
         setGradedText((prev) =>
           new Map(prev).set(question.questionId, data.answerText)
         );
+        if (
+          data.translatedExplanation !== undefined ||
+          data.translatedModelAnswer !== undefined
+        ) {
+          mergeTranslation(question.questionId, {
+            ...(data.translatedExplanation !== undefined
+              ? { explanation: data.translatedExplanation }
+              : {}),
+            ...(data.translatedModelAnswer !== undefined
+              ? { modelAnswer: data.translatedModelAnswer }
+              : {}),
+          });
+        }
       } catch {
         toast.error("Could not grade that answer. Try again.");
       } finally {
         setPendingGrade(false);
       }
     },
-    [accrueTime, markClean, pendingGrade, reveals, test.id, timeSpent]
+    [
+      accrueTime,
+      markClean,
+      mergeTranslation,
+      pendingGrade,
+      reveals,
+      test.id,
+      timeSpent,
+    ]
   );
 
   const setText = useCallback(
@@ -309,10 +356,14 @@ export function OsceRunner({
       if (e.key === "ArrowRight") step(1);
       else if (e.key === "ArrowLeft") step(-1);
       else if (e.key.toLowerCase() === "f") toggleFlag();
+      // T only flips an existing translation — never starts a paid request.
+      else if (e.key.toLowerCase() === "t") {
+        if (current) toggleTranslation(current.questionId);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, toggleFlag]);
+  }, [current, step, toggleFlag, toggleTranslation]);
 
   const paletteEntries = useMemo(
     () =>
@@ -352,6 +403,11 @@ export function OsceRunner({
   const isGraded = currentReveal !== null;
   const draft = answer?.text ?? "";
   const tooShort = draft.trim().length < OSCE_MIN_ANSWER_CHARS;
+  const shown = translation.translationFor(current.questionId);
+  const stemAttrs = translatedAttrs(shown?.language ?? null);
+  const bodyAttrs = translatedAttrs(
+    shown?.modelAnswer !== undefined ? shown.language : null
+  );
 
   const palette = (
     <div className="space-y-3">
@@ -457,42 +513,52 @@ export function OsceRunner({
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{current.subjectName}</Badge>
-            {isGraded ? (
-              <span
-                className={cn(
-                  "ml-auto flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-                  currentReveal.isCorrect
-                    ? "bg-success/10 text-success"
-                    : "bg-destructive/10 text-destructive"
-                )}
-              >
-                {currentReveal.isCorrect ? (
-                  <Check className="size-3.5" strokeWidth={3} />
-                ) : (
-                  <X className="size-3.5" strokeWidth={3} />
-                )}
-                {currentReveal.isCorrect ? "Correct" : "Incorrect"}
-              </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleFlag}
-                className={cn("ml-auto", answer?.flagged && "text-primary")}
-                aria-pressed={answer?.flagged ?? false}
-              >
-                <Flag
-                  className={cn(answer?.flagged && "fill-current")}
-                  data-icon="inline-start"
-                />
-                {answer?.flagged ? "Flagged" : "Flag"}
-              </Button>
-            )}
+            {/* The right-hand cluster keeps its alignment whether or not the
+                Translate control renders (it doesn't when no language is on). */}
+            <span className="ml-auto flex items-center gap-2">
+              <TranslateControl api={translation} questionId={current.questionId} />
+              {isGraded ? (
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                    currentReveal.isCorrect
+                      ? "bg-success/10 text-success"
+                      : "bg-destructive/10 text-destructive"
+                  )}
+                >
+                  {currentReveal.isCorrect ? (
+                    <Check className="size-3.5" strokeWidth={3} />
+                  ) : (
+                    <X className="size-3.5" strokeWidth={3} />
+                  )}
+                  {currentReveal.isCorrect ? "Correct" : "Incorrect"}
+                </span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleFlag}
+                  className={cn(answer?.flagged && "text-primary")}
+                  aria-pressed={answer?.flagged ?? false}
+                >
+                  <Flag
+                    className={cn(answer?.flagged && "fill-current")}
+                    data-icon="inline-start"
+                  />
+                  {answer?.flagged ? "Flagged" : "Flag"}
+                </Button>
+              )}
+            </span>
           </div>
 
+          <TranslationNotice api={translation} />
+
           {/* The vignette is the hero — brand face, generous leading */}
-          <h1 className="font-display text-xl leading-relaxed text-foreground sm:text-2xl sm:leading-relaxed">
-            {current.stem}
+          <h1
+            className="font-display text-xl leading-relaxed text-foreground sm:text-2xl sm:leading-relaxed"
+            {...stemAttrs}
+          >
+            {shown?.stem ?? current.stem}
           </h1>
 
           {questionImageUrl(current.imagePath) && (
@@ -517,12 +583,22 @@ export function OsceRunner({
                 <p className="mb-1 text-xs font-semibold tracking-wide text-teal uppercase">
                   Model answer
                 </p>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-                  {currentReveal.modelAnswer}
+                <p
+                  className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90"
+                  {...bodyAttrs}
+                >
+                  {shown?.modelAnswer ?? currentReveal.modelAnswer}
                 </p>
               </div>
 
-              <ExplanationStrip explanation={currentReveal.explanation} />
+              <ExplanationStrip
+                explanation={shown?.explanation ?? currentReveal.explanation}
+                translated={
+                  shown?.explanation !== undefined
+                    ? { language: shown.language }
+                    : null
+                }
+              />
 
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -658,6 +734,8 @@ export function OsceRunner({
           </div>
         </div>
       )}
+
+      <TranslationChrome api={translation} />
     </div>
   );
 }

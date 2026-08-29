@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { finalizeIfExpired, getTakeState, getTestForUser } from "@/lib/tests";
 import { openReportsFor } from "@/lib/question-reports";
+import { listEnabledLanguageCodes } from "@/lib/translations";
+import { resolveTranslationLanguage } from "@/lib/translation-core";
 import { TestRunner } from "@/components/test/test-runner";
 import { TutorRunner } from "@/components/test/tutor-runner";
 import { OsceRunner } from "@/components/test/osce-runner";
@@ -32,13 +34,35 @@ export default async function TakeTestPage(
 
   const questionIds = state.questions.map((q) => q.questionId);
 
+  // Translate: the one resolver — the paper's frozen language wins, a
+  // still-enabled profile default seeds the first click, a disabled default
+  // means the picker. A paper frozen to a since-disabled language offers no
+  // new translations (its cached ones stay toggleable).
+  const enabledLanguageCodes = await listEnabledLanguageCodes();
+  const { language: initialLanguage, refused } = resolveTranslationLanguage({
+    testLanguage: state.test.language,
+    requested: undefined,
+    profileDefault: user.profile.preferred_language,
+    enabled: enabledLanguageCodes,
+  });
+  const translationProps = {
+    enabledLanguageCodes: refused ? [] : enabledLanguageCodes,
+    initialLanguage,
+  };
+
   // "You reported this" persists wherever the student meets the question —
   // and mid-test the tap toggles, so the runner needs what's open (with
   // test id + category, to know which it may undo). OSCE stations keep
   // "Report this grade" and get no second control.
   if (state.test.mode === "exam") {
     const reports = await openReportsFor(user.id, questionIds);
-    return <TestRunner state={state} initialReports={reports} />;
+    return (
+      <TestRunner
+        state={state}
+        initialReports={reports}
+        {...translationProps}
+      />
+    );
   }
 
   // Tutor and OSCE sessions surface bookmark + note editing at reveal time,
@@ -69,6 +93,7 @@ export default async function TakeTestPage(
     state,
     initialBookmarkedIds: (bookmarkRows ?? []).map((b) => b.question_id),
     notesByQuestion,
+    ...translationProps,
   };
 
   return state.test.mode === "osce" ? (

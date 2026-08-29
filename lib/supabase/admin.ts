@@ -14,9 +14,13 @@ import type { Database } from "@/lib/supabase/types";
  * This is the only place allowed to read `question_options.is_correct`.
  */
 export function createAdminClient() {
-  const key = process.env.SUPABASE_SECRET_KEY;
+  // Two server keys on purpose: this one (service-role credential for
+  // supabase-js — the legacy service_role JWT or an sb_secret_ key both
+  // work) and SUPABASE_SECRET_KEY, which lib/translations.ts sends to the
+  // translate-question Edge Function and which MUST be an sb_secret_ key.
+  const key = process.env.SUPABASE_ADMIN_SECRET_KEY;
   if (!key) {
-    throw new Error("SUPABASE_SECRET_KEY is not set");
+    throw new Error("SUPABASE_ADMIN_SECRET_KEY is not set");
   }
 
   return createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {

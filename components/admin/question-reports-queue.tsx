@@ -14,6 +14,7 @@ import {
   REPORT_RESOLUTIONS,
 } from "@/lib/question-reports-core";
 import type { QuestionReportCategory, QuestionReportResolution } from "@/lib/supabase/types";
+import { languageByCode } from "@/lib/translation-core";
 import {
   resolveQuestionReports,
   type QuestionState,
@@ -222,6 +223,8 @@ function RollupCard({
                     {n.category ? (
                       <Badge variant="outline" className="ml-2">
                         {REPORT_CATEGORY_LABELS[n.category]}
+                        {n.language &&
+                          ` · ${languageByCode(n.language)?.nativeName ?? n.language}`}
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="ml-2">

@@ -46,6 +46,8 @@ export type ReporterNote = {
   email: string | null;
   category: QuestionReportCategory | null;
   note: string | null;
+  /** Translation on screen when filed (the 'translation' category). */
+  language: string | null;
   createdAt: string;
 };
 
@@ -101,7 +103,7 @@ type QuestionJoin = {
 };
 
 const REPORT_COLUMNS =
-  "id, question_id, user_id, category, note, created_at, resolved_at, resolved_by, resolution, resolution_note, profiles!question_reports_user_id_fkey(full_name)";
+  "id, question_id, user_id, category, note, language, created_at, resolved_at, resolved_by, resolution, resolution_note, profiles!question_reports_user_id_fkey(full_name)";
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -427,6 +429,7 @@ export async function listReportRollups(
         email: emails.get(r.user_id) ?? null,
         category: r.category,
         note: r.note,
+        language: r.language,
         createdAt: r.created_at,
       })),
       picks: picks.get(seed.questionId)!,
@@ -491,6 +494,7 @@ export async function questionReportHistory(
       email: emails.get(r.user_id) ?? null,
       category: r.category,
       note: r.note,
+      language: r.language,
       createdAt: r.created_at,
       resolvedAt: r.resolved_at,
       resolution: r.resolution,

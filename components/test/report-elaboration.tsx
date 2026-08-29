@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
-import { REPORT_NOTE_MAX } from "@/lib/question-reports-core";
+import { REPORT_NOTE_MAX,
+  reportCategoriesFor,
+} from "@/lib/question-reports-core";
 import type { QuestionReportCategory } from "@/lib/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -114,10 +116,14 @@ function ElaborationRow({
         </span>
         {excerpt}
       </p>
+      {/* No translation is on screen here, so "Translation is wrong" is not
+          offered — the mid-test tap already recorded the language, and the
+          report keeps it. */}
       <CategoryPicker
         name={`elab-${item.questionId}`}
         value={category}
         onChange={setCategory}
+        categories={reportCategoriesFor({ translationShown: false })}
       />
       {category !== null && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">

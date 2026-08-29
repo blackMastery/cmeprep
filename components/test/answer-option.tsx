@@ -2,6 +2,7 @@
 
 import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { translatedAttrs } from "@/lib/translation-ui-core";
 
 export type AnswerState = "idle" | "correct" | "incorrect" | "missed";
 
@@ -27,6 +28,7 @@ export function AnswerOption({
   state = "idle",
   disabled,
   onSelect,
+  translated = null,
 }: {
   id: string;
   /** Radio group key — scope per question, never a global constant. */
@@ -38,7 +40,11 @@ export function AnswerOption({
   state?: AnswerState;
   disabled?: boolean;
   onSelect?: (id: string) => void;
+  /** Set when `label` is a translation: the text node gets lang/dir; the
+   * badge and row layout are untouched. */
+  translated?: { language: string } | null;
 }) {
+  const translatedProps = translatedAttrs(translated?.language ?? null);
   const isCorrect = state === "correct";
   const isIncorrect = state === "incorrect";
   const isMissed = state === "missed";
@@ -91,10 +97,15 @@ export function AnswerOption({
         )}
       </span>
 
-      <span className="pt-0.5 text-[0.95rem] leading-relaxed text-foreground">
+      <span
+        className="pt-0.5 text-[0.95rem] leading-relaxed text-foreground"
+        {...translatedProps}
+      >
         {label}
         {(isCorrect || isIncorrect) && (
-          <span className="sr-only">
+          // lang="en": the verdict stays English inside a translated node, so
+          // the screen reader switches voice back for it.
+          <span className="sr-only" lang="en">
             {isCorrect ? " — your answer, correct" : " — your answer, incorrect"}
           </span>
         )}

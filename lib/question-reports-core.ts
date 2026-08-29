@@ -19,6 +19,7 @@ export const REPORT_CATEGORIES: readonly QuestionReportCategory[] = [
   "outdated",
   "ambiguous",
   "image",
+  "translation",
   "other",
 ];
 
@@ -28,8 +29,22 @@ export const REPORT_CATEGORY_LABELS: Record<QuestionReportCategory, string> = {
   outdated: "Outdated guideline",
   ambiguous: "Ambiguous",
   image: "Image problem",
+  translation: "Translation is wrong",
   other: "Something else",
 };
+
+/**
+ * The categories a report form offers. "Translation is wrong" only makes
+ * sense while a translation is on screen — offered otherwise it would file
+ * complaints about text the student never saw.
+ */
+export function reportCategoriesFor(input: {
+  translationShown: boolean;
+}): readonly QuestionReportCategory[] {
+  return input.translationShown
+    ? REPORT_CATEGORIES
+    : REPORT_CATEGORIES.filter((c) => c !== "translation");
+}
 
 export const REPORT_RESOLUTIONS: readonly QuestionReportResolution[] = [
   "fixed",

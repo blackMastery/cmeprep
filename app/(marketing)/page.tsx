@@ -22,6 +22,8 @@ import { TutorMockup } from "@/components/marketing/tutor-mockup";
 import { PricingCards } from "@/components/marketing/pricing-cards";
 import { MarketingStructuredData } from "@/components/marketing/structured-data";
 import { listActivePlans, paidPlans } from "@/lib/plans";
+import { listEnabledLanguageCodes } from "@/lib/translations";
+import { languageByCode } from "@/lib/translation-core";
 import { priceLabel } from "@/lib/format";
 import { TUTOR_DAILY_CAP, TUTOR_TRIAL_ALLOWANCE } from "@/lib/tutor-core";
 
@@ -140,7 +142,10 @@ const EXAMINATIONS = [
 // a partial `openGraph` here would REPLACE the root's and drop og:image.
 
 export default async function MarketingPage() {
-  const plans = await listActivePlans();
+  const [plans, enabledLanguageCodes] = await Promise.all([
+    listActivePlans(),
+    listEnabledLanguageCodes(),
+  ]);
   const paid = paidPlans(plans);
   const lowestCents =
     paid.length > 0 ? Math.min(...paid.map((p) => p.price_cents)) : null;
@@ -151,6 +156,10 @@ export default async function MarketingPage() {
     <>
       <MarketingStructuredData
         startingPrice={lowestCents !== null ? lowestCents / 100 : undefined}
+        languages={enabledLanguageCodes.flatMap((code) => {
+          const l = languageByCode(code);
+          return l ? [{ code, name: l.name }] : [];
+        })}
       />
       {/* ── Hero ─────────────────────────────────────────── */}
       <section className="relative isolate overflow-hidden bg-brand-surface">

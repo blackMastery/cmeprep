@@ -19,6 +19,8 @@ npx vitest run         # all unit tests  (npm test also works)
 npx vitest run tests/unit/scoring.test.ts        # one file
 npx vitest run -t "partial refund"               # one test by name
 npx tsc --noEmit       # typecheck — run this, `next build` alone won't catch everything
+npm run check:functions # Deno typecheck of the Edge Function (needs Deno installed;
+                        # the Node gate excludes supabase/functions/*/index.ts)
 npx supabase start     # local stack (needs Docker); prints URL + keys for .env.local
 npx supabase db reset  # rebuild local DB from migrations + seed
 npx next typegen       # regenerate route types after adding/moving a route
@@ -123,6 +125,34 @@ because trial breadth is a practice allowance and does not buy the client's
 syllabus. Locked exams may show a document COUNT and never a title. Paths are
 client-supplied and read with the service-role client, so
 `isExamDocumentPath` / `examDocumentPathExamId` must gate every one of them.
+
+### On-demand translation
+
+Question text is translated ONE question at a time, when a student presses
+Translate, and cached forever in `question_translations` keyed by
+(question, language). Nothing translates ahead of demand. The pure rules —
+language registry, source hash, prompt, output contract, caps — live in
+`supabase/functions/_shared/translation-core.ts` (no imports, on purpose) so
+the Edge Function (`supabase/functions/translate-question`, Deno) and the app
+(`lib/translation-core.ts` re-exports it) apply exactly the same ones; vitest
+covers it through the re-export. That function is the only place question
+text meets OpenAI for translation and accepts ONLY the project's secret key
+(`withSupabase({ auth: "secret" })`); the browser never calls it. The Next
+route `POST /api/tests/[id]/translate` owns identity, ownership, the
+enabled-language check (`translation_languages`) and the daily caps
+(`translation_events`), and gates the translated explanation / model answer
+with `revealFieldsAllowed` — the same rule as the English ones (never
+mid-exam; tutor once revealed; OSCE once graded). Staleness is the hash, not
+`content_updated_at`: `loadTranslationsFor` recomputes it and treats a
+mismatch as "no translation". The Deno entrypoint is excluded from tsc/eslint
+(`npm run check:functions` covers it when Deno is installed); the shared core
+is not, and the row shape both sides write/read is declared there
+(`QuestionTranslationRow`). Deploy: `supabase functions deploy
+translate-question` + `supabase secrets set OPENAI_API_KEY=…` (locally
+`supabase/functions/.env`). Two server keys: the admin client reads
+`SUPABASE_ADMIN_SECRET_KEY` (JWT or `sb_secret_…`), while the function call
+sends `SUPABASE_SECRET_KEY`, which must be an `sb_secret_…` key — the
+function's secret mode rejects the legacy service_role JWT.
 
 ### Timing
 

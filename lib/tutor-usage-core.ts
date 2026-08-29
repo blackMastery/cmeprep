@@ -18,6 +18,10 @@ export const MODEL_RATES: Readonly<
   Record<string, { inputPerM: number; outputPerM: number }>
 > = {
   "openai/gpt-5.6": { inputPerM: 2.0, outputPerM: 12.0 },
+  // The translation model (translation_events.model stores the bare id).
+  // ASSUMED the same tier as gpt-5.6 above — confirm against OpenAI's
+  // pricing page; a wrong rate misprices only /admin/translations' strip.
+  "gpt-5.6-sol": { inputPerM: 2.0, outputPerM: 12.0 },
 };
 export const RATES_AS_OF = "4 Aug 2026";
 

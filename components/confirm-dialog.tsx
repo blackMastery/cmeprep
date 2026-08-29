@@ -76,6 +76,7 @@ export function ConfirmSubmit({
   className,
   triggerLabel,
   disabled = false,
+  confirmVariant = "destructive",
 }: ConfirmCopy & {
   children: React.ReactNode;
   variant?: ButtonProps["variant"];
@@ -83,6 +84,9 @@ export function ConfirmSubmit({
   className?: string;
   /** Accessible name when the trigger is icon-only. */
   triggerLabel?: string;
+  /** The confirming button's look. Destructive by default; a consequential
+   * but non-destructive action (regenerate) confirms in the primary tone. */
+  confirmVariant?: ButtonProps["variant"];
   /**
    * For actions the caller already knows the server would refuse — don't open
    * a confirm dialog just to report a failure that was predictable.
@@ -125,7 +129,7 @@ export function ConfirmSubmit({
               <Button variant="outline-muted">Cancel</Button>
             </DialogClose>
             <Button
-              variant="destructive"
+              variant={confirmVariant}
               onClick={() => {
                 setOpen(false);
                 submitRef.current?.click();

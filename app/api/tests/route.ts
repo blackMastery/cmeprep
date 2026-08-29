@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
+import { resolveNewTestLanguage } from "@/lib/translations";
 import {
   assignmentModeSchema,
   createTestSchema,
@@ -247,6 +248,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  // ── Translation language, frozen on the paper (resolveTranslationLanguage
+  // with nothing frozen yet). The wizard sends a code, `null` for an
+  // explicit "English only", or nothing; a since-disabled explicit choice is
+  // refused, a since-disabled profile default quietly means English.
+  // Assignment and plan launches carry no choice — profile default.
+  const requestedLanguage = parsed?.success ? parsed.data.language : undefined;
+  const { language, refused } = await resolveNewTestLanguage(
+    requestedLanguage,
+    user.profile.preferred_language
+  );
+  if (refused) {
+    return NextResponse.json(
+      {
+        error: "language_not_enabled",
+        message: "That translation language isn't available.",
+      },
+      { status: 400 }
+    );
+  }
+
   // ── Entitlement: a paid plan buys ONE exam. This is the hard block — the
   // wizard only renders locks. Trial users pass (they may practise any exam);
   // the quota below is their limiter. Checked BEFORE the trial claim, so a
@@ -465,6 +486,7 @@ export async function POST(request: Request) {
       expires_at: expiresAt,
       total_questions: picked.length,
       assignment_id: assignment?.id ?? null,
+      language,
     })
     .select("id")
     .single();

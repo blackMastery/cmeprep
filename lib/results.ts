@@ -1,7 +1,16 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  loadTranslationsFor,
+  type CachedTranslation,
+} from "@/lib/translations";
+import type { TranslationSource } from "@/lib/translation-core";
 import type { Difficulty, QuestionType, Test } from "@/lib/supabase/types";
+
+/** A current cached translation in tests.language. Review only serves
+ * finished papers, so every field is present. */
+export type ReviewTranslation = CachedTranslation;
 
 export type ReviewQuestion = {
   questionId: string;
@@ -26,6 +35,9 @@ export type ReviewQuestion = {
    * the immutable score survives. The review UI renders a placeholder.
    */
   withheld: boolean;
+  /** Null when the paper has no language, nothing current is cached, or the
+   * question is withheld (the translation is the org's content too). */
+  translation: ReviewTranslation | null;
 };
 
 export type SubjectBreakdown = {
@@ -129,9 +141,10 @@ export async function getTestResults(
           "id, stem, type, difficulty, image_path, explanation, subjects(name)"
         )
         .in("id", questionIds.length > 0 ? questionIds : [""]),
+      // position/deleted_at feed the translation hash's live option set.
       admin
         .from("question_options")
-        .select("id, question_id, label, is_correct")
+        .select("id, question_id, label, is_correct, position, deleted_at")
         .in("question_id", questionIds.length > 0 ? questionIds : [""]),
       admin
         .from("attempts")
@@ -159,7 +172,33 @@ export async function getTestResults(
   // The admin client bypasses RLS, so the org wall must be applied HERE:
   // questions from a private bank are readable in review only while the
   // viewer is still a member of that org (platform admins excepted).
-  const withheldIds = await withheldQuestionIds(admin, questionIds, userId);
+  // Translation sources come from the rows above — review already holds
+  // stem, explanation, options and model answers, so the cache read is one
+  // query rather than four.
+  const liveOptionsByQuestion = new Map<string, { id: string; label: string }[]>();
+  for (const o of [...(options ?? [])].sort((a, b) => a.position - b.position)) {
+    if (o.deleted_at !== null) continue;
+    const list = liveOptionsByQuestion.get(o.question_id) ?? [];
+    list.push({ id: o.id, label: o.label });
+    liveOptionsByQuestion.set(o.question_id, list);
+  }
+  const sources = new Map<string, TranslationSource>(
+    ((questions ?? []) as unknown as QuestionRow[]).map((q) => [
+      q.id,
+      {
+        stem: q.stem,
+        explanation: q.explanation,
+        modelAnswer: modelAnswerById.get(q.id) ?? null,
+        options: liveOptionsByQuestion.get(q.id) ?? [],
+      },
+    ])
+  );
+  const [withheldIds, translations] = await Promise.all([
+    withheldQuestionIds(admin, questionIds, userId),
+    test.language
+      ? loadTranslationsFor(admin, questionIds, test.language, sources)
+      : Promise.resolve(new Map<string, CachedTranslation>()),
+  ]);
 
   const questionById = new Map(
     ((questions ?? []) as unknown as QuestionRow[]).map((q) => [q.id, q])
@@ -176,6 +215,7 @@ export async function getTestResults(
     const attempt = attemptByQuestion.get(link.question_id);
     const selected = attempt?.selected_option_ids ?? [];
     const withheld = withheldIds.has(q.id);
+    const translated = translations.get(q.id) ?? null;
 
     return [
       {
@@ -205,6 +245,8 @@ export async function getTestResults(
         // every graded station "Not answered".
         answered: q.type === "osce" ? attempt !== undefined : selected.length > 0,
         withheld,
+        // The org's translation leaves with the member, like its stem.
+        translation: withheld ? null : translated,
       },
     ];
   });

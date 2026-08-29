@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLifetimeStats } from "@/lib/stats";
 import { listExamCatalog } from "@/lib/catalog";
 import { getOrgDepartment, getOrgMembership } from "@/lib/orgs";
+import { listEnabledLanguageCodes } from "@/lib/translations";
 import type { Subscription } from "@/lib/supabase/types";
 import { OrgUpsellCard } from "@/components/org/org-upsell-card";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { IdentityCard } from "@/components/profile/identity-card";
+import { LanguageCard } from "@/components/profile/language-card";
 import { PlanCard } from "@/components/profile/plan-card";
 import { SubscriptionCard } from "@/components/profile/subscription-card";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
@@ -28,7 +30,7 @@ export default async function ProfilePage() {
 
   // RLS scopes the subscriptions read to this user; one query serves the
   // expiry banner, current status and history.
-  const [{ stats, streak }, { data: subs }, catalog, membership] =
+  const [{ stats, streak }, { data: subs }, catalog, membership, enabledLanguageCodes] =
     await Promise.all([
       getLifetimeStats(user.id),
       supabase
@@ -38,6 +40,7 @@ export default async function ProfilePage() {
         .order("created_at", { ascending: false }),
       listExamCatalog(),
       getOrgMembership(user.id),
+      listEnabledLanguageCodes(),
     ]);
   const subscriptions = (subs ?? []) as Subscription[];
   const memberDepartment =
@@ -91,6 +94,10 @@ export default async function ProfilePage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <IdentityCard profile={user.profile} email={user.email} />
+          <LanguageCard
+            profile={user.profile}
+            enabledLanguageCodes={enabledLanguageCodes}
+          />
           <ChangePasswordForm />
         </div>
         <div className="space-y-6">

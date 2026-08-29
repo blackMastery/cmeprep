@@ -101,3 +101,24 @@ describe("constants", () => {
     expect(OSCE_MIN_ANSWER_CHARS).toBeLessThan(OSCE_MAX_ANSWER_CHARS);
   });
 });
+
+describe("buildJudgeMessages with a translation language", () => {
+  const base = {
+    stem: "State the most likely diagnosis.",
+    modelAnswer: "Opioid overdose; airway support and titrated naloxone.",
+    answerText: "Sobredosis de opioides; naloxona.",
+  };
+
+  it("tells the judge the answer may be in that language, in the system prompt", () => {
+    const system = buildJudgeMessages({ ...base, answerLanguage: "Spanish" })[0]
+      .content;
+    expect(system).toMatch(/written in Spanish/);
+    expect(system).toMatch(/regardless of the\s+language/i);
+  });
+
+  it("says nothing about language when the paper has none", () => {
+    expect(buildJudgeMessages(base)[0].content).not.toMatch(
+      /regardless of the\s+language/i
+    );
+  });
+});

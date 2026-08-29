@@ -132,7 +132,14 @@ export type AuditAction =
   | "course.lesson_delete"
   | "course.lesson_reorder"
   | "course.question_save"
-  | "course.question_delete";
+  | "course.question_delete"
+  // On-demand translation (/admin/translations). Regenerate and delete are
+  // per (question, language) row — target is the question, meta.language
+  // says which — and each language toggle is its own row.
+  | "translation.regenerate"
+  | "translation.delete"
+  | "translation.language_enable"
+  | "translation.language_disable";
 
 /**
  * Append an admin action to `audit_logs`.

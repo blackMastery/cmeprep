@@ -71,6 +71,8 @@ export async function fileQuestionReport(input: {
   testId?: string;
   category?: QuestionReportCategory;
   note?: string;
+  /** Translation language on screen when filed (see the 'translation' category). */
+  language?: string;
 }): Promise<FileReportResult> {
   const admin = createAdminClient();
   const now = new Date();
@@ -173,7 +175,13 @@ export async function fileQuestionReport(input: {
     if (input.category && existing.category === null) {
       const { error } = await admin
         .from("question_reports")
-        .update({ category: input.category, note })
+        // The language is the tap's evidence; the results-page elaboration
+        // form has none to send, so absent means "keep", not "clear".
+        .update({
+          category: input.category,
+          note,
+          ...(input.language !== undefined ? { language: input.language } : {}),
+        })
         .eq("id", existing.id)
         .is("category", null);
       if (error) return { ok: false, status: 500, error: "Could not report" };
@@ -196,6 +204,7 @@ export async function fileQuestionReport(input: {
     test_id: test?.id ?? null,
     category: input.category ?? null,
     note,
+    language: input.language ?? null,
   });
   // 23505 = the partial unique index: a parallel tab got there first.
   if (error && error.code !== "23505") {

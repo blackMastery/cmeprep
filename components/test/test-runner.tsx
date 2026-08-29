@@ -18,6 +18,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { AnswerOption } from "@/components/test/answer-option";
+import { TranslateControl } from "@/components/test/translate-control";
+import { TranslationNotice } from "@/components/test/translation-notice";
+import { TranslationChrome } from "@/components/test/translation-chrome";
+import { useQuestionTranslation } from "@/components/test/use-question-translation";
+import {
+  optionTranslation,
+  seedTakeTranslations,
+  translatedAttrs,
+} from "@/lib/translation-ui-core";
 import { QuestionPalette } from "@/components/test/question-palette";
 import { TestTimer } from "@/components/test/test-timer";
 import { SubmitDialog } from "@/components/test/submit-dialog";
@@ -31,10 +40,16 @@ const LETTERS = "ABCDEFGH".split("");
 export function TestRunner({
   state,
   initialReports = [],
+  enabledLanguageCodes = [],
+  initialLanguage = null,
 }: {
   state: TakeState;
   /** The student's open reports on this paper's questions. */
   initialReports?: OpenReport[];
+  /** Translation languages the admin has switched on; empty = feature off. */
+  enabledLanguageCodes?: string[];
+  /** tests.language, else the profile default. */
+  initialLanguage?: string | null;
 }) {
   const router = useRouter();
   const { test, questions } = state;
@@ -73,6 +88,20 @@ export function TestRunner({
 
   const [submitting, setSubmitting] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Per-question Translate: seeded from the page's cached translations, grown
+  // by clicks. The clock keeps running while a translation is fetched — the
+  // student chose to spend that time.
+  const translation = useQuestionTranslation({
+    testId: test.id,
+    enabledLanguageCodes,
+    initialLanguage,
+    initial: () => seedTakeTranslations(questions),
+  });
+
+  // Stable (reads the latest state through a ref), so the key handler below
+  // doesn't re-subscribe on every translation state change.
+  const { toggle: toggleTranslation } = translation;
 
   const current = questions[index];
 
@@ -168,7 +197,11 @@ export function TestRunner({
       if (e.key === "ArrowRight") go(index + 1);
       else if (e.key === "ArrowLeft") go(index - 1);
       else if (e.key.toLowerCase() === "f") toggleFlag();
-      else {
+      // T only flips a translation that already exists — a stray keypress
+      // can never start a paid request.
+      else if (e.key.toLowerCase() === "t") {
+        if (current) toggleTranslation(current.questionId);
+      } else {
         const pos = LETTERS.indexOf(e.key.toUpperCase());
         if (pos >= 0 && current && pos < current.options.length) {
           select(current.options[pos].id);
@@ -177,7 +210,7 @@ export function TestRunner({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, go, index, select, toggleFlag]);
+  }, [current, go, index, select, toggleFlag, toggleTranslation]);
 
   const paletteEntries = useMemo(
     () =>
@@ -206,6 +239,8 @@ export function TestRunner({
 
   const answer = answers.get(current.questionId);
   const isMulti = current.type === "mcq_multi";
+  const shown = translation.translationFor(current.questionId);
+  const stemAttrs = translatedAttrs(shown?.language ?? null);
 
   const palette = (
     <QuestionPalette entries={paletteEntries} current={index} onJump={go} />
@@ -271,27 +306,34 @@ export function TestRunner({
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{current.subjectName}</Badge>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleFlag}
-              className={cn(
-                "ml-auto",
-                answer?.flagged && "text-primary"
-              )}
-              aria-pressed={answer?.flagged ?? false}
-            >
-              <Flag
-                className={cn(answer?.flagged && "fill-current")}
-                data-icon="inline-start"
-              />
-              {answer?.flagged ? "Flagged" : "Flag"}
-            </Button>
+            {/* The right-hand cluster keeps its alignment whether or not the
+                Translate control renders (it doesn't when no language is on). */}
+            <span className="ml-auto flex items-center gap-2">
+              <TranslateControl api={translation} questionId={current.questionId} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleFlag}
+                className={cn(answer?.flagged && "text-primary")}
+                aria-pressed={answer?.flagged ?? false}
+              >
+                <Flag
+                  className={cn(answer?.flagged && "fill-current")}
+                  data-icon="inline-start"
+                />
+                {answer?.flagged ? "Flagged" : "Flag"}
+              </Button>
+            </span>
           </div>
 
+          <TranslationNotice api={translation} />
+
           {/* The question stem is the hero — brand face, generous leading */}
-          <h1 className="font-display text-xl leading-relaxed text-foreground sm:text-2xl sm:leading-relaxed">
-            {current.stem}
+          <h1
+            className="font-display text-xl leading-relaxed text-foreground sm:text-2xl sm:leading-relaxed"
+            {...stemAttrs}
+          >
+            {shown?.stem ?? current.stem}
           </h1>
 
           {questionImageUrl(current.imagePath) && (
@@ -308,6 +350,7 @@ export function TestRunner({
               questionId={current.questionId}
               report={reports.get(current.questionId) ?? null}
               onChange={(next) => setReport(current.questionId, next)}
+              language={shown?.language}
             />
           </div>
 
@@ -323,11 +366,11 @@ export function TestRunner({
                 key={opt.id}
                 id={opt.id}
                 groupName={`q-${current.questionId}`}
-                label={opt.label}
                 letter={LETTERS[i] ?? String(i + 1)}
                 multi={isMulti}
                 selected={answer?.selected.includes(opt.id) ?? false}
                 onSelect={select}
+                {...optionTranslation(shown, opt)}
               />
             ))}
           </div>
@@ -418,6 +461,8 @@ export function TestRunner({
           </div>
         </div>
       )}
+
+      <TranslationChrome api={translation} />
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { finalizeIfExpired, getTestForUser } from "@/lib/tests";
 import { getTestResults } from "@/lib/results";
 import { openReportsFor } from "@/lib/question-reports";
+import { listEnabledLanguageCodes } from "@/lib/translations";
+import { resolveTranslationLanguage } from "@/lib/translation-core";
 import { Button } from "@/components/ui/button";
 import { ReviewList } from "@/components/test/review-list";
 
@@ -34,23 +36,34 @@ export default async function ReviewPage(
   const questionIds = results.questions.map((q) => q.questionId);
   const idFilter = questionIds.length > 0 ? questionIds : [""];
   const supabase = await createClient();
-  const [{ data: bookmarkRows }, { data: noteRows }, reports] = await Promise.all([
-    supabase
-      .from("bookmarks")
-      .select("question_id")
-      .eq("user_id", user.id)
-      .in("question_id", idFilter),
-    supabase
-      .from("notes")
-      .select("question_id, body")
-      .eq("user_id", user.id)
-      .in("question_id", idFilter),
-    // MCQ reports only — OSCE review keeps "Report this grade".
-    test.mode === "osce" ? Promise.resolve([]) : openReportsFor(user.id, questionIds),
-  ]);
+  const [{ data: bookmarkRows }, { data: noteRows }, reports, enabledLanguageCodes] =
+    await Promise.all([
+      supabase
+        .from("bookmarks")
+        .select("question_id")
+        .eq("user_id", user.id)
+        .in("question_id", idFilter),
+      supabase
+        .from("notes")
+        .select("question_id, body")
+        .eq("user_id", user.id)
+        .in("question_id", idFilter),
+      // MCQ reports only — OSCE review keeps "Report this grade".
+      test.mode === "osce" ? Promise.resolve([]) : openReportsFor(user.id, questionIds),
+      listEnabledLanguageCodes(),
+    ]);
 
   const notesByQuestion: Record<string, string> = {};
   for (const n of noteRows ?? []) notesByQuestion[n.question_id] = n.body;
+
+  // Same resolver as the take page: a paper frozen to a since-disabled
+  // language keeps its cached translations toggleable but offers no new ones.
+  const { language: initialLanguage, refused } = resolveTranslationLanguage({
+    testLanguage: test.language,
+    requested: undefined,
+    profileDefault: user.profile.preferred_language,
+    enabled: enabledLanguageCodes,
+  });
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-12">
@@ -73,6 +86,8 @@ export default async function ReviewPage(
         notesByQuestion={notesByQuestion}
         testId={id}
         initialReportedIds={reports.map((r) => r.questionId)}
+        enabledLanguageCodes={refused ? [] : enabledLanguageCodes}
+        initialLanguage={initialLanguage}
       />
     </div>
   );

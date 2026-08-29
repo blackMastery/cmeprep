@@ -7,6 +7,7 @@ import {
   REPORT_NOTE_MAX,
   REPORT_RESOLUTIONS,
 } from "@/lib/question-reports-core";
+import { isLanguageCode } from "@/lib/translation-core";
 
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -15,6 +16,28 @@ export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 // value — so strict validation would reject IDs the database happily stores
 // (fixed-value seed ids, UUIDv7, etc). Match the database's definition.
 export const uuid = () => z.guid();
+
+/** A code from the translation registry (lib/translation-core LANGUAGES). */
+export const languageCodeSchema = z
+  .string()
+  .trim()
+  .refine(isLanguageCode, "Unknown language");
+
+/** Profile setting: "" clears it (the select's "English only" option). */
+export const preferredLanguageSchema = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || isLanguageCode(v), "Unknown language");
+
+/**
+ * POST /api/tests/[id]/translate — one question in the paper's language.
+ * `language` is only honoured when the paper has none yet (the first-click
+ * picker); the route freezes it onto the test.
+ */
+export const translateQuestionSchema = z.object({
+  questionId: uuid(),
+  language: languageCodeSchema.optional(),
+});
 
 export const TEST_MODES = ["exam", "tutor", "osce"] as const;
 export const testModeSchema = z.enum(TEST_MODES);
@@ -35,6 +58,11 @@ export const createTestSchema = z
     // a stray durationMin on a tutor request is accepted and ignored, so an
     // older client can't be locked out by sending it.
     durationMin: z.number().int().min(5).max(240).optional(),
+    // Translation language for the paper: a registry code, `null` for an
+    // explicit "English only" (which must beat a profile default), or absent
+    // for no choice. Whether a code is ENABLED is the route's check — the
+    // registry is static, the toggles are not.
+    language: languageCodeSchema.nullable().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.mode === "exam" && v.durationMin === undefined) {
@@ -100,6 +128,8 @@ export const questionReportSchema = z.object({
   questionId: uuid(),
   testId: uuid().optional(),
   category: z.enum(REPORT_CATEGORIES).optional(),
+  /** The translation on screen when filed — what a 'translation' report is about. */
+  language: languageCodeSchema.optional(),
   note: z
     .string()
     .trim()

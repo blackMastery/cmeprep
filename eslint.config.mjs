@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Deno Edge Function entrypoints: npm:/jsr: specifiers and Deno globals
+    // that Node's resolver and typescript-eslint can't see. The shared pure
+    // core next to them (supabase/functions/_shared) stays linted — the app
+    // imports it.
+    "supabase/functions/*/index.ts",
   ]),
 ]);
 

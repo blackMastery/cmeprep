@@ -41,9 +41,26 @@ export function parsePageSize(value: string | undefined): number {
 
 export type SearchParamsLike = Record<string, string | string[] | undefined>;
 
-function one(value: string | string[] | undefined): string | undefined {
+/** First value of a possibly-repeated query key; empty = absent. */
+export function one(value: string | string[] | undefined): string | undefined {
   const v = Array.isArray(value) ? value[0] : value;
   return v && v.length > 0 ? v : undefined;
+}
+
+/**
+ * A 1-based integer page, whatever the link says. Non-integers matter: a
+ * fractional page becomes a fractional PostgREST offset, which PostgREST
+ * rejects and the list renders as a false "nothing matches".
+ */
+export function parsePage(value: string | undefined): number {
+  const n = Math.floor(Number(value ?? 1));
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+}
+
+/** Escape ilike wildcards so a search for "100%" matches literally. Shared
+ * by every admin free-text search so the rule can't fragment. */
+export function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 export function questionFiltersFromSearchParams(
@@ -66,7 +83,7 @@ export function questionFiltersFromSearchParams(
     published:
       published === "true" ? true : published === "false" ? false : undefined,
     includeDeleted: one(sp.includeDeleted) === "1",
-    page: Number(one(sp.page) ?? 1) || 1,
+    page: parsePage(one(sp.page)),
     pageSize: parsePageSize(one(sp.perPage)),
   };
 }

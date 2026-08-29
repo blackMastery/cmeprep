@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 /**
  * Numbered pagination bar for any server-rendered list page. Links preserve
  * the current searchParams (minus `page`, which is dropped when 1 for clean
- * URLs). Number row collapses to "Page X of Y" below sm.
+ * URLs). Number row collapses to "Page X of Y" below sm. `sizeControl` is
+ * the admin lists' rows-per-page picker, rendered on the footer's right.
  */
 export function Pager({
   page,
@@ -15,6 +16,7 @@ export function Pager({
   pageSize,
   basePath,
   params,
+  sizeControl,
 }: {
   page: number;
   pageCount: number;
@@ -23,6 +25,7 @@ export function Pager({
   pageSize: number;
   basePath: string;
   params: Record<string, string | string[] | undefined>;
+  sizeControl?: React.ReactNode;
 }) {
   // A page beyond the end (stale link after deletes) renders an empty list;
   // navigate relative to the real last page so Previous recovers.
@@ -106,10 +109,22 @@ export function Pager({
         </Button>
       </nav>
 
-      {shown > 0 && (
-        <p className="text-center text-xs text-muted-foreground tabular-nums">
-          Showing {first}–{first + shown - 1} of {total}
-        </p>
+      {sizeControl ? (
+        // Three equal columns keep the count centred under the page buttons
+        // regardless of how wide the picker on the right renders.
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <span />
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {shown > 0 && `Showing ${first}–${first + shown - 1} of ${total}`}
+          </p>
+          <div className="justify-self-end">{sizeControl}</div>
+        </div>
+      ) : (
+        shown > 0 && (
+          <p className="text-center text-xs text-muted-foreground tabular-nums">
+            Showing {first}–{first + shown - 1} of {total}
+          </p>
+        )
       )}
     </div>
   );

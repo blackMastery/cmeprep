@@ -33,6 +33,15 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { AnswerOption, type AnswerState } from "@/components/test/answer-option";
 import { ExplanationStrip } from "@/components/test/explanation-strip";
 import { QuestionPalette } from "@/components/test/question-palette";
+import { TranslateControl } from "@/components/test/translate-control";
+import { TranslationNotice } from "@/components/test/translation-notice";
+import { TranslationChrome } from "@/components/test/translation-chrome";
+import { useQuestionTranslation } from "@/components/test/use-question-translation";
+import {
+  optionTranslation,
+  seedTakeTranslations,
+  translatedAttrs,
+} from "@/lib/translation-ui-core";
 import { AutosaveIndicator } from "@/components/test/autosave-indicator";
 import { useAnswerAutosave } from "@/components/test/use-answer-autosave";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
@@ -53,12 +62,18 @@ export function TutorRunner({
   initialBookmarkedIds,
   notesByQuestion,
   initialReportedIds = [],
+  enabledLanguageCodes = [],
+  initialLanguage = null,
 }: {
   state: TakeState;
   initialBookmarkedIds: string[];
   notesByQuestion: Record<string, string>;
   /** Questions this student already has an open report on. */
   initialReportedIds?: string[];
+  /** Translation languages the admin has switched on; empty = feature off. */
+  enabledLanguageCodes?: string[];
+  /** tests.language, else the profile default. */
+  initialLanguage?: string | null;
 }) {
   const router = useRouter();
   const { test, questions } = state;
@@ -108,6 +123,19 @@ export function TutorRunner({
     () => new Set(initialReportedIds)
   );
 
+  // Per-question Translate: seeded from the page's cached translations
+  // (revealed questions already carry their translated explanation), grown
+  // by clicks; the reveal response tops up the explanation.
+  const translation = useQuestionTranslation({
+    testId: test.id,
+    enabledLanguageCodes,
+    initialLanguage,
+    initial: () => seedTakeTranslations(questions),
+  });
+  // Stable (they read the latest state through a ref): reveal() and the key
+  // handler depend on them without re-subscribing on every state change.
+  const { merge: mergeTranslation, toggle: toggleTranslation } = translation;
+
   const current = questions[index];
 
   // ── Track per-question time (same mechanism as the exam runner)
@@ -155,6 +183,7 @@ export function TutorRunner({
           selectedOptionIds: string[];
           correctOptionIds: string[];
           explanation: string;
+          translatedExplanation?: string;
         } = await res.json();
 
         // Only now is the answer locked server-side, making any pending
@@ -170,6 +199,14 @@ export function TutorRunner({
             explanation: data.explanation,
           })
         );
+        // The reveal is the first moment the explanation may be shown, so
+        // its translation arrives with it (same gate) — a question translated
+        // before it was checked picks it up here.
+        if (data.translatedExplanation !== undefined) {
+          mergeTranslation(question.questionId, {
+            explanation: data.translatedExplanation,
+          });
+        }
         setAnswers((prev) => {
           const next = new Map(prev);
           const existing = next.get(question.questionId) ?? {
@@ -192,6 +229,7 @@ export function TutorRunner({
     [
       accrueTime,
       markClean,
+      mergeTranslation,
       pendingReveal,
       reveals,
       setAnswers,
@@ -308,7 +346,10 @@ export function TutorRunner({
       if (e.key === "ArrowRight") step(1);
       else if (e.key === "ArrowLeft") step(-1);
       else if (e.key.toLowerCase() === "f") toggleFlag();
-      else if (e.key === "Enter") {
+      // T only flips an existing translation — never starts a paid request.
+      else if (e.key.toLowerCase() === "t") {
+        if (current) toggleTranslation(current.questionId);
+      } else if (e.key === "Enter") {
         if (!current || reveals.has(current.questionId)) return;
         if (current.type === "mcq_multi") {
           const selected = answers.get(current.questionId)?.selected ?? [];
@@ -330,7 +371,17 @@ export function TutorRunner({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [answers, current, highlightedId, reveal, reveals, select, step, toggleFlag]);
+  }, [
+    answers,
+    current,
+    highlightedId,
+    reveal,
+    reveals,
+    select,
+    step,
+    toggleFlag,
+    toggleTranslation,
+  ]);
 
   const paletteEntries = useMemo(
     () =>
@@ -369,6 +420,8 @@ export function TutorRunner({
   const currentReveal = reveals.get(current.questionId) ?? null;
   const isMulti = current.type === "mcq_multi";
   const isRevealed = currentReveal !== null;
+  const shown = translation.translationFor(current.questionId);
+  const stemAttrs = translatedAttrs(shown?.language ?? null);
 
   const palette = (
     <div className="space-y-3">
@@ -472,42 +525,52 @@ export function TutorRunner({
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{current.subjectName}</Badge>
-            {isRevealed ? (
-              <span
-                className={cn(
-                  "ml-auto flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-                  currentReveal.isCorrect
-                    ? "bg-success/10 text-success"
-                    : "bg-destructive/10 text-destructive"
-                )}
-              >
-                {currentReveal.isCorrect ? (
-                  <Check className="size-3.5" strokeWidth={3} />
-                ) : (
-                  <X className="size-3.5" strokeWidth={3} />
-                )}
-                {currentReveal.isCorrect ? "Correct" : "Incorrect"}
-              </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleFlag}
-                className={cn("ml-auto", answer?.flagged && "text-primary")}
-                aria-pressed={answer?.flagged ?? false}
-              >
-                <Flag
-                  className={cn(answer?.flagged && "fill-current")}
-                  data-icon="inline-start"
-                />
-                {answer?.flagged ? "Flagged" : "Flag"}
-              </Button>
-            )}
+            {/* The right-hand cluster keeps its alignment whether or not the
+                Translate control renders (it doesn't when no language is on). */}
+            <span className="ml-auto flex items-center gap-2">
+              <TranslateControl api={translation} questionId={current.questionId} />
+              {isRevealed ? (
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                    currentReveal.isCorrect
+                      ? "bg-success/10 text-success"
+                      : "bg-destructive/10 text-destructive"
+                  )}
+                >
+                  {currentReveal.isCorrect ? (
+                    <Check className="size-3.5" strokeWidth={3} />
+                  ) : (
+                    <X className="size-3.5" strokeWidth={3} />
+                  )}
+                  {currentReveal.isCorrect ? "Correct" : "Incorrect"}
+                </span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleFlag}
+                  className={cn(answer?.flagged && "text-primary")}
+                  aria-pressed={answer?.flagged ?? false}
+                >
+                  <Flag
+                    className={cn(answer?.flagged && "fill-current")}
+                    data-icon="inline-start"
+                  />
+                  {answer?.flagged ? "Flagged" : "Flag"}
+                </Button>
+              )}
+            </span>
           </div>
 
+          <TranslationNotice api={translation} />
+
           {/* The question stem is the hero — brand face, generous leading */}
-          <h1 className="font-display text-xl leading-relaxed text-foreground sm:text-2xl sm:leading-relaxed">
-            {current.stem}
+          <h1
+            className="font-display text-xl leading-relaxed text-foreground sm:text-2xl sm:leading-relaxed"
+            {...stemAttrs}
+          >
+            {shown?.stem ?? current.stem}
           </h1>
 
           {questionImageUrl(current.imagePath) && (
@@ -545,13 +608,13 @@ export function TutorRunner({
                   key={opt.id}
                   id={opt.id}
                   groupName={`q-${current.questionId}`}
-                  label={opt.label}
                   letter={LETTERS[i] ?? String(i + 1)}
                   multi={isMulti}
                   selected={selected}
                   state={optState}
                   disabled={isRevealed || pendingReveal}
                   onSelect={select}
+                  {...optionTranslation(shown, opt)}
                 />
               );
             })}
@@ -577,7 +640,14 @@ export function TutorRunner({
 
           {isRevealed && (
             <div className="mt-6 space-y-4">
-              <ExplanationStrip explanation={currentReveal.explanation} />
+              <ExplanationStrip
+                explanation={shown?.explanation ?? currentReveal.explanation}
+                translated={
+                  shown?.explanation !== undefined
+                    ? { language: shown.language }
+                    : null
+                }
+              />
               {/* Tutor mode: the full dialog, offered only after the reveal —
                   the student has seen the key they're disputing. Keyed like
                   the note/bookmark below. */}
@@ -589,6 +659,7 @@ export function TutorRunner({
                 onReported={() =>
                   setReportedIds((prev) => new Set(prev).add(current.questionId))
                 }
+                translationLanguage={shown?.language ?? null}
               />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -682,6 +753,8 @@ export function TutorRunner({
           </div>
         </div>
       )}
+
+      <TranslationChrome api={translation} />
     </div>
   );
 }

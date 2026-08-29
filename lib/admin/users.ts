@@ -1,4 +1,5 @@
 import "server-only";
+import { escapeLike } from "@/lib/admin/question-filters-core";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateStreak } from "@/lib/scoring";
@@ -27,11 +28,6 @@ export type AdminUserRow = {
   /** Tests started, any status — matches getUserDetail's testsCount. */
   testsCount: number;
 };
-
-/** Escape ilike wildcards so a search for "100%" matches literally. */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
 
 /**
  * PostgREST `.or()` clauses reserve `,` `(` `)` and quotes; strip anything

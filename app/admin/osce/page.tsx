@@ -7,10 +7,10 @@ import {
   OSCE_EVENTS_PAGE_SIZE,
 } from "@/lib/admin/osce";
 import { OSCE_DAILY_CAP } from "@/lib/osce-grading-core";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SummaryTile } from "@/components/admin/summary-tile";
 
 export const metadata: Metadata = { title: "OSCE grading" };
 
@@ -169,26 +169,3 @@ export default async function AdminOscePage(props: PageProps<"/admin/osce">) {
   );
 }
 
-function SummaryTile({
-  label,
-  value,
-  warn = false,
-}: {
-  label: string;
-  value: string;
-  warn?: boolean;
-}) {
-  return (
-    <div className="rounded-lg bg-muted/60 px-3 py-2">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "font-display text-lg tabular-nums",
-          warn && "text-destructive"
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}

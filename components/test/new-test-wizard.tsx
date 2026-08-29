@@ -5,6 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Loader2, Lock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  languageByCode,
+  resolveTranslationLanguage,
+} from "@/lib/translation-core";
+import { translatedAttrs } from "@/lib/translation-ui-core";
+import { LanguageSelect } from "@/components/language-select";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -74,10 +80,16 @@ type Mode = (typeof MODES)[number]["value"];
 export function NewTestWizard({
   exams,
   upsellPlanId,
+  enabledLanguageCodes = [],
+  defaultLanguage = null,
 }: {
   exams: WizardExam[];
   /** Plan to send locked-exam upsells to; null when nothing is purchasable. */
   upsellPlanId: string | null;
+  /** Translation languages the admin has switched on; empty hides the step. */
+  enabledLanguageCodes?: string[];
+  /** profiles.preferred_language — the select's starting value. */
+  defaultLanguage?: string | null;
 }) {
   const router = useRouter();
 
@@ -111,6 +123,17 @@ export function NewTestWizard({
   const [difficulty, setDifficulty] =
     useState<(typeof DIFFICULTIES)[number]["value"]>("mixed");
   const [durationMin, setDurationMin] = useState(30);
+  // The same resolver the routes use: a since-disabled profile default
+  // means none, never a dead option.
+  const [language, setLanguage] = useState<string | null>(
+    () =>
+      resolveTranslationLanguage({
+        testLanguage: null,
+        requested: undefined,
+        profileDefault: defaultLanguage,
+        enabled: enabledLanguageCodes,
+      }).language
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -256,6 +279,9 @@ export function NewTestWizard({
           mode,
           // Tutor sessions are untimed — no duration is sent at all.
           ...(mode === "exam" ? { durationMin } : {}),
+          // Sent whenever the select was shown: `null` is the explicit
+          // "English only", which must beat a profile default server-side.
+          ...(enabledLanguageCodes.length > 0 ? { language } : {}),
         }),
       });
       const data = await res.json();
@@ -646,6 +672,24 @@ export function NewTestWizard({
                 </div>
               </fieldset>
 
+              {enabledLanguageCodes.length > 0 && (
+                <fieldset>
+                  <legend className="mb-3 font-display text-lg">
+                    Translation language
+                  </legend>
+                  <LanguageSelect
+                    id="wizard-language"
+                    enabledLanguageCodes={enabledLanguageCodes}
+                    value={language}
+                    onChange={setLanguage}
+                  />
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Optional. You get a Translate button on each question; the
+                    paper itself stays in English. Fixed once the test starts.
+                  </p>
+                </fieldset>
+              )}
+
               {mode === "exam" && (
                 <fieldset>
                   <legend className="mb-3 font-display text-lg">
@@ -666,7 +710,14 @@ export function NewTestWizard({
 
               <EcgDivider className="my-2" />
 
-              <dl className="grid grid-cols-3 gap-3 text-sm">
+              <dl
+                className={cn(
+                  "grid gap-3 text-sm",
+                  enabledLanguageCodes.length > 0
+                    ? "grid-cols-2 sm:grid-cols-4"
+                    : "grid-cols-3"
+                )}
+              >
                 <Summary label="Subjects" value={String(subjectIds.length)} />
                 <Summary
                   label={osceMode ? "Stations" : "Questions"}
@@ -676,6 +727,20 @@ export function NewTestWizard({
                   label="Time"
                   value={mode === "exam" ? `${durationMin} min` : "Untimed"}
                 />
+                {enabledLanguageCodes.length > 0 && (
+                  <Summary
+                    label="Language"
+                    value={
+                      language ? (
+                        <span {...translatedAttrs(language)}>
+                          {languageByCode(language)?.nativeName ?? language}
+                        </span>
+                      ) : (
+                        "English"
+                      )
+                    }
+                  />
+                )}
               </dl>
             </div>
           )}
@@ -865,7 +930,13 @@ function Chip({
   );
 }
 
-function Summary({ label, value }: { label: string; value: string }) {
+function Summary({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg bg-muted/60 px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>

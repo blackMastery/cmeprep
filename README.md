@@ -23,6 +23,16 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   untimed sessions, per-station check-and-lock, binary verdicts feeding the
   normal stats, paid-only with a 50-grades/day cap, admin grading log and
   student "report this grade" flags. Requires `OPENAI_API_KEY`.
+- **On-demand translation** — a Translate button on every question (take and
+  review) that translates ONE question at a time into the student's language
+  and caches it forever (`question_translations`); nothing is translated
+  ahead of demand. Spanish ships enabled; ~20 languages are in the registry
+  and switched on per language at `/admin/translations`, which also lists
+  cached rows (with hash-based staleness), regenerates/deletes them, and
+  shows spend and "request a language" counts. The OpenAI call lives in the
+  `translate-question` Supabase Edge Function (secret-key only); the Next
+  route enforces ownership, the enabled list and the daily caps. Requires
+  `OPENAI_API_KEY` as a **function** secret (`supabase secrets set …`).
 - **AI tutor** — a study chat at `/tutor`, grounded strictly in the client's
   ingested course materials: it cites the passages it used and refuses rather
   than guessing when a topic isn't covered. The retrieval and generation live

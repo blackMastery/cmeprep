@@ -2,6 +2,15 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  loadTranslationsFor,
+  translatedRevealFields,
+  type CachedTranslation,
+} from "@/lib/translations";
+import {
+  revealFieldsAllowed,
+  type TranslationSource,
+} from "@/lib/translation-core";
+import {
   correctOptionsInTest,
   isSelectionCorrect,
   scoreOsceOutcomes,
@@ -27,6 +36,22 @@ export type TakeReveal = {
   explanation: string;
   /** OSCE only: the admin-authored answer key, served once graded. */
   modelAnswer?: string;
+  /** Cached translations of the two fields above, projected through
+   * translatedRevealFields(revealFieldsAllowed(...)) — the same gate as the
+   * English — and living inside the reveal object so they can't be served
+   * without it. */
+  translatedExplanation?: string;
+  translatedModelAnswer?: string;
+};
+
+/** A current cached translation of the question text, in tests.language.
+ * Stem and options only — nothing here is answer-key material. Read-only
+ * cache: the take page never calls OpenAI; the Translate button does. */
+export type TakeTranslation = {
+  language: string;
+  stem: string;
+  /** option id → translated label. */
+  options: Record<string, string>;
 };
 
 export type TakeQuestion = {
@@ -47,6 +72,8 @@ export type TakeQuestion = {
    * the answer. MUST stay null for exam-mode tests so a client can never
    * render correctness mid-exam even by accident. */
   reveal: TakeReveal | null;
+  /** Null when the paper has no language or nothing current is cached. */
+  translation: TakeTranslation | null;
 };
 
 export type TakeState = {
@@ -62,7 +89,17 @@ type QuestionRow = {
   type: QuestionType;
   difficulty: Difficulty;
   image_path: string | null;
+  /** Server-side only — feeds the translation hash, never the client. */
+  explanation: string;
   subjects: { name: string } | null;
+};
+
+type OptionRow = {
+  id: string;
+  question_id: string;
+  label: string;
+  position: number;
+  deleted_at: string | null;
 };
 
 export async function getTestForUser(
@@ -110,11 +147,15 @@ export async function getTakeState(
     await Promise.all([
       admin
         .from("questions")
-        .select("id, stem, type, difficulty, image_path, subjects(name)")
+        .select(
+          "id, stem, type, difficulty, image_path, explanation, subjects(name)"
+        )
         .in("id", questionIds),
+      // Retired options included: the frozen option_order may still name
+      // them. position/deleted_at feed the translation hash's live set.
       admin
         .from("question_options")
-        .select("id, question_id, label")
+        .select("id, question_id, label, position, deleted_at")
         .in("question_id", questionIds),
       admin
         .from("test_answers")
@@ -127,18 +168,30 @@ export async function getTakeState(
   const questionById = new Map(
     ((questions ?? []) as unknown as QuestionRow[]).map((q) => [q.id, q])
   );
-  const optionById = new Map(
-    (options ?? []).map((o) => [o.id, o as { id: string; label: string }])
-  );
+  const optionRows = (options ?? []) as OptionRow[];
+  const optionById = new Map(optionRows.map((o) => [o.id, o]));
   const answerByQuestion = new Map(
     (answers ?? []).map((a) => [a.question_id, a])
   );
 
-  // Each loader is gated on its own mode, so at most one does any work.
-  const [revealByQuestion, osceRevealByQuestion] = await Promise.all([
-    loadRevealData(admin, test, links, answers ?? []),
-    loadOsceRevealData(admin, test, answers ?? []),
-  ]);
+  // The two reveal loaders are gated on their own mode, so at most one of
+  // them does any work; the translation read runs alongside whichever it is,
+  // and only when the paper has a language (a hash-verified cache read,
+  // never OpenAI).
+  const [revealByQuestion, osceRevealByQuestion, translations] =
+    await Promise.all([
+      loadRevealData(admin, test, links, answers ?? []),
+      loadOsceRevealData(admin, test, answers ?? []),
+      test.language
+        ? loadTakeTranslations(
+            admin,
+            test,
+            questionIds,
+            [...questionById.values()],
+            optionRows
+          )
+        : Promise.resolve(new Map<string, CachedTranslation>()),
+    ]);
 
   const take: TakeQuestion[] = links.flatMap((link) => {
     const q = questionById.get(link.question_id);
@@ -147,6 +200,7 @@ export async function getTakeState(
     const answer = answerByQuestion.get(link.question_id);
     const reveal = revealByQuestion.get(link.question_id);
     const osceReveal = osceRevealByQuestion.get(link.question_id);
+    const translated = translations.get(link.question_id) ?? null;
 
     return [
       {
@@ -168,18 +222,117 @@ export async function getTakeState(
           reveal?.selectedOptionIds ?? answer?.selected_option_ids ?? [],
         answerText: osceReveal?.answerText ?? answer?.answer_text ?? null,
         flagged: answer?.flagged ?? false,
+        // A reveal object exists exactly when the loaders established the
+        // question is revealed/graded, so `revealed` is true here and the
+        // gate reduces to the mode rule (tutor: explanation only; OSCE: both).
         reveal: reveal
           ? {
               isCorrect: reveal.isCorrect,
               correctOptionIds: reveal.correctOptionIds,
               explanation: reveal.explanation,
+              ...translatedRevealFields(
+                translated,
+                revealFieldsAllowed(test, true)
+              ),
             }
-          : (osceReveal?.reveal ?? null),
+          : osceReveal
+            ? {
+                ...osceReveal.reveal,
+                ...translatedRevealFields(
+                  translated,
+                  revealFieldsAllowed(test, true)
+                ),
+              }
+            : null,
+        translation:
+          translated && test.language
+            ? {
+                language: test.language,
+                stem: translated.stem,
+                options: translated.options,
+              }
+            : null,
       },
     ];
   });
 
   return { test, questions: take, serverNow: new Date().toISOString() };
+}
+
+/**
+ * Cached translations for the paper, hashed against the sources this read
+ * already holds (stem, explanation, live options) plus the model answers an
+ * OSCE session needs — so the cache read costs one query, not four.
+ */
+async function loadTakeTranslations(
+  admin: ReturnType<typeof createAdminClient>,
+  test: Test,
+  questionIds: string[],
+  questions: QuestionRow[],
+  options: OptionRow[]
+): Promise<Map<string, CachedTranslation>> {
+  const { data: modelAnswers } =
+    test.mode === "osce"
+      ? await admin
+          .from("question_model_answers")
+          .select("question_id, model_answer")
+          .in("question_id", questionIds)
+      : { data: null };
+  const modelAnswerById = new Map(
+    (modelAnswers ?? []).map((m) => [m.question_id, m.model_answer])
+  );
+  const liveByQuestion = new Map<string, { id: string; label: string }[]>();
+  for (const o of [...options].sort((a, b) => a.position - b.position)) {
+    if (o.deleted_at !== null) continue;
+    const list = liveByQuestion.get(o.question_id) ?? [];
+    list.push({ id: o.id, label: o.label });
+    liveByQuestion.set(o.question_id, list);
+  }
+  const sources = new Map<string, TranslationSource>(
+    questions.map((q) => [
+      q.id,
+      {
+        stem: q.stem,
+        explanation: q.explanation,
+        modelAnswer: modelAnswerById.get(q.id) ?? null,
+        options: liveByQuestion.get(q.id) ?? [],
+      },
+    ])
+  );
+  return loadTranslationsFor(admin, questionIds, test.language!, sources);
+}
+
+/**
+ * Whether reveal data (the explanation; for OSCE the model answer) may be
+ * served for ONE question — the per-question form of what loadRevealData
+ * and loadOsceRevealData establish in bulk, for routes that handle a single
+ * click: tutor = the reveal lock; OSCE = the lock AND a graded attempts row
+ * (a locked station without its verdict is served ungraded, see
+ * loadOsceRevealData); exam = never while in progress; a finished paper
+ * always. Pair with revealFieldsAllowed for the field-level rule.
+ */
+export async function isQuestionRevealed(
+  admin: ReturnType<typeof createAdminClient>,
+  test: Test,
+  questionId: string
+): Promise<boolean> {
+  if (test.status !== "in_progress") return true;
+  if (test.mode === "exam") return false;
+  const { data: answer } = await admin
+    .from("test_answers")
+    .select("revealed_at")
+    .eq("test_id", test.id)
+    .eq("question_id", questionId)
+    .maybeSingle();
+  if (!answer?.revealed_at) return false;
+  if (test.mode === "tutor") return true;
+  const { data: attempt } = await admin
+    .from("attempts")
+    .select("id")
+    .eq("test_id", test.id)
+    .eq("question_id", questionId)
+    .maybeSingle();
+  return attempt !== null;
 }
 
 /**

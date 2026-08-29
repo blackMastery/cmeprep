@@ -6,6 +6,8 @@
  *   npx supabase gen types typescript --local > lib/supabase/types.ts
  */
 
+import type { QuestionTranslationRow } from "@/supabase/functions/_shared/translation-core";
+
 export type UserRole = "trial" | "student" | "admin";
 export type QuestionType = "mcq_single" | "mcq_multi" | "image_based" | "osce";
 export type Difficulty = "easy" | "medium" | "hard";
@@ -45,6 +47,9 @@ export type Profile = Timestamps & {
   trials_used: number;
   trials_limit: number;
   banned_at: string | null;
+  /** Registry code (translation-core LANGUAGES) that seeds the wizard's
+   * translation language; null = English only. Self-serve via column grant. */
+  preferred_language: string | null;
   updated_at: string | null;
 };
 
@@ -159,6 +164,10 @@ export type Test = Timestamps & {
   answered_questions: number | null;
   /** Launched from an org assignment; completion tracking keys off this. */
   assignment_id: string | null;
+  /** Translation language frozen on the paper (registry code) so take and
+   * review agree forever; null until the wizard or the first Translate
+   * click sets it. */
+  language: string | null;
 };
 
 export type TestQuestion = {
@@ -871,6 +880,7 @@ export type QuestionReportCategory =
   | "outdated"
   | "ambiguous"
   | "image"
+  | "translation"
   | "other";
 export type QuestionReportResolution = "fixed" | "no_change" | "not_actionable";
 export type QuestionReport = {
@@ -886,6 +896,9 @@ export type QuestionReport = {
   resolved_by: string | null;
   resolution: QuestionReportResolution | null;
   resolution_note: string | null;
+  /** The translation language on screen when the report was filed; set with
+   * the 'translation' category so triage can regenerate the right row. */
+  language: string | null;
 };
 
 /** Published OSCE stations per subject — gates the wizard's OSCE mode. */
@@ -1011,6 +1024,45 @@ export type UserEmail = {
   email: string | null;
 };
 
+// ── On-demand translation (migration 20260902000001) ───────────
+
+/** Which registry languages the picker offers. Public read. */
+export type TranslationLanguage = {
+  code: string;
+  enabled: boolean;
+  enabled_at: string | null;
+  enabled_by: string | null;
+  updated_at: string;
+};
+
+/** The cache: one row per (question, language), every field translated.
+ * Service-role only — the explanation inside is answer-key material. The
+ * shape is declared in the shared translation core so the Edge Function's
+ * upsert and this type describe the same columns. */
+export type QuestionTranslation = QuestionTranslationRow;
+
+/** One row per OpenAI translation call, failures included. */
+export type TranslationEvent = Timestamps & {
+  id: string;
+  user_id: string | null;
+  test_id: string | null;
+  question_id: string;
+  language: string;
+  trigger: "student" | "admin";
+  ok: boolean;
+  model: string;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  duration_ms: number;
+  error: string | null;
+};
+
+/** "Request a language": one row per (user, language). */
+export type LanguageRequest = Timestamps & {
+  user_id: string;
+  language: string;
+};
+
 type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Row: Row;
   Insert: Insert;
@@ -1034,6 +1086,10 @@ export type Database = {
       osce_grading_events: Table<OsceGradingEvent>;
       osce_grade_reports: Table<OsceGradeReport>;
       question_reports: Table<QuestionReport>;
+      translation_languages: Table<TranslationLanguage>;
+      question_translations: Table<QuestionTranslation>;
+      translation_events: Table<TranslationEvent>;
+      language_requests: Table<LanguageRequest>;
       synced_files: Table<SyncedFile>;
       chunks: Table<Chunk>;
       chat_messages: Table<ChatMessage>;
@@ -1099,6 +1155,10 @@ export type Database = {
       subject_osce_question_counts: View<SubjectOsceQuestionCount>;
     };
     Functions: {
+      translation_language_counts: {
+        Args: Record<string, never>;
+        Returns: { language: string; cached: number; requests: number }[];
+      };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       is_org_member: { Args: { org: string }; Returns: boolean };
       is_org_admin: { Args: { org: string }; Returns: boolean };

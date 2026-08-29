@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import type { ReviewQuestion } from "@/lib/results";
@@ -11,6 +11,18 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnswerOption, type AnswerState } from "@/components/test/answer-option";
 import { ExplanationStrip } from "@/components/test/explanation-strip";
+import { TranslateControl } from "@/components/test/translate-control";
+import { TranslationNotice } from "@/components/test/translation-notice";
+import { TranslationChrome } from "@/components/test/translation-chrome";
+import {
+  useQuestionTranslation,
+  type TranslationApi,
+} from "@/components/test/use-question-translation";
+import {
+  optionTranslation,
+  seedReviewTranslations,
+  translatedAttrs,
+} from "@/lib/translation-ui-core";
 import { BookmarkToggle } from "@/components/bookmark-toggle";
 import { QuestionNoteEditor } from "@/components/question-note-editor";
 import { ReportQuestionDialog } from "@/components/report-question";
@@ -24,6 +36,8 @@ export function ReviewList({
   notesByQuestion = {},
   testId,
   initialReportedIds = [],
+  enabledLanguageCodes = [],
+  initialLanguage = null,
 }: {
   questions: ReviewQuestion[];
   initialWrongOnly: boolean;
@@ -34,13 +48,30 @@ export function ReviewList({
   testId?: string;
   /** MCQs this student already has an open report on. */
   initialReportedIds?: string[];
+  /** Translation languages the admin has switched on; empty = feature off. */
+  enabledLanguageCodes?: string[];
+  /** tests.language, else the profile default. */
+  initialLanguage?: string | null;
 }) {
   const [wrongOnly, setWrongOnly] = useState(initialWrongOnly);
+  // Owned by the list for the same reason as reportedIds below: the filter
+  // unmounts cards. Translate needs a paper to post against — without a
+  // testId the control simply never renders.
+  const translation = useQuestionTranslation({
+    testId: testId ?? "",
+    enabledLanguageCodes: testId ? enabledLanguageCodes : [],
+    initialLanguage,
+    initial: () => seedReviewTranslations(questions),
+  });
   // Owned by the list: the wrong-only filter unmounts cards, which would
   // reset a per-card "reported" flag to its stale initial value.
   const [reportedIds, setReportedIds] = useState<Set<string>>(
     () => new Set(initialReportedIds)
   );
+  // Stable, so memoised cards don't re-render for it.
+  const onReported = useCallback((questionId: string) => {
+    setReportedIds((prev) => new Set(prev).add(questionId));
+  }, []);
 
   const visible = useMemo(
     () => (wrongOnly ? questions.filter((q) => !q.isCorrect) : questions),
@@ -48,6 +79,11 @@ export function ReviewList({
   );
 
   const wrongCount = questions.filter((q) => !q.isCorrect).length;
+  // The one-time notice renders on the first card showing a translation,
+  // not on every card.
+  const firstShownId =
+    visible.find((q) => translation.statusFor(q.questionId) === "shown")
+      ?.questionId ?? null;
 
   return (
     <div className="space-y-6">
@@ -83,33 +119,79 @@ export function ReviewList({
                 note={notesByQuestion[q.questionId] ?? null}
                 testId={testId}
                 reported={reportedIds.has(q.questionId)}
-                onReported={() =>
-                  setReportedIds((prev) => new Set(prev).add(q.questionId))
-                }
+                onReported={onReported}
+                translation={translation}
+                showNotice={q.questionId === firstShownId}
               />
             </li>
           ))}
         </ol>
       )}
+
+      <TranslationChrome api={translation} />
     </div>
   );
 }
 
-function ReviewCard({
+type ReviewCardProps = {
+  question: ReviewQuestion;
+  initialBookmarked: boolean;
+  note: string | null;
+  testId?: string;
+  reported?: boolean;
+  onReported?: (questionId: string) => void;
+  translation: TranslationApi;
+  showNotice?: boolean;
+};
+
+/**
+ * Memoised on what the card actually renders from the translation api —
+ * this question's status and translation, the shared flags — rather than
+ * the api object, which is rebuilt on every translation state change. The
+ * api's actions are stable, so calling them from a skipped render is safe.
+ * Without this, one Translate click re-rendered every card on the page.
+ */
+const ReviewCard = memo(ReviewCardInner, (prev, next) => {
+  if (
+    prev.question !== next.question ||
+    prev.initialBookmarked !== next.initialBookmarked ||
+    prev.note !== next.note ||
+    prev.testId !== next.testId ||
+    prev.reported !== next.reported ||
+    prev.onReported !== next.onReported ||
+    prev.showNotice !== next.showNotice
+  ) {
+    return false;
+  }
+  const id = next.question.questionId;
+  const a = prev.translation;
+  const b = next.translation;
+  return (
+    a.statusFor(id) === b.statusFor(id) &&
+    a.translationFor(id) === b.translationFor(id) &&
+    a.language === b.language &&
+    a.capped === b.capped &&
+    a.enabled === b.enabled &&
+    a.notice.visible === b.notice.visible
+  );
+});
+
+function ReviewCardInner({
   question,
   initialBookmarked,
   note,
   testId,
   reported = false,
   onReported = () => {},
-}: {
-  question: ReviewQuestion;
-  initialBookmarked: boolean;
-  note: string | null;
-  testId?: string;
-  reported?: boolean;
-  onReported?: () => void;
-}) {
+  translation,
+  showNotice = false,
+}: ReviewCardProps) {
+  const shown = translation.translationFor(question.questionId);
+  const stemAttrs = translatedAttrs(shown?.language ?? null);
+  const bodyAttrs = translatedAttrs(
+    shown?.modelAnswer !== undefined ? shown.language : null
+  );
+
   // Private-bank content after leaving the org: the score survives, the
   // organisation's material does not (SPEC §4). Render the gap, never a 404.
   if (question.withheld) {
@@ -158,32 +240,41 @@ function ReviewCard({
             Q{question.position + 1}
           </span>
           <Badge variant="secondary">{question.subjectName}</Badge>
-          <span
-            className={cn(
-              "ml-auto flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-              question.isCorrect
-                ? "bg-success/10 text-success"
-                : "bg-destructive/10 text-destructive"
-            )}
-          >
-            {question.isCorrect ? (
-              <Check className="size-3.5" strokeWidth={3} />
-            ) : (
-              <X className="size-3.5" strokeWidth={3} />
-            )}
-            {question.isCorrect
-              ? "Correct"
-              : question.answered
-                ? "Incorrect"
-                : "Not answered"}
+          {/* The right-hand cluster keeps its alignment whether or not the
+              Translate control renders — and matches the withheld card. */}
+          <span className="ml-auto flex items-center gap-2">
+            <TranslateControl api={translation} questionId={question.questionId} />
+            <span
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                question.isCorrect
+                  ? "bg-success/10 text-success"
+                  : "bg-destructive/10 text-destructive"
+              )}
+            >
+              {question.isCorrect ? (
+                <Check className="size-3.5" strokeWidth={3} />
+              ) : (
+                <X className="size-3.5" strokeWidth={3} />
+              )}
+              {question.isCorrect
+                ? "Correct"
+                : question.answered
+                  ? "Incorrect"
+                  : "Not answered"}
+            </span>
+            <BookmarkToggle
+              questionId={question.questionId}
+              initialBookmarked={initialBookmarked}
+            />
           </span>
-          <BookmarkToggle
-            questionId={question.questionId}
-            initialBookmarked={initialBookmarked}
-          />
         </div>
 
-        <p className="font-display text-lg leading-relaxed">{question.stem}</p>
+        {showNotice && <TranslationNotice api={translation} />}
+
+        <p className="font-display text-lg leading-relaxed" {...stemAttrs}>
+          {shown?.stem ?? question.stem}
+        </p>
 
         {questionImageUrl(question.imagePath) && (
           <QuestionImage src={questionImageUrl(question.imagePath)!} />
@@ -206,8 +297,11 @@ function ReviewCard({
                 <p className="mb-1 text-xs font-semibold tracking-wide text-teal uppercase">
                   Model answer
                 </p>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-                  {question.modelAnswer}
+                <p
+                  className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90"
+                  {...bodyAttrs}
+                >
+                  {shown?.modelAnswer ?? question.modelAnswer}
                 </p>
               </div>
             )}
@@ -232,19 +326,24 @@ function ReviewCard({
                   key={opt.id}
                   id={opt.id}
                   groupName={`review-${question.questionId}`}
-                  label={opt.label}
                   letter={LETTERS[i] ?? String(i + 1)}
                   multi={question.type === "mcq_multi"}
                   selected={selected}
                   state={state}
                   disabled
+                  {...optionTranslation(shown, opt)}
                 />
               );
             })}
           </div>
         )}
 
-        <ExplanationStrip explanation={question.explanation} />
+        <ExplanationStrip
+          explanation={shown?.explanation ?? question.explanation}
+          translated={
+            shown?.explanation !== undefined ? { language: shown.language } : null
+          }
+        />
 
         {/* One report affordance per question: OSCE stations have "Report
             this grade" above; MCQs get the question report here. */}
@@ -253,7 +352,8 @@ function ReviewCard({
             testId={testId}
             questionId={question.questionId}
             reported={reported}
-            onReported={onReported}
+            onReported={() => onReported(question.questionId)}
+            translationLanguage={shown?.language ?? null}
           />
         )}
 

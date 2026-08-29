@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { gradeAnswerSchema } from "@/lib/validation";
 import { getTestForUser } from "@/lib/tests";
+import { loadTranslationsFor, translatedRevealFields } from "@/lib/translations";
+import { languageByCode, revealFieldsAllowed } from "@/lib/translation-core";
 import { judgeAnswer, osceModel } from "@/lib/openai";
 import {
   buildJudgeMessages,
@@ -17,6 +19,11 @@ type GradePayload = {
   answerText: string;
   modelAnswer: string;
   explanation: string;
+  /** Cached translations of the two fields above, when the paper has a
+   * language and a current row exists — served only with the grade, the
+   * same gate the English model answer has. */
+  translatedExplanation?: string;
+  translatedModelAnswer?: string;
   /** True when a concurrent grade won — the STORED answer was graded. */
   alreadyRevealed: boolean;
 };
@@ -136,6 +143,18 @@ export async function POST(
     );
   }
 
+  // A cache read, never OpenAI: the paper's translation of this station,
+  // served alongside the grade under the grade's own gate (OSCE + graded →
+  // explanation and model answer, per the one rule).
+  const translatedFields = test.language
+    ? translatedRevealFields(
+        (await loadTranslationsFor(admin, [questionId], test.language)).get(
+          questionId
+        ),
+        revealFieldsAllowed(test, true)
+      )
+    : {};
+
   // A station that already has a verdict is immutable — double-clicks and
   // second tabs get the stored outcome back, whatever they typed since.
   const existing = attemptRes.data;
@@ -179,6 +198,7 @@ export async function POST(
       answerText: existing.answer_text ?? "",
       modelAnswer,
       explanation: question.explanation,
+      ...translatedFields,
       alreadyRevealed: true,
     } satisfies GradePayload);
   }
@@ -217,7 +237,13 @@ export async function POST(
 
   // ── The judge call ────────────────────────────────────────
   const result = await judgeAnswer(
-    buildJudgeMessages({ stem: question.stem, modelAnswer, answerText })
+    buildJudgeMessages({
+      stem: question.stem,
+      modelAnswer,
+      answerText,
+      // A translated station is likely answered in that language.
+      answerLanguage: languageByCode(test.language)?.name,
+    })
   );
 
   // Every call lands in the audit log — verdict or failure. Spend tracking
@@ -319,6 +345,7 @@ export async function POST(
     answerText: finalAttempt?.answer_text ?? answerText,
     modelAnswer,
     explanation: question.explanation,
+    ...translatedFields,
     alreadyRevealed: false,
   } satisfies GradePayload);
 }

@@ -20,9 +20,13 @@ import { LOGO_SRC } from "@/components/brand/logo";
  */
 export function MarketingStructuredData({
   startingPrice,
+  languages = [],
 }: {
   /** Lowest active paid price in dollars, e.g. 72. Omitted when unknown. */
   startingPrice?: number;
+  /** Translation languages switched on (registry code + English name).
+   * English stays first so the markup is unchanged while none is enabled. */
+  languages?: { code: string; name: string }[];
 }) {
   const organization = {
     "@type": "Organization",
@@ -35,7 +39,10 @@ export function MarketingStructuredData({
       "@type": "ContactPoint",
       contactType: "customer support",
       email: SUPPORT_EMAIL,
-      availableLanguage: "English",
+      availableLanguage:
+        languages.length > 0
+          ? ["English", ...languages.map((l) => l.name)]
+          : "English",
     },
   };
 
@@ -46,7 +53,8 @@ export function MarketingStructuredData({
     url: SITE_URL,
     description: SITE_DESCRIPTION,
     publisher: { "@id": absoluteUrl("/#organization") },
-    inLanguage: "en",
+    inLanguage:
+      languages.length > 0 ? ["en", ...languages.map((l) => l.code)] : "en",
   };
 
   const service = {

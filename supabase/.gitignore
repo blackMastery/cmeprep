@@ -6,3 +6,6 @@
 .env.keys
 .env.local
 .env.*.local
+
+# Edge Function secrets — loaded by `supabase start`; never commit.
+functions/.env
