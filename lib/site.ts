@@ -31,7 +31,7 @@ export const SITE_TAGLINE =
 export const SITE_DESCRIPTION =
   "CME question bank: practice questions, mock exams and an AI tutor for medical board and exit exams — CAMC, USMLE, PLAB, NCLEX, MBBS and OSCE. Start free.";
 
-export const SUPPORT_EMAIL = "support@cmeqbank.com";
+export const SUPPORT_EMAIL = "info@cmeqbank.com";
 
 /**
  * WhatsApp contact.

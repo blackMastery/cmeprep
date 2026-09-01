@@ -23,7 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { OG_IMAGE, SITE_NAME, TWITTER_IMAGE } from "@/lib/site";
+import { OG_IMAGE, SITE_NAME, SUPPORT_EMAIL, TWITTER_IMAGE } from "@/lib/site";
 import { TUTOR_DAILY_CAP } from "@/lib/tutor-core";
 import { Button } from "@/components/ui/button";
 
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
 };
 
 const CONTACT_HREF =
-  "mailto:support@cmeqbank.com?subject=" +
+  `mailto:${SUPPORT_EMAIL}?subject=` +
   encodeURIComponent("Teams & Enterprises inquiry");
 
 type OrgPlan = {
@@ -478,7 +478,7 @@ export default function TeamsPage() {
           <Button size="xl" className="bg-gold text-ink hover:bg-gold-deep focus-visible:border-white/60 focus-visible:ring-white/50" asChild>
             <a href={CONTACT_HREF}>Contact sales</a>
           </Button>
-          <p className="text-sm text-white/80">Or email support@cmeqbank.com</p>
+          <p className="text-sm text-white/80">Or email {SUPPORT_EMAIL}</p>
         </div>
       </section>
     </>

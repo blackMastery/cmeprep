@@ -51,13 +51,13 @@ function stats(startingPrice: string | null) {
 /** Local files under public/images — no remotePatterns entry needed. */
 const RECOGNITION = [
   {
-    src: "/images/image1.jpeg",
+    src: "/images/image4.jpeg",
     alt: "SelectUSA Investment Summit 2026 badge for Raule Williams, Complete Medical Examinations Prep, Guyana",
-    width: 1055,
-    height: 1280,
+    width: 1026,
+    height: 1259,
   },
   {
-    src: "/images/image2.jpeg",
+    src: "/images/image3.jpeg",
     alt: "2023–2024 Guyana Innovation Prize awardee: Raule Williams, CMEPrep",
     width: 1080,
     height: 1278,

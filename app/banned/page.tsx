@@ -3,6 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import { logout } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Account suspended",
@@ -22,7 +23,7 @@ export default function BannedPage() {
         </h1>
         <p className="max-w-sm text-sm text-muted-foreground">
           Access to CME Prep has been paused for this account. If you believe
-          this is a mistake, contact support@cmeqbank.com.
+          this is a mistake, contact {SUPPORT_EMAIL}.
         </p>
       </div>
       <form action={logout}>

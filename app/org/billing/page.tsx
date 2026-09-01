@@ -8,6 +8,7 @@ import { listExamCatalogTree } from "@/lib/catalog";
 import { sellableExams, toExamSummary } from "@/lib/catalog-core";
 import { listActiveOrgPlans } from "@/lib/plans";
 import { priceLabel } from "@/lib/format";
+import { SUPPORT_EMAIL } from "@/lib/site";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -158,8 +159,7 @@ export default async function OrgBillingPage(
           </ExamChoice>
           {catalog.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No examinations are on sale right now — contact
-              support@cmeqbank.com.
+              No examinations are on sale right now — contact {SUPPORT_EMAIL}.
             </p>
           )}
         </CardContent>
@@ -221,8 +221,8 @@ export default async function OrgBillingPage(
         ))}
         {plans.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No organisation plans are on sale right now — contact
-            support@cmeqbank.com for terms.
+            No organisation plans are on sale right now — contact{" "}
+            {SUPPORT_EMAIL} for terms.
           </p>
         )}
       </div>

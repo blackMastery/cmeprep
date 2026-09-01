@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 /**
  * Grace/lock messaging (SPEC §5). Two audiences, two tones:
@@ -28,7 +29,7 @@ export function OrgAdminAccessBanner({
         <AlertTriangle className="size-5 shrink-0 text-destructive" aria-hidden="true" />
         <p className="min-w-0 flex-1 text-sm">
           This organisation is <span className="font-semibold">suspended</span>{" "}
-          — members have no access. Contact support@cmeqbank.com.
+          — members have no access. Contact {SUPPORT_EMAIL}.
         </p>
       </div>
     );
