@@ -9,7 +9,7 @@ import {
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
-
+import { Analytics } from "@vercel/analytics/next"
 const publicSans = Public_Sans({
   variable: "--font-public-sans",
   subsets: ["latin"],
@@ -127,6 +127,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
+        <Analytics />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
