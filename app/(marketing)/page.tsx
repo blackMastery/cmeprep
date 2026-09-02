@@ -468,9 +468,7 @@ export default async function MarketingPage() {
                 width={item.width}
                 height={item.height}
                 sizes="(min-width: 640px) 448px, 50vw"
-                // Grayscale so two very differently-coloured photos read as
-                // one quiet strip instead of competing with the brand palette.
-                className="mx-auto h-auto w-full max-w-md rounded-xl grayscale"
+                className="mx-auto h-auto w-full max-w-md rounded-xl"
               />
             </li>
           ))}
