@@ -11,6 +11,7 @@ import {
   REVIEW_BODY_MAX,
   REVIEW_BODY_MIN,
   REVIEW_DISPLAY_NAME_MAX,
+  REVIEW_BANNER_MIN_ATTEMPTS,
   REVIEW_FALLBACK_NAME,
   REVIEW_STATUS_LABELS,
   REVIEW_STATUSES,
@@ -301,10 +302,15 @@ describe("prompt rules", () => {
   });
 
   it("offers the banner only to someone who has used the product", () => {
-    expect(shouldOfferReviewBanner({ attempted: 19, hasReviewed: false })).toBe(
+    expect(REVIEW_BANNER_MIN_ATTEMPTS).toBe(5);
+    // A brand-new account is not asked before it has seen anything.
+    expect(shouldOfferReviewBanner({ attempted: 0, hasReviewed: false })).toBe(
       false,
     );
-    expect(shouldOfferReviewBanner({ attempted: 20, hasReviewed: false })).toBe(
+    expect(shouldOfferReviewBanner({ attempted: 4, hasReviewed: false })).toBe(
+      false,
+    );
+    expect(shouldOfferReviewBanner({ attempted: 5, hasReviewed: false })).toBe(
       true,
     );
     expect(shouldOfferReviewBanner({ attempted: 500, hasReviewed: true })).toBe(

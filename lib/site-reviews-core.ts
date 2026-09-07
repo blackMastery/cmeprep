@@ -288,13 +288,22 @@ export function shouldPromptForReview(input: {
   return input.scorePct >= input.passMark;
 }
 
+/**
+ * Questions answered before the dashboard banner is offered.
+ *
+ * Five, so it reaches people early — including trial users, who get ten free
+ * questions and would otherwise never see it. The floor exists only so that
+ * a brand-new account is not asked before it has seen anything.
+ */
+export const REVIEW_BANNER_MIN_ATTEMPTS = 5;
+
 /** Whether the dashboard banner is offered at all. The client only decides
  * whether it was dismissed. */
 export function shouldOfferReviewBanner(input: {
   attempted: number;
   hasReviewed: boolean;
 }): boolean {
-  return !input.hasReviewed && input.attempted >= 20;
+  return !input.hasReviewed && input.attempted >= REVIEW_BANNER_MIN_ATTEMPTS;
 }
 
 /**
