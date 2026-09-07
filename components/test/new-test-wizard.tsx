@@ -10,7 +10,7 @@ import {
   resolveTranslationLanguage,
 } from "@/lib/translation-core";
 import { translatedAttrs } from "@/lib/translation-ui-core";
-import { LanguageSelect } from "@/components/language-select";
+import { LanguageDropdown } from "@/components/language-dropdown";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -674,11 +674,15 @@ export function NewTestWizard({
 
               {enabledLanguageCodes.length > 0 && (
                 <fieldset>
-                  <legend className="mb-3 font-display text-lg">
+                  <legend
+                    id="wizard-language-label"
+                    className="mb-3 font-display text-lg"
+                  >
                     Translation language
                   </legend>
-                  <LanguageSelect
+                  <LanguageDropdown
                     id="wizard-language"
+                    labelledBy="wizard-language-label"
                     enabledLanguageCodes={enabledLanguageCodes}
                     value={language}
                     onChange={setLanguage}
