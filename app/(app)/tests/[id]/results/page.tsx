@@ -8,12 +8,18 @@ import { getTestResults } from "@/lib/results";
 import { getExamAccess } from "@/lib/entitlements";
 import { openReportsFor } from "@/lib/question-reports";
 import { needsElaboration } from "@/lib/question-reports-core";
-import { accuracyTone, formatDuration } from "@/lib/format";
+import { ACCURACY_PASS, accuracyTone, formatDuration } from "@/lib/format";
+import { hasReviewed } from "@/lib/site-reviews";
+import {
+  reviewDisplayName,
+  shouldPromptForReview,
+} from "@/lib/site-reviews-core";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcgDivider } from "@/components/brand/ecg-line";
 import { TrialResultsUpsell } from "@/components/app/trial-results-upsell";
+import { ReviewResultsPrompt } from "@/components/app/review-results-prompt";
 import {
   ReportElaboration,
   type ElaborationItem,
@@ -40,7 +46,7 @@ export default async function ResultsPage(
   // Same rule as the new-test wall (SPEC §3): a member whose org covers the
   // bank is not metered, so "2 free tests left — upgrade for unlimited mock
   // exams" was both untrue and an upsell for access they already have.
-  const [access, reports] = await Promise.all([
+  const [access, reports, reviewed] = await Promise.all([
     getExamAccess(user),
     // Bare reports tapped during THIS test get a category + note here,
     // skippable. OSCE has its own grade reports.
@@ -50,6 +56,7 @@ export default async function ResultsPage(
           user.id,
           results.questions.map((q) => q.questionId)
         ),
+    hasReviewed(user.id),
   ]);
   const bare = new Set(
     reports.filter((r) => needsElaboration(r, test.id)).map((r) => r.questionId)
@@ -148,6 +155,21 @@ export default async function ResultsPage(
       <ReportElaboration testId={id} items={toElaborate} />
 
       {!access.org && <TrialResultsUpsell profile={user.profile} />}
+
+      {/* Stands down when the trial upsell renders: two asks after one score
+          is noise, and the upsell converts money. */}
+      {shouldPromptForReview({
+        scorePct: percentage,
+        answered: results.answered,
+        passMark: ACCURACY_PASS,
+        hasReviewed: reviewed,
+        upsellShown: !access.org && user.profile.role === "trial",
+      }) && (
+        <ReviewResultsPrompt
+          userId={user.id}
+          displayName={reviewDisplayName(user.profile.full_name)}
+        />
+      )}
 
       {/* Tutor sessions already showed every explanation inline, so the
           dashboard is the primary next step and review the secondary one. */}

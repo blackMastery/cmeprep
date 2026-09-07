@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: "/#tutor", label: "AI tutor" },
   { href: "/#examinations", label: "Examinations" },
   { href: "/#pricing", label: "Pricing" },
+  { href: "/reviews", label: "Reviews" },
   { href: "/teams", label: "Enterprise & Teams" },
   { href: "/about", label: "About" },
 ] as const;

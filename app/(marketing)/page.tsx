@@ -13,6 +13,7 @@ import {
   Target,
   Timer,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { HERO_IMAGE, unsplashUrl } from "@/lib/marketing-images";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
@@ -21,7 +22,16 @@ import { SocialLinks } from "@/components/marketing/social-links";
 import { TutorMockup } from "@/components/marketing/tutor-mockup";
 import { PricingCards } from "@/components/marketing/pricing-cards";
 import { MarketingStructuredData } from "@/components/marketing/structured-data";
+import { ReviewCard } from "@/components/marketing/review-card";
+import { ReviewSummary } from "@/components/marketing/review-summary";
 import { listActivePlans, paidPlans } from "@/lib/plans";
+import { getHomeReviews } from "@/lib/site-reviews";
+import {
+  HOME_FEATURED,
+  PRICING_FEATURED,
+  reviewsArePublic,
+  splitFeatured,
+} from "@/lib/site-reviews-core";
 import { listEnabledLanguageCodes } from "@/lib/translations";
 import { languageByCode } from "@/lib/translation-core";
 import { priceLabel } from "@/lib/format";
@@ -142,10 +152,19 @@ const EXAMINATIONS = [
 // a partial `openGraph` here would REPLACE the root's and drop og:image.
 
 export default async function MarketingPage() {
-  const [plans, enabledLanguageCodes] = await Promise.all([
+  const [plans, enabledLanguageCodes, reviews] = await Promise.all([
     listActivePlans(),
     listEnabledLanguageCodes(),
+    // One snapshot for both review surfaces: the cards, the average and the
+    // "Read all N reviews" count all come from the same read, so they cannot
+    // disagree with each other.
+    getHomeReviews(HOME_FEATURED + PRICING_FEATURED),
   ]);
+  const reviewsLive = reviewsArePublic(reviews.summary.count);
+  // Split so no quote appears twice on this page.
+  const { home: homeReviews, pricing: pricingReviews } = splitFeatured(
+    reviews.featured
+  );
   const paid = paidPlans(plans);
   const lowestCents =
     paid.length > 0 ? Math.min(...paid.map((p) => p.price_cents)) : null;
@@ -270,6 +289,61 @@ export default async function MarketingPage() {
           ))}
         </dl>
       </section>
+
+      {/* ── Reviews ──────────────────────────────────────── */}
+      {/* Right after the Stats band on purpose — numbers, then the voices
+          behind them — and four sections clear of the pricing rail so the two
+          review surfaces never share a viewport. The section owns its own
+          border and padding, so below the cold-start gate the Stats -> Features
+          boundary is exactly what it was before this feature existed. */}
+      {reviewsLive && reviews.summary.averageLabel !== null && (
+        <section
+          id="reviews"
+          className="scroll-mt-20 border-b border-border bg-background"
+        >
+          {/* Two columns only when there are quotes to fill the second one.
+              Approving and featuring are separate actions, so "approved but
+              nothing featured" is the normal state right after the first
+              verdict — and it used to leave a 17rem rail beside a large empty
+              region on the highest-traffic page. */}
+          <div
+            className={cn(
+              "mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:py-20 lg:gap-14",
+              homeReviews.length > 0 && "lg:grid-cols-[minmax(0,17rem)_1fr]"
+            )}
+          >
+            <div>
+              <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+                What students say
+              </h2>
+              <ReviewSummary
+                averageLabel={reviews.summary.averageLabel}
+                total={reviews.summary.count}
+                className="mt-6"
+              />
+              <Button variant="outline" size="lg" className="mt-6" asChild>
+                {/* The count is in the link text so it survives a screen
+                    reader's links-list readout. */}
+                <Link href="/reviews">
+                  {reviews.summary.count === 1
+                    ? "Read the review"
+                    : `Read all ${reviews.summary.count} reviews`}
+                </Link>
+              </Button>
+            </div>
+
+            {homeReviews.length > 0 && (
+              <ul className="grid gap-6 sm:grid-cols-2">
+                {homeReviews.map((review) => (
+                  <li key={review.id}>
+                    <ReviewCard review={review} clamp />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ── Features ─────────────────────────────────────── */}
       <section
@@ -436,6 +510,28 @@ export default async function MarketingPage() {
             </div>
 
             <PricingCards plans={plans} />
+
+            {/* Below the plans, never above: on mobile the cards are a single
+                stack, and anything above them pushes the CTAs down. Compact
+                and divided rather than carded, so it reads as a footnote to
+                the plans instead of a second testimonial band. */}
+            {reviewsLive && pricingReviews.length > 0 && (
+              <div className="mt-12">
+                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Why they subscribed
+                </p>
+                <ul className="mt-4 grid gap-6 sm:grid-cols-3 sm:gap-8 sm:divide-x sm:divide-border">
+                  {pricingReviews.map((review, i) => (
+                    <li
+                      key={review.id}
+                      className={i > 0 ? "sm:pl-8" : undefined}
+                    >
+                      <ReviewCard review={review} variant="compact" clamp />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </section>
       )}

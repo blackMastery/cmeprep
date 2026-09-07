@@ -27,6 +27,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
+      // Hardcoded, and this function stays sync: /reviews returns 200 whatever
+      // the review count, so gating the entry on a DB read would buy nothing.
+      url: absoluteUrl("/reviews"),
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
+    {
       url: absoluteUrl("/about"),
       lastModified,
       changeFrequency: "monthly",

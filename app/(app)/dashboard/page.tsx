@@ -36,6 +36,12 @@ import { WeakAreas } from "@/components/dashboard/weak-areas";
 import { PastTests } from "@/components/dashboard/past-tests";
 import { AccountPanel } from "@/components/dashboard/account-panel";
 import { ExpiryBanners } from "@/components/subscriptions/expiry-banners";
+import { ReviewBanner } from "@/components/app/review-banner";
+import { hasReviewed } from "@/lib/site-reviews";
+import {
+  reviewDisplayName,
+  shouldOfferReviewBanner,
+} from "@/lib/site-reviews-core";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -54,6 +60,7 @@ export default async function DashboardPage() {
     inviteNotice,
     courseCard,
     planCard,
+    reviewed,
   ] = await Promise.all([
     getLifetimeStats(user.id),
     supabase
@@ -77,6 +84,7 @@ export default async function DashboardPage() {
     pendingInviteForEmail(user.email),
     continueLearning(user.id),
     getPlanCard(user),
+    hasReviewed(user.id),
   ]);
 
   // Only modes the user has actually practised, in learning order.
@@ -190,6 +198,19 @@ export default async function DashboardPage() {
         })()}
 
       <ExpiryBanners subscriptions={subscriptions} />
+
+      {/* Last in the banner stack: an invite, an org-access notice or an
+          expiry warning all matter more than a nudge. The client decides only
+          whether it was already dismissed. */}
+      {shouldOfferReviewBanner({
+        attempted: userStats?.attempted ?? 0,
+        hasReviewed: reviewed,
+      }) && (
+        <ReviewBanner
+          userId={user.id}
+          displayName={reviewDisplayName(user.profile.full_name)}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard

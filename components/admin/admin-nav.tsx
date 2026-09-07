@@ -11,6 +11,7 @@ import {
   Mail,
   MessagesSquare,
   Receipt,
+  Star,
   Stethoscope,
   Users,
 } from "lucide-react";
@@ -33,6 +34,7 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin/plans", label: "Plans", icon: CreditCard },
   { href: "/admin/payments", label: "Payments", icon: Receipt },
   { href: "/admin/messages", label: "Messages", icon: Mail },
+  { href: "/admin/reviews", label: "Reviews", icon: Star },
 ];
 
 /**
@@ -46,12 +48,16 @@ export type AdminNavBadges = {
   /** Open question-report rollups (questions, not reports). Its own badge,
    * kept apart from payments — money-ops has a different urgency. */
   questions?: number;
+  /** Product reviews waiting on a verdict. Its own badge too: a pending
+   * testimonial is a queue, not an ops incident. */
+  reviews?: number;
 };
 
 function withBadges(badges: AdminNavBadges | undefined): SideNavItem[] {
   return ADMIN_NAV_ITEMS.map((item) => {
     if (item.href === "/admin/payments") return { ...item, badge: badges?.payments };
     if (item.href === "/admin/questions") return { ...item, badge: badges?.questions };
+    if (item.href === "/admin/reviews") return { ...item, badge: badges?.reviews };
     return item;
   });
 }

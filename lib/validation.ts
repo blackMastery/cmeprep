@@ -8,6 +8,11 @@ import {
   REPORT_RESOLUTIONS,
 } from "@/lib/question-reports-core";
 import { isLanguageCode } from "@/lib/translation-core";
+import {
+  REVIEW_RATING_MAX,
+  REVIEW_RATING_MIN,
+  reviewBodyIssue,
+} from "@/lib/site-reviews-core";
 
 export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -141,6 +146,25 @@ export const questionReportSchema = z.object({
 export const withdrawQuestionReportSchema = z.object({
   questionId: uuid(),
   testId: uuid(),
+});
+
+/**
+ * POST /api/reviews — one person's review of the PRODUCT, once ever.
+ *
+ * No userId field: it comes from the session, and the route spreads it BEFORE
+ * ...parsed.data so a body field could never win. `consent` is
+ * z.literal(true) rather than a boolean — an unticked publication licence is
+ * not a review, and the route must not have to remember to check it. The
+ * length rule delegates to reviewBodyIssue() so the form's live validation
+ * and this schema state it exactly once.
+ */
+export const siteReviewSchema = z.object({
+  rating: z.number().int().min(REVIEW_RATING_MIN).max(REVIEW_RATING_MAX),
+  body: z.string().superRefine((value, ctx) => {
+    const issue = reviewBodyIssue(value);
+    if (issue) ctx.addIssue({ code: "custom", message: issue });
+  }),
+  consent: z.literal(true),
 });
 
 /** Admin/org resolution of every open report on one question. */

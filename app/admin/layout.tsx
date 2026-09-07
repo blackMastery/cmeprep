@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { SITE_NAME } from "@/lib/site";
 import { opsAlertCounts } from "@/lib/analytics";
 import { openReportQuestionCount } from "@/lib/admin/question-reports";
+import { pendingSiteReviewCount } from "@/lib/admin/site-reviews";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminSidebar } from "@/components/admin/admin-nav";
 
@@ -29,17 +30,20 @@ export default async function AdminLayout({
 }) {
   const user = await requireAdmin();
 
-  // Two indexed head-counts per admin page load (payments_unclaimed_idx,
-  // payment_events_unprocessed_idx) — cheap enough to skip caching. Known
-  // limitation: layouts don't re-render on soft navigation, so the badge
-  // refreshes on hard loads and section changes, not every click.
-  const [alerts, openReports] = await Promise.all([
+  // Three indexed head-counts per admin page load (payments_unclaimed_idx,
+  // payment_events_unprocessed_idx, site_reviews_status_idx) — cheap enough
+  // to skip caching. Known limitation: layouts don't re-render on soft
+  // navigation, so the badge refreshes on hard loads and section changes,
+  // not every click.
+  const [alerts, openReports, pendingReviews] = await Promise.all([
     opsAlertCounts(),
     openReportQuestionCount({ kind: "platform" }),
+    pendingSiteReviewCount(),
   ]);
   const badges = {
     payments: alerts.unclaimed + alerts.backlog,
     questions: openReports,
+    reviews: pendingReviews,
   };
 
   return (

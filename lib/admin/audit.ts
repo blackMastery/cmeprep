@@ -62,6 +62,18 @@ export type AuditAction =
   | "osce.report_handle"
   // AI tutor answer feedback: same triage shape.
   | "tutor.feedback_handle"
+  // Product reviews (/admin/reviews). Pre-moderation, so approve/reject IS
+  // the surface — there is deliberately no site_review.edit (an admin never
+  // changes a reviewer's words) and no rejection reason is recorded anywhere,
+  // so these rows are the only account of a verdict. Featuring is its own
+  // pair because moving a quote onto the marketing page is a second decision
+  // on top of publishing. There is no site_review.delete either: the
+  // one-per-user unique index IS the "once ever" rule, so deleting a row
+  // would silently grant a re-review and erase the record of a rejection.
+  | "site_review.approve"
+  | "site_review.reject"
+  | "site_review.feature"
+  | "site_review.unfeature"
   // Study plans: the two sanctioned service-role deletes of a frozen week —
   // both user-initiated/self-healing, audited because RLS was bypassed.
   | "study_plan.dismiss_diagnostic"

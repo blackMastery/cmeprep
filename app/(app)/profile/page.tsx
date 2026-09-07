@@ -6,6 +6,8 @@ import { getLifetimeStats } from "@/lib/stats";
 import { listExamCatalog } from "@/lib/catalog";
 import { getOrgDepartment, getOrgMembership } from "@/lib/orgs";
 import { listEnabledLanguageCodes } from "@/lib/translations";
+import { hasReviewed } from "@/lib/site-reviews";
+import { reviewDisplayName } from "@/lib/site-reviews-core";
 import type { Subscription } from "@/lib/supabase/types";
 import { OrgUpsellCard } from "@/components/org/org-upsell-card";
 import {
@@ -20,6 +22,7 @@ import { LanguageCard } from "@/components/profile/language-card";
 import { PlanCard } from "@/components/profile/plan-card";
 import { SubscriptionCard } from "@/components/profile/subscription-card";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
+import { SiteReviewCard } from "@/components/profile/site-review-card";
 import { ExpiryBanners } from "@/components/subscriptions/expiry-banners";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -30,8 +33,14 @@ export default async function ProfilePage() {
 
   // RLS scopes the subscriptions read to this user; one query serves the
   // expiry banner, current status and history.
-  const [{ stats, streak }, { data: subs }, catalog, membership, enabledLanguageCodes] =
-    await Promise.all([
+  const [
+    { stats, streak },
+    { data: subs },
+    catalog,
+    membership,
+    enabledLanguageCodes,
+    reviewed,
+  ] = await Promise.all([
       getLifetimeStats(user.id),
       supabase
         .from("subscriptions")
@@ -41,6 +50,7 @@ export default async function ProfilePage() {
       listExamCatalog(),
       getOrgMembership(user.id),
       listEnabledLanguageCodes(),
+      hasReviewed(user.id),
     ]);
   const subscriptions = (subs ?? []) as Subscription[];
   const memberDepartment =
@@ -97,6 +107,11 @@ export default async function ProfilePage() {
           <LanguageCard
             profile={user.profile}
             enabledLanguageCodes={enabledLanguageCodes}
+          />
+          <SiteReviewCard
+            userId={user.id}
+            displayName={reviewDisplayName(user.profile.full_name)}
+            hasReviewed={reviewed}
           />
           <ChangePasswordForm />
         </div>

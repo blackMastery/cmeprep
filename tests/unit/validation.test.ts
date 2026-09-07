@@ -15,6 +15,7 @@ import {
   planSchema,
   safeRedirectPath,
   saveAnswersSchema,
+  siteReviewSchema,
   subscriptionSchema,
   trialsLimitSchema,
   userRoleSchema,
@@ -522,5 +523,61 @@ describe("parseInviteEmails", () => {
 
   it("returns nothing for an empty paste", () => {
     expect(parseInviteEmails("  \n ")).toEqual({ emails: [], invalid: [] });
+  });
+});
+
+describe("siteReviewSchema", () => {
+  const body = "x".repeat(60);
+
+  it("accepts a well-formed review", () => {
+    const parsed = siteReviewSchema.safeParse({ rating: 5, body, consent: true });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("bounds the rating to the five stars the form offers", () => {
+    for (const rating of [0, 6, 2.5, -1]) {
+      expect(
+        siteReviewSchema.safeParse({ rating, body, consent: true }).success
+      ).toBe(false);
+    }
+    for (const rating of [1, 5]) {
+      expect(
+        siteReviewSchema.safeParse({ rating, body, consent: true }).success
+      ).toBe(true);
+    }
+  });
+
+  it("treats a missing or unticked licence as not a review", () => {
+    // z.literal(true), not z.boolean(): the route never has to remember to
+    // check consent, because an unticked box cannot parse.
+    expect(siteReviewSchema.safeParse({ rating: 5, body }).success).toBe(false);
+    expect(
+      siteReviewSchema.safeParse({ rating: 5, body, consent: false }).success
+    ).toBe(false);
+  });
+
+  it("enforces the body length through reviewBodyIssue", () => {
+    expect(
+      siteReviewSchema.safeParse({
+        rating: 5,
+        body: "x".repeat(39),
+        consent: true,
+      }).success
+    ).toBe(false);
+    expect(
+      siteReviewSchema.safeParse({
+        rating: 5,
+        body: "x".repeat(1001),
+        consent: true,
+      }).success
+    ).toBe(false);
+  });
+
+  it("measures the body after trimming, so padding cannot buy length", () => {
+    const padded = `${" ".repeat(50)}too short${" ".repeat(50)}`;
+    expect(
+      siteReviewSchema.safeParse({ rating: 5, body: padded, consent: true })
+        .success
+    ).toBe(false);
   });
 });

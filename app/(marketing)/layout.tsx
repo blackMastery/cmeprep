@@ -34,6 +34,15 @@ export default async function MarketingLayout({
             <Button variant="ghost" size="sm" asChild>
               <Link href="/#pricing">Pricing</Link>
             </Button>
+            {/* The NEW link is the one that waits for lg, not Teams. Six
+                links collide with the header at 768px (see the Logo comment
+                above), and between md and lg the mobile nav is hidden too —
+                so demoting Teams would have left /teams reachable only from
+                the footer on portrait tablets and small laptop windows.
+                Reviews is still in the footer and the mobile sheet. */}
+            <Button variant="ghost" size="sm" asChild className="max-lg:hidden">
+              <Link href="/reviews">Reviews</Link>
+            </Button>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/teams">Enterprise &amp; Teams</Link>
             </Button>
@@ -88,6 +97,9 @@ export default async function MarketingLayout({
                 </Link>
                 <Link href="/#tutor" className="block text-[#a9a29b] hover:text-white">
                   AI tutor
+                </Link>
+                <Link href="/reviews" className="block text-[#a9a29b] hover:text-white">
+                  Reviews
                 </Link>
                 <Link href="/teams" className="block text-[#a9a29b] hover:text-white">
                   Teams &amp; Enterprises

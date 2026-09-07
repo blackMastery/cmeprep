@@ -920,6 +920,49 @@ export type ContactMessage = Timestamps & {
   handled_by: string | null;
 };
 
+/** Product testimonials. site_reviews, not reviews: "review" already means
+ * ANSWER review everywhere else in this app. */
+export type SiteReviewStatus = "pending" | "approved" | "rejected";
+
+/**
+ * One person's review of the PRODUCT — no subject FK by design. Service-role
+ * read/write only: the public surfaces read it through lib/site-reviews.ts,
+ * which selects display columns BY NAME, so the `status = 'approved'` filter
+ * is stated once. Everything after `body` is a SNAPSHOT taken at submit time
+ * and never refreshed.
+ */
+export type SiteReview = Timestamps & {
+  id: string;
+  /** Null once the account is deleted — the published statement survives it,
+   * which is what the consent_at licence buys. */
+  user_id: string | null;
+  rating: number;
+  /** Plain text, 40-1000 chars. Never markdown: it renders on marketing pages. */
+  body: string;
+  /** profiles.full_name at submit time. Frozen: profiles is unreadable by
+   * anon, so a render-time join is impossible, and a rename must not rewrite
+   * a quote we already published. */
+  display_name: string;
+  /** Ever paid us, as of submit time. NOT canAccessExam — that expires. */
+  verified_purchase: boolean;
+  /** Snapshot, so it is text + check in Postgres rather than the user_role
+   * enum; typed as UserRole here because the values are the same three. */
+  role_at_submit: UserRole;
+  /** Most-practised exam at submit time (pickPrimaryExam). Admin filter only. */
+  exam_id: string | null;
+  /** ...and its name, so the row survives an exam rename or delete. Not
+   * displayed publicly in v1. */
+  exam_name: string | null;
+  /** The publication-licence checkbox. Never null: no path writes without it. */
+  consent_at: string;
+  status: SiteReviewStatus;
+  moderated_at: string | null;
+  moderated_by: string | null;
+  /** Marketing pull-quote. A CHECK pins featured => approved. */
+  featured: boolean;
+  updated_at: string | null;
+};
+
 /* ── Tutor agent ──────────────────────────────────────────────
  * Written by the FastAPI tutor service over a direct Postgres connection, not
  * by this app. All five are deny-all for anon/authenticated: reads go through
@@ -1109,6 +1152,7 @@ export type Database = {
       payments: Table<Payment>;
       plans: Table<Plan>;
       contact_messages: Table<ContactMessage>;
+      site_reviews: Table<SiteReview>;
       orgs: Table<Org>;
       org_departments: Table<OrgDepartment>;
       org_members: Table<OrgMember>;
@@ -1217,6 +1261,15 @@ export type Database = {
           since_edit: boolean;
           picks: number;
         }[];
+      };
+      /** Approved-review rating histogram (at most 5 rows). NOT a plain select
+       * of the ratings: PostgREST caps a response at max_rows = 1000, so that
+       * would silently truncate and skew the average past a thousand reviews.
+       * The average, the rounding and the cold-start gate are computed in
+       * lib/site-reviews-core.ts, not here. Service-role only. */
+      site_review_rating_counts: {
+        Args: Record<string, never>;
+        Returns: { rating: number; reviews: number }[];
       };
       /** AI-tutor token usage per (Guyana day, model). The model-null row
        * carries the question count and refusals. Service-role only. */
