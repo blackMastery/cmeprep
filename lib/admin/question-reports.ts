@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentScope } from "@/lib/admin/content-scope";
+import { notifyReportsResolved } from "@/lib/notifications";
 import type {
   QuestionReport,
   QuestionReportCategory,
@@ -530,7 +531,14 @@ export async function resolveOpenReports(
     })
     .in("question_id", questionIds)
     .is("resolved_at", null)
-    .select("id");
+    .select("id, user_id, question_id");
   if (error) throw new Error(`could not resolve reports: ${error.message}`);
+  // Every close path (editor save, delete, the queue) lands here, so this is
+  // the one place the reporter hears back — grouped per reporter, and it
+  // never throws, so the ruling stands even if the mail cannot be queued.
+  await notifyReportsResolved(admin, {
+    rows: data ?? [],
+    resolution: input.resolution,
+  });
   return data?.length ?? 0;
 }

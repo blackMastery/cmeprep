@@ -22,6 +22,10 @@ import {
   syncRoleFromSubscriptions,
 } from "@/lib/subscriptions";
 import {
+  notifyPaymentReversed,
+  notifyRefundRecorded,
+} from "@/lib/notifications";
+import {
   parseAnyPurchaseCustomId,
   type ParsedCustomId,
 } from "@/lib/subscriptions-core";
@@ -209,24 +213,49 @@ async function handleCaptureRefunded(admin: AdminClient, event: WebhookEvent) {
     return;
   }
 
-  // Money first, access second: if the revocation below throws, the sweep
-  // replays and this write is a no-op while the revocation retries.
+  // Money first, access second. A replay (PayPal redelivery, or the sweep
+  // after a throw below) records nothing new — applied === null — but must
+  // STILL run the revoke: it is idempotent (a cancelled row short-circuits),
+  // and stopping early would leave a full refund with its access intact.
   const applied = await recordRefund(admin, payment, amounts);
-  if (!applied) return; // redelivery — nothing changed
+  const refundedCents = applied?.refundedCents ?? payment.refunded_cents;
 
-  await audit(payment.user_id, "payment.refund", payment.user_id, {
-    paymentId: payment.id,
-    refundId: event.resource?.id,
-    refundCents: amounts.refundCents,
-    refundedCentsBefore: payment.refunded_cents,
-    refundedCentsAfter: applied.refundedCents,
-    amountCents: payment.amount_cents,
-    status: applied.status,
-    via: "paypal_webhook",
-    eventType: event.event_type,
-  });
+  if (applied) {
+    await audit(payment.user_id, "payment.refund", payment.user_id, {
+      paymentId: payment.id,
+      refundId: event.resource?.id,
+      refundCents: amounts.refundCents,
+      refundedCentsBefore: payment.refunded_cents,
+      refundedCentsAfter: applied.refundedCents,
+      amountCents: payment.amount_cents,
+      status: applied.status,
+      via: "paypal_webhook",
+      eventType: event.event_type,
+    });
+  }
 
-  if (shouldRevokeAccess("refund", applied.refundedCents, payment.amount_cents)) {
+  const withdraw = shouldRevokeAccess("refund", refundedCents, payment.amount_cents);
+
+  // The mail is queued from the delta THIS pass recorded, BEFORE the revoke:
+  // the delta is only known here (a running-total payload has no per-refund
+  // figure), and shouldRevokeAccess already decided purely what the revoke
+  // below will do — a throw there replays into the revoke alone, never into
+  // a second mail. A pass that recorded nothing (redelivery, or an
+  // out-of-order partial refund the total already covered) mails nothing.
+  if (applied && payment.user_id) {
+    await notifyRefundRecorded(admin, {
+      userId: payment.user_id,
+      paypalOrderId: payment.paypal_order_id,
+      refundId: event.resource?.id ?? `${payment.id}:${applied.refundedCents}`,
+      refundCents: applied.refundedCents - payment.refunded_cents,
+      totalRefundedCents: applied.refundedCents,
+      amountCents: payment.amount_cents,
+      currency: payment.currency,
+      accessWithdrawn: withdraw,
+    });
+  }
+
+  if (withdraw) {
     await revokeSubscriptionForOrder(admin, payment.paypal_order_id, {
       trigger: "refund",
       eventType: event.event_type,
@@ -299,6 +328,19 @@ async function handleTerminalReversal(
     await revokeSubscriptionForOrder(admin, orderId, {
       trigger,
       eventType: event.event_type,
+    });
+  }
+
+  // Keyed on the payment id, so a redelivery or a sweep replay of the same
+  // event cannot mail twice.
+  if (payment?.user_id) {
+    await notifyPaymentReversed(admin, {
+      userId: payment.user_id,
+      paymentId: payment.id,
+      paypalOrderId: payment.paypal_order_id,
+      kind: status,
+      amountCents: payment.amount_cents,
+      currency: payment.currency,
     });
   }
 }

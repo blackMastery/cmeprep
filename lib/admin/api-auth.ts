@@ -26,3 +26,20 @@ export async function requireAdminJson(): Promise<
   }
   return { user };
 }
+
+/**
+ * Bearer gate for the cron routes (/api/cron/*). Missing secret fails
+ * CLOSED — 503, never "anyone may trigger a run" — and a wrong one is 401.
+ * Stated once so a hardening change (timing-safe compare, a rotation
+ * window accepting two values) reaches every cron route at once.
+ */
+export function requireCronJson(request: Request): NextResponse | null {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: "cron_not_configured" }, { status: 503 });
+  }
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  return null;
+}

@@ -8,6 +8,8 @@ import type {
   Test,
 } from "@/lib/supabase/types";
 import { withheldQuestionIds } from "@/lib/results";
+import { deferNotify } from "@/lib/email";
+import { notifyQuestionReported } from "@/lib/notifications";
 import {
   canWithdraw,
   categoryRequired,
@@ -198,17 +200,33 @@ export async function fileQuestionReport(input: {
     };
   }
 
-  const { error } = await admin.from("question_reports").insert({
-    user_id: input.userId,
-    question_id: input.questionId,
-    test_id: test?.id ?? null,
-    category: input.category ?? null,
-    note,
-    language: input.language ?? null,
-  });
+  const { data: inserted, error } = await admin
+    .from("question_reports")
+    .insert({
+      user_id: input.userId,
+      question_id: input.questionId,
+      test_id: test?.id ?? null,
+      category: input.category ?? null,
+      note,
+      language: input.language ?? null,
+    })
+    .select("id")
+    .maybeSingle();
   // 23505 = the partial unique index: a parallel tab got there first.
   if (error && error.code !== "23505") {
     return { ok: false, status: 500, error: "Could not report" };
+  }
+  // Org bank → that org's admins; public bank → platform admins, batched
+  // per question. Only on a NEW row, and off the student's round-trip —
+  // this is the mid-exam hot path.
+  if (inserted) {
+    await deferNotify(() =>
+      notifyQuestionReported(admin, {
+        reportId: inserted.id,
+        questionId: input.questionId,
+        category: input.category ?? null,
+      })
+    );
   }
   return { ok: true, status: error ? "duplicate" : "created" };
 }

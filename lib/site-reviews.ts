@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyAdminReviewSubmitted } from "@/lib/notifications";
 import { guyanaDay } from "@/lib/orgs-core";
 import { pickPrimaryExam } from "@/lib/plan-core";
 import {
@@ -196,7 +197,7 @@ export async function submitSiteReview(input: {
     ? ((exams ?? []).find((e) => e.id === examId)?.name ?? null)
     : null;
 
-  const { error } = await admin.from("site_reviews").insert({
+  const row = {
     user_id: input.userId,
     rating: input.rating,
     // The SAME string reviewBodyIssue measured — it normalizes before
@@ -211,7 +212,12 @@ export async function submitSiteReview(input: {
     exam_id: examId,
     exam_name: examName,
     consent_at: now.toISOString(),
-  });
+  };
+  const { data: inserted, error } = await admin
+    .from("site_reviews")
+    .insert(row)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     // 23505 = site_reviews_user_uidx: a second tab, or a second attempt past
@@ -224,6 +230,20 @@ export async function submitSiteReview(input: {
       return { ok: false, status: 409, error: "You've already left a review." };
     }
     return { ok: false, status: 500, error: "Could not save your review" };
+  }
+
+  // Moderators hear at once: nothing is public until one of them rules, and
+  // a review that waits a day for the digest is a reviewer left wondering.
+  // Never blocks or fails the submit (enqueueEmails swallows).
+  if (inserted) {
+    await notifyAdminReviewSubmitted(admin, {
+      id: inserted.id,
+      rating: row.rating,
+      displayName: row.display_name,
+      examName: row.exam_name,
+      verifiedPurchase: row.verified_purchase,
+      body: row.body,
+    });
   }
 
   return { ok: true, status: "created" };

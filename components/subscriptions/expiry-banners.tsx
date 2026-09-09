@@ -1,4 +1,5 @@
-import { listActivePlans, paidPlans } from "@/lib/plans";
+import { listActivePlans } from "@/lib/plans";
+import { renewHref, renewPlan } from "@/lib/plans-core";
 import { listExamCatalog } from "@/lib/catalog";
 import { expiryWarnings } from "@/lib/entitlements-core";
 import type { SubscriptionScope } from "@/lib/entitlements-core";
@@ -27,7 +28,9 @@ export async function ExpiryBanners({
     listActivePlans(),
   ]);
 
-  const renewPlan = paidPlans(plans).filter((p) => p.duration_months !== null)[0];
+  // Same rule as the expiry reminder EMAIL (lib/notification-scans.ts): the
+  // two must never point a student at different plans.
+  const plan = renewPlan(plans);
   const nameById = new Map(catalog.map((exam) => [exam.id, exam.name]));
 
   return (
@@ -40,16 +43,7 @@ export async function ExpiryBanners({
           examName={
             warning.examId ? (nameById.get(warning.examId) ?? null) : null
           }
-          // Deep-link straight back to the same exam when we can — this is
-          // what the exam id bought us; before it, renewal could only point
-          // at the pricing section.
-          renewHref={
-            renewPlan
-              ? warning.examId
-                ? `/checkout/${renewPlan.id}?exam=${warning.examId}`
-                : `/checkout/${renewPlan.id}`
-              : "/#pricing"
-          }
+          renewHref={renewHref(plan, warning.examId)}
         />
       ))}
     </>

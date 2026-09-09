@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { listOrgSubscriptions, requireOrgAdmin, type OrgAdminSession } from "@/lib/orgs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import { notifyAssignmentCreated } from "@/lib/notifications";
 import { orgAccessOf } from "@/lib/entitlements-core";
 import {
   assignmentChanges,
@@ -205,7 +206,7 @@ export async function createAssignment(
       department_id: departmentId,
       created_by: session.user.id,
     })
-    .select("id")
+    .select("*")
     .single();
   if (error || !created) return { error: "Could not create the assignment." };
 
@@ -243,6 +244,8 @@ export async function createAssignment(
     },
     session.org.id
   );
+  // After the target rows exist: the audience helper reads them.
+  await notifyAssignmentCreated(admin, created as OrgAssignment);
   revalidateAssignments();
   return { success: "Assignment created." };
 }

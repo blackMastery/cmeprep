@@ -6,6 +6,9 @@ import { getLifetimeStats } from "@/lib/stats";
 import { listExamCatalog } from "@/lib/catalog";
 import { getOrgDepartment, getOrgMembership } from "@/lib/orgs";
 import { listEnabledLanguageCodes } from "@/lib/translations";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ensurePreferences, prefsOf } from "@/lib/email";
+import { CATEGORY_LABEL, NOTIFICATION_CATEGORIES } from "@/lib/email-core";
 import { hasReviewed } from "@/lib/site-reviews";
 import { reviewDisplayName } from "@/lib/site-reviews-core";
 import type { Subscription } from "@/lib/supabase/types";
@@ -19,6 +22,7 @@ import {
 import { StatCard } from "@/components/dashboard/stat-card";
 import { IdentityCard } from "@/components/profile/identity-card";
 import { LanguageCard } from "@/components/profile/language-card";
+import { NotificationsCard } from "@/components/profile/notifications-card";
 import { PlanCard } from "@/components/profile/plan-card";
 import { SubscriptionCard } from "@/components/profile/subscription-card";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
@@ -40,6 +44,7 @@ export default async function ProfilePage() {
     membership,
     enabledLanguageCodes,
     reviewed,
+    preferenceRow,
   ] = await Promise.all([
       getLifetimeStats(user.id),
       supabase
@@ -51,6 +56,9 @@ export default async function ProfilePage() {
       getOrgMembership(user.id),
       listEnabledLanguageCodes(),
       hasReviewed(user.id),
+      // Admin client after requireUser: creates the row (and its unsubscribe
+      // token) on first visit.
+      ensurePreferences(createAdminClient(), user.id),
     ]);
   const subscriptions = (subs ?? []) as Subscription[];
   const memberDepartment =
@@ -63,6 +71,16 @@ export default async function ProfilePage() {
   const examNames = Object.fromEntries(
     catalog.map((exam) => [exam.id, exam.name])
   );
+  // Org-admin toggles only mean something to an org admin, the platform
+  // operations one only to a platform admin; everyone else sees the four
+  // personal ones.
+  const isOrgAdmin = membership?.membership.role === "admin";
+  const isPlatformAdmin = user.profile.role === "admin";
+  const notificationCategories = NOTIFICATION_CATEGORIES.filter(
+    (category) =>
+      (isOrgAdmin || !CATEGORY_LABEL[category].org) &&
+      (isPlatformAdmin || !CATEGORY_LABEL[category].admin)
+  ).map((category) => ({ key: category, ...CATEGORY_LABEL[category] }));
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
@@ -107,6 +125,10 @@ export default async function ProfilePage() {
           <LanguageCard
             profile={user.profile}
             enabledLanguageCodes={enabledLanguageCodes}
+          />
+          <NotificationsCard
+            prefs={prefsOf(preferenceRow)}
+            categories={notificationCategories}
           />
           <SiteReviewCard
             userId={user.id}

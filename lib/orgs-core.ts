@@ -319,9 +319,21 @@ export type MemberReadiness = {
 
 /** Civil date (YYYY-MM-DD) of a moment in America/Guyana — the app's
  * analytics timezone (user_daily_activity precedent). */
+/** The site's civil timezone, stated once. Every view, scan window and email
+ * date that says "today" means this zone. Guyana has no DST: UTC−4 always. */
+export const SITE_TIME_ZONE = "America/Guyana";
+
+/** ISO instant at which a civil day (YYYY-MM-DD) begins in SITE_TIME_ZONE —
+ * the inverse of guyanaDay, for range bounds on timestamptz columns. Fixed
+ * offset because the zone has none; if that ever changes, this is the one
+ * place to fix. */
+export function dayStartUtc(day: string): string {
+  return `${day}T04:00:00Z`;
+}
+
 export function guyanaDay(at: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Guyana",
+    timeZone: SITE_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

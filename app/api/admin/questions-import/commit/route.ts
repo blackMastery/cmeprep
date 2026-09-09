@@ -21,6 +21,7 @@ import {
 import { diffOptions } from "@/lib/admin/option-diff";
 import { listHierarchy, nextPosition } from "@/lib/admin/taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyAdminImportFinished } from "@/lib/notifications";
 import { uuid } from "@/lib/validation";
 
 const UNIQUE_VIOLATION = "23505";
@@ -449,6 +450,21 @@ export async function POST(request: Request) {
     },
     orgId
   );
+
+  // The importer gets the tally by email: a commit can outlive the tab that
+  // started it, and the response below is gone the moment it closes.
+  await notifyAdminImportFinished(admin, {
+    userId: user.id,
+    examName: exam.name,
+    fileName,
+    imported: insertedQuestionIds.length,
+    skipped: analysis.counts.skipped,
+    errorRows: analysis.counts.errorRows,
+    images: uploaded.pathByRow.size,
+    createdSpecialties: createdSpecialties.length,
+    createdSubjects: createdSubjects.length,
+    questionsPath: orgId ? "/org/content/questions" : "/admin/questions",
+  });
 
   // The workbook has served its purpose; nothing reads it again.
   await deleteImportObject(objectPath);

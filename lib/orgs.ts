@@ -387,6 +387,68 @@ export async function assignmentsForMember(
   });
 }
 
+/**
+ * Who an assignment reaches, as user ids. The audience rule stated ONCE for
+ * the reminder and summary emails (lib/notification-scans.ts, the
+ * assignment_created hook) — the same predicate assignmentsForMember and
+ * listAssignmentProgress apply: everyone for 'all', the target rows for
+ * 'selected', and the completion cohort (countsTowardDeptAssignment) for a
+ * department. Selected targets who have since left the org are dropped;
+ * membership is required at launch and by RLS, so nothing addresses them.
+ */
+export async function assignmentAudienceUserIds(
+  assignment: Pick<
+    OrgAssignment,
+    "id" | "org_id" | "audience" | "department_id" | "due_at"
+  >
+): Promise<string[]> {
+  const admin = createAdminClient();
+  const ROSTER_PAGE = 1000;
+
+  if (assignment.audience === "selected") {
+    const { data: targets } = await admin
+      .from("org_assignment_targets")
+      .select("user_id")
+      .eq("assignment_id", assignment.id);
+    const ids = (targets ?? []).map((t) => t.user_id);
+    // `.in()` rides the URL: chunked like the readiness dashboard's member
+    // reads so a large selected audience cannot 414 into an empty list.
+    const IN_CHUNK = 200;
+    const members: string[] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const { data, error } = await admin
+        .from("org_members")
+        .select("user_id")
+        .eq("org_id", assignment.org_id)
+        .in("user_id", ids.slice(i, i + IN_CHUNK));
+      if (error) throw new Error(`assignment audience read failed: ${error.message}`);
+      members.push(...(data ?? []).map((m) => m.user_id));
+    }
+    return members;
+  }
+
+  // Paged like listAssignmentProgress: a plain row select is capped by
+  // PostgREST max_rows (1000).
+  const roster: Pick<
+    OrgMember,
+    "user_id" | "department_id" | "department_changed_at"
+  >[] = [];
+  for (let from = 0; ; from += ROSTER_PAGE) {
+    const { data: page } = await admin
+      .from("org_members")
+      .select("user_id, department_id, department_changed_at")
+      .eq("org_id", assignment.org_id)
+      .order("user_id")
+      .range(from, from + ROSTER_PAGE - 1);
+    roster.push(...((page ?? []) as typeof roster));
+    if (!page || page.length < ROSTER_PAGE) break;
+  }
+  if (assignment.audience === "all") return roster.map((m) => m.user_id);
+  return roster
+    .filter((m) => countsTowardDeptAssignment(m, assignment))
+    .map((m) => m.user_id);
+}
+
 export type AssignmentProgress = {
   assignment: OrgAssignment;
   targeted: number;

@@ -1,7 +1,9 @@
 "use server";
 
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyAdminContactMessage } from "@/lib/notifications";
 import { contactSchema } from "@/lib/validation";
 
 /**
@@ -13,8 +15,9 @@ import { contactSchema } from "@/lib/validation";
  * to anon or authenticated. There is no direct PostgREST path to the table —
  * this action is the only door.
  *
- * Nothing is emailed. The project has no mail provider, so /admin/messages is
- * where submissions are actually read.
+ * /admin/messages is where submissions are read and handled; every platform
+ * admin also gets the message by email the moment it lands (the outbox,
+ * lib/notifications.ts) because these come from prospects.
  */
 
 /**
@@ -74,20 +77,30 @@ export async function submitContact(
   // but a failure to resolve one must never block the message.
   const user = await getCurrentUser().catch(() => null);
 
-  const { error } = await createAdminClient().from("contact_messages").insert({
-    name: parsed.data.name,
-    email: parsed.data.email,
-    subject: parsed.data.subject,
-    body: parsed.data.body,
-    user_id: user?.id ?? null,
-  });
+  const admin = createAdminClient();
+  const { data: inserted, error } = await admin
+    .from("contact_messages")
+    .insert({
+      name: parsed.data.name,
+      email: parsed.data.email,
+      subject: parsed.data.subject,
+      body: parsed.data.body,
+      user_id: user?.id ?? null,
+    })
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
+  if (error || !inserted) {
     return {
       error: "Could not send your message. Please try again in a moment.",
       values,
     };
   }
+
+  // After the row exists and off the visitor's round-trip: after() runs the
+  // enqueue once the confirmation has been sent. It cannot fail the action
+  // either way (enqueueEmails swallows), so this is only about latency.
+  after(() => notifyAdminContactMessage(admin, { id: inserted.id, ...parsed.data }));
 
   // No revalidatePath: /admin/messages is a different, admin-only route and
   // nothing on this page reflects the write.

@@ -154,6 +154,33 @@ translate-question` + `supabase secrets set OPENAI_API_KEY=…` (locally
 sends `SUPABASE_SECRET_KEY`, which must be an `sb_secret_…` key — the
 function's secret mode rejects the legacy service_role JWT.
 
+### Email notifications
+
+Nothing sends mail directly. An event writes an `email_outbox` row (via
+`enqueueEmail` in `lib/email.ts`) with a **dedupe key naming the event**; the
+row is delivered right after the response (`after()`), and
+`POST /api/cron/email` every five minutes is the safety net for failed sends,
+the daily scans' bulk rows (`lib/notification-scans.ts`: expiry, assignment
+due/overdue/closed, weekly digest, admin digest and alerts) and crashed runs. The template registry, copy, category map and key shapes are
+pure in `lib/email-core.ts` and vitest renders every template. Transactional
+templates (receipts, refunds, invites, removals, role changes, certificates)
+ignore `notification_preferences`; the rest honour the toggle and carry an
+unsubscribe link. Event hooks live where the event commits — the grant branch
+of `grantPlanPurchase`, the webhook refund handlers, `resolveOpenReports`,
+`mintCertificate`, the org member/assignment actions — and always AFTER the
+write, since `enqueueEmail` never throws and a mail must never fail its
+action. Emails never contain correctness, explanations or locked document
+titles. `EMAIL_TRANSPORT=log` (default) prints instead of sending; `resend`
+needs `RESEND_API_KEY` + `EMAIL_FROM`. The worker refuses unconfirmed
+addresses (`user_emails.confirmed`). `/admin/emails` (`lib/admin/emails.ts`)
+monitors the outbox and test-sends any template from `lib/email-samples.ts`,
+which vitest also renders — a new template needs a sample there or both
+break. Two Server Actions are deliberately session-less, as exceptions to
+the "requireUser first" rule: the contact form (`submitContact`) and the
+unsubscribe confirm (`app/unsubscribe/[token]/actions.ts`), where the
+unguessable token is the credential and its only power is to switch one
+optional category off.
+
 ### Timing
 
 `tests.expires_at` is set server-side at creation; the client countdown only

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import { notifyAdminRoleChanged } from "@/lib/notifications";
 import { syncRoleFromSubscriptions } from "@/lib/subscriptions";
 import {
   subscriptionSchema,
@@ -72,6 +73,15 @@ export async function updateUserRole(
     before: target.role,
     after: role.data,
   });
+  // Only when admin access itself changed hands — student↔trial is routine.
+  if (target.role === "admin" || role.data === "admin") {
+    await notifyAdminRoleChanged(admin, {
+      actorId: actor.id,
+      targetId: id.data,
+      before: target.role,
+      after: role.data,
+    });
+  }
   revalidateUser(id.data);
   return { success: "Role updated." };
 }

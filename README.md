@@ -67,8 +67,20 @@ examinations. Next.js 16 (App Router) + Supabase + Tailwind v4 + shadcn/ui.
   and a `pg_cron` reconciliation sweep at `/api/cron/reconcile`. Gaps are
   tracked in [payments-backlog.md](payments-backlog.md).
 
-**Not built yet:** admin analytics, receipts and transactional email, an admin
-payments view, Sentry, CI, Playwright.
+- **Email notifications** — receipts, refunds, access-expiry reminders,
+  org invites/membership changes, assignment reminders and summaries,
+  certificates, question-report outcomes and an opt-in weekly digest, all
+  queued in `email_outbox`, sent immediately after the response, with
+  `/api/cron/email` every five minutes as the retry net (Resend, or a log
+  transport locally). Optional categories have per-user toggles on
+  `/profile` and one-click unsubscribe links. Platform admins get contact
+  messages immediately, a daily queue digest, import results, OpenAI
+  failure alerts and admin-role changes; `/admin/emails` monitors the outbox
+  and previews or test-sends any template. See
+  [notifications-plan.md](notifications-plan.md).
+
+**Not built yet:** admin analytics, an admin payments view, reconcile-sweep
+alert emails, Sentry, CI, Playwright.
 
 ## Getting started
 

@@ -151,7 +151,20 @@ export type AuditAction =
   | "translation.regenerate"
   | "translation.delete"
   | "translation.language_enable"
-  | "translation.language_disable";
+  | "translation.language_disable"
+  // Email outbox (lib/email.ts, lib/notification-scans.ts). email.scan is
+  // written every daily run like payment.reconcile — the heartbeat that
+  // shows the cron is alive; email.deliver only for SCHEDULED runs that had
+  // rows to work (immediate per-event sends write nothing, or the log would
+  // carry one row per email).
+  | "email.deliver"
+  | "email.scan"
+  // /admin/emails: an admin re-queued a parked row, ran a job by hand, or
+  // sent themselves a sample. One row each — these are the only writes an
+  // admin can make to the outbox.
+  | "email.retry"
+  | "email.run"
+  | "email.test";
 
 /**
  * Append an admin action to `audit_logs`.

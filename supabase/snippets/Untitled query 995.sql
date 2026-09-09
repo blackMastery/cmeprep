@@ -1,0 +1,1 @@
+select vault.create_secret('http://localhost:3000/api/cron/email', 'email_url');

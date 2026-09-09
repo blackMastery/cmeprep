@@ -7,6 +7,7 @@ import { getOrgMembership } from "@/lib/orgs";
 import { inviteAcceptBlocker, maskEmail } from "@/lib/orgs-core";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import { notifyOrgMemberJoined } from "@/lib/notifications";
 import { uuid } from "@/lib/validation";
 import type { OrgInvite } from "@/lib/supabase/types";
 import type { OrgActionState } from "@/app/org/members/actions";
@@ -118,6 +119,13 @@ export async function acceptInvite(
     { inviteId: invite.id, role: invite.role, departmentId: grantedDepartmentId },
     invite.org_id
   );
+  // Before the redirect below — it signals by throwing.
+  await notifyOrgMemberJoined(admin, {
+    orgId: invite.org_id,
+    inviteId: invite.id,
+    memberId: user.id,
+    role: invite.role,
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/org/members");

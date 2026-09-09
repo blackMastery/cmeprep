@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setCredentialName } from "@/lib/certificates";
+import { NOTIFICATION_CATEGORIES } from "@/lib/email-core";
 import { isLanguageCode, languageByCode } from "@/lib/translation-core";
 import { isLanguageEnabled } from "@/lib/translations";
 import {
@@ -140,4 +141,42 @@ export async function requestLanguage(
     return { ok: false, error: "Could not send the request. Try again." };
   }
   return { ok: true };
+}
+
+/**
+ * The optional email categories (notifications-plan.md). Only the toggles
+ * the form actually SHOWED are written: the org-admin ones are hidden from
+ * everyone else, and a hidden checkbox posts nothing, which must not read as
+ * "switched off" — a member promoted to admin later would find them dark.
+ * Transactional mail has no toggle and is not represented here at all.
+ */
+export async function updateNotificationPreferences(
+  _prev: ProfileState,
+  formData: FormData
+): Promise<ProfileState> {
+  const user = await requireUser();
+
+  const patch: Record<string, boolean> = {};
+  for (const category of NOTIFICATION_CATEGORIES) {
+    if (!formData.has(`shown_${category}`)) continue;
+    patch[category] = formData.get(category) === "on";
+  }
+  if (Object.keys(patch).length === 0) return { error: "Nothing to save." };
+
+  // Admin client after requireUser (the requestLanguage precedent): the row
+  // is created lazily with its unsubscribe token, which a plain RLS upsert
+  // could not be granted without also exposing every column to writes.
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("notification_preferences")
+    .upsert(
+      { user_id: user.id, ...patch, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+  if (error) {
+    return { error: "Could not save your email settings. Try again." };
+  }
+
+  revalidatePath("/profile");
+  return { success: "Email settings saved." };
 }

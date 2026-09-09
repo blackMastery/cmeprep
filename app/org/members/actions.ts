@@ -9,6 +9,11 @@ import {
 } from "@/lib/orgs-core";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
+import {
+  notifyOrgInvites,
+  notifyOrgMemberRemoved,
+  notifyOrgRoleChanged,
+} from "@/lib/notifications";
 import { absoluteUrl } from "@/lib/site";
 import {
   orgMemberRoleSchema,
@@ -81,13 +86,17 @@ export async function inviteMembers(
   // (skip), expired invite (renew in place — the partial unique index means
   // the row must be UPDATED, not re-inserted), otherwise brand new.
   const [{ data: emailOwners }, invites] = await Promise.all([
-    admin.from("user_emails").select("id, email").in("email", emails),
+    admin.from("user_emails").select("id, email, confirmed").in("email", emails),
     listOrgInvites(session.org.id),
   ]);
 
+  // CONFIRMED accounts only. An unconfirmed auth user is what an earlier
+  // inviteUserByEmail left behind when the invitee never acted: GoTrue
+  // re-sends its invite for those, while the outbox worker would refuse the
+  // address — so they must take the auth-mail path below, not this map.
   const ownerByEmail = new Map(
     (emailOwners ?? [])
-      .filter((r) => r.email !== null)
+      .filter((r) => r.email !== null && r.confirmed)
       .map((r) => [r.email!.toLowerCase(), r.id])
   );
 
@@ -179,9 +188,13 @@ export async function inviteMembers(
     inserted.push(...((data ?? []) as OrgInvite[]));
   }
 
+  // The rows the renewal ACTUALLY changed, read back: an invite accepted or
+  // revoked between the list read and this write matches zero rows, and the
+  // outbox mail below must not advertise a renewal that did not happen.
+  const renewed: OrgInvite[] = [];
   for (const invite of toRenew) {
     // Renewal re-stamps role AND department — the new batch's intent wins.
-    await admin
+    const { data } = await admin
       .from("org_invites")
       .update({
         role: role.data,
@@ -191,7 +204,10 @@ export async function inviteMembers(
       })
       .eq("id", invite.id)
       .is("accepted_at", null)
-      .is("revoked_at", null);
+      .is("revoked_at", null)
+      .select("*")
+      .maybeSingle();
+    if (data) renewed.push(data as OrgInvite);
   }
 
   for (const invite of toUpdate) {
@@ -231,27 +247,37 @@ export async function inviteMembers(
   }
 
   // Brand-new addresses get the Supabase auth invite email (account +
-  // delivery in one step). Existing accounts get no email in v1 — the
-  // dashboard banner surfaces the invite on their next visit. Delivery
-  // failures are non-fatal: the invite row exists and its link still works.
+  // delivery in one step). Existing accounts get an outbox email pointing at
+  // the accept page — the dashboard banner alone only reaches people who
+  // happen to log in. Delivery failures are non-fatal either way: the invite
+  // row exists and its link still works.
   let emailed = 0;
-  for (const invite of [...inserted, ...toRenew]) {
+  for (const invite of [...inserted, ...renewed]) {
     if (ownerByEmail.has(invite.email.toLowerCase())) continue;
     const { error } = await admin.auth.admin.inviteUserByEmail(invite.email, {
       redirectTo: INVITE_REDIRECT(),
     });
     if (!error) emailed++;
   }
+  // The renewed rows as the database now has them; their new expiry keys
+  // the mail so a renewal sends again. Live invites merely corrected in
+  // place (toUpdate) were already delivered.
+  await notifyOrgInvites(admin, {
+    orgId: session.org.id,
+    inviterId: session.user.id,
+    invites: [...inserted, ...renewed],
+    ownerByEmail,
+  });
 
   await audit(
     session.user.id,
     "org.invite",
     null,
     {
-      emails: [...toInsert, ...toRenew.map((i) => i.email)],
+      emails: [...toInsert, ...renewed.map((i) => i.email)],
       role: role.data,
       departmentId,
-      renewed: toRenew.length,
+      renewed: renewed.length,
       updated: toUpdate.length,
       emailed,
       skipped,
@@ -260,7 +286,7 @@ export async function inviteMembers(
   );
 
   revalidateMembers();
-  const total = inserted.length + toRenew.length;
+  const total = inserted.length + renewed.length;
   const parts = [
     total > 0 ? `Invited ${total} ${total === 1 ? "person" : "people"}.` : null,
     toUpdate.length > 0
@@ -334,23 +360,36 @@ export async function resendInvite(
     }
   }
 
-  const { error } = await admin
+  const { data: renewedRow, error } = await admin
     .from("org_invites")
     .update({ expires_at: inviteExpiresAt(now).toISOString() })
-    .eq("id", invite.id);
-  if (error) return { error: "Could not renew the invite." };
+    .eq("id", invite.id)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .select("*")
+    .maybeSingle();
+  if (error || !renewedRow) return { error: "Could not renew the invite." };
+  const renewed = renewedRow as OrgInvite;
 
-  // Re-send only reaches addresses with no account yet; inviteUserByEmail
-  // errors for existing users, which is fine — the dashboard banner covers
-  // them.
+  // No CONFIRMED account → the auth invite (GoTrue re-sends it for an
+  // unconfirmed user too, which is exactly the "never acted on the first
+  // one" case); a confirmed account → the outbox invite, keyed on the fresh
+  // expiry so a resend actually sends.
   const { data: owner } = await admin
     .from("user_emails")
-    .select("id")
+    .select("id, confirmed")
     .eq("email", invite.email)
     .maybeSingle();
-  if (!owner) {
+  if (!owner?.confirmed) {
     await admin.auth.admin.inviteUserByEmail(invite.email, {
       redirectTo: INVITE_REDIRECT(),
+    });
+  } else {
+    await notifyOrgInvites(admin, {
+      orgId: session.org.id,
+      inviterId: session.user.id,
+      invites: [renewed],
+      ownerByEmail: new Map([[invite.email.toLowerCase(), owner.id]]),
     });
   }
 
@@ -409,6 +448,11 @@ export async function removeMember(
     { role: data.role },
     session.org.id
   );
+  await notifyOrgMemberRemoved(admin, {
+    orgId: session.org.id,
+    userId: id.data,
+    removedById: session.user.id,
+  });
   revalidateMembers();
   return { success: "Member removed. Their personal account is untouched." };
 }
@@ -457,6 +501,11 @@ export async function setMemberRole(
     { before, after: role.data },
     session.org.id
   );
+  await notifyOrgRoleChanged(admin, {
+    orgId: session.org.id,
+    userId: id.data,
+    role: role.data,
+  });
   revalidateMembers();
   return { success: "Role updated." };
 }

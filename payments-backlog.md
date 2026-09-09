@@ -56,13 +56,11 @@ The sweep and the payment record now produce good data. Nothing reads it.
 
 ## 2. What the buyer never receives
 
-- [ ] **Receipts.** No purchase confirmation, no invoice, no downloadable
-  receipt. There is no mail infrastructure at all beyond Supabase auth mail —
-  see the note at the top of `20260803000001_contact_messages.sql`. Buyers get
-  PayPal's own receipt and nothing from us, which also blocks anyone expensing
-  this to a CME budget.
-  **Done when:** a completed purchase sends a receipt carrying the plan, exam,
-  amount and access-until date.
+- [x] **Receipts.** Done in notifications-plan.md phase 1: a completed
+  purchase queues a `purchase_receipt` (or `org_purchase_receipt`) from the
+  grant branch in `lib/subscriptions.ts`, so the capture route, the webhook
+  and the reconcile repair all produce exactly one, carrying plan, exam,
+  amount and access-until date. Refunds, denials and chargebacks mail too.
 
 - [ ] **Purchase history.** `components/profile/subscription-card.tsx` shows
   active access per exam only. The `payments_select_own` policy and its column
@@ -72,10 +70,10 @@ The sweep and the payment record now produce good data. Nothing reads it.
   **Done when:** a buyer can see every payment they have made, with dates and
   amounts, and prove they paid without emailing support.
 
-- [ ] **Expiry emails.** `components/subscriptions/expiry-banners.tsx` warns
-  in-app only, so a student who stops logging in just lapses. Cheapest revenue
-  recovery available.
-  **Done when:** access nearing its end triggers a reminder with a renew link.
+- [x] **Expiry emails.** Done in notifications-plan.md phase 2: the daily
+  scan in `lib/notification-scans.ts` runs the same `expiryWarnings` the
+  banner uses and queues a 7-day and a 1-day reminder with the same renew
+  link (`renewHref` in `lib/plans-core.ts`).
 
 - [ ] **Pending captures.** eCheck and review-held payments come back
   non-`COMPLETED`; the capture route returns `capture_failed` and nothing

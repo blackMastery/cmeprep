@@ -11,6 +11,7 @@ import {
   Mail,
   MessagesSquare,
   Receipt,
+  Send,
   Star,
   Stethoscope,
   Users,
@@ -35,6 +36,7 @@ const ADMIN_NAV_ITEMS: readonly SideNavItem[] = [
   { href: "/admin/payments", label: "Payments", icon: Receipt },
   { href: "/admin/messages", label: "Messages", icon: Mail },
   { href: "/admin/reviews", label: "Reviews", icon: Star },
+  { href: "/admin/emails", label: "Emails", icon: Send },
 ];
 
 /**

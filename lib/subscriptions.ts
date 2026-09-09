@@ -5,6 +5,11 @@ import { audit } from "@/lib/admin/audit";
 import { CURRENCY } from "@/lib/paypal";
 import { checkCaptureAmount } from "@/lib/payments-core";
 import { recordCapture, recordPaymentGrant } from "@/lib/payments";
+import { deferNotify } from "@/lib/email";
+import {
+  notifyOrgPurchaseReceipt,
+  notifyPurchaseReceipt,
+} from "@/lib/notifications";
 import { computePeriodEnd, stackBase } from "@/lib/subscriptions-core";
 import type { PaymentSource, Plan, Profile } from "@/lib/supabase/types";
 
@@ -241,6 +246,22 @@ export async function grantPlanPurchase(
 
   await syncRoleFromSubscriptions(admin, userId, userId);
 
+  // The receipt is queued HERE rather than in the capture route because this
+  // branch is the one point the capture route, the webhook and the reconcile
+  // repair all pass through — a browser that died mid-checkout still gets
+  // its receipt. After the grant, never before: the receipt promises access.
+  // Deferred off the response — the buyer is waiting on the capture route.
+  await deferNotify(() =>
+    notifyPurchaseReceipt(admin, {
+      userId,
+      paypalOrderId,
+      planId: plan.id,
+      planName: plan.name,
+      examId,
+      periodEnd,
+    })
+  );
+
   return {
     outcome: "granted",
     subscriptionId: data.id,
@@ -428,6 +449,19 @@ export async function grantOrgPlanPurchase(
       ...input.meta,
     },
     orgId
+  );
+
+  // Same placement rule as the personal receipt above.
+  await deferNotify(() =>
+    notifyOrgPurchaseReceipt(admin, {
+      orgId,
+      buyerId,
+      paypalOrderId,
+      planId: plan.id,
+      planName: plan.name,
+      examId,
+      periodEnd,
+    })
   );
 
   return {

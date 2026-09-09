@@ -1065,6 +1065,52 @@ export type TutorAnswerFeedback = {
 export type UserEmail = {
   id: string;
   email: string | null;
+  /** auth.users.email_confirmed_at is not null. The email worker refuses to
+   * mail an unconfirmed address (20260909000001). */
+  confirmed: boolean;
+};
+
+// ── Email notifications (migration 20260909000001) ─────────────
+
+export type EmailOutboxStatus = "queued" | "sent" | "failed" | "skipped";
+
+/** One queued email. `template` is a lib/email-core.ts EmailTemplate and
+ * `payload` its EmailPayloads entry — typed loosely here because the row is
+ * only ever read back by the worker, which validates the template name. */
+export type EmailOutbox = {
+  id: string;
+  user_id: string;
+  template: string;
+  payload: Record<string, unknown>;
+  /** Idempotency key; shapes are the dedupeKey builders in lib/email-core.ts. */
+  dedupe_key: string;
+  status: EmailOutboxStatus;
+  attempts: number;
+  last_error: string | null;
+  skip_reason: string | null;
+  provider_id: string | null;
+  scheduled_for: string;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+/** Per-user opt-outs for the OPTIONAL email categories. Absent row = these
+ * defaults (DEFAULT_PREFERENCES in lib/email-core.ts states them once). */
+export type NotificationPreferences = {
+  user_id: string;
+  expiry_reminders: boolean;
+  assignment_reminders: boolean;
+  report_updates: boolean;
+  weekly_digest: boolean;
+  org_admin_events: boolean;
+  org_assignment_summary: boolean;
+  /** Platform admins only (20260909000002); meaningless on other rows. */
+  admin_operations: boolean;
+  /** One-click unsubscribe credential; only ever turns a category off. */
+  unsubscribe_token: string;
+  created_at: string;
+  updated_at: string | null;
 };
 
 // ── On-demand translation (migration 20260902000001) ───────────
@@ -1180,6 +1226,8 @@ export type Database = {
       analytics_question_stats: Table<AnalyticsQuestionStat>;
       reconcile_runs: Table<ReconcileRun>;
       analytics_state: Table<AnalyticsState>;
+      email_outbox: Table<EmailOutbox>;
+      notification_preferences: Table<NotificationPreferences>;
     };
     Views: {
       question_options_public: View<QuestionOptionPublic>;

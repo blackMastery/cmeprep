@@ -35,25 +35,7 @@ export async function listActiveOrgPlans(): Promise<Plan[]> {
   return (data ?? []) as Plan[];
 }
 
-/** Paid = costs money; the free tier renders but is never a grant preset. */
-export function paidPlans(plans: Plan[]): Plan[] {
-  return plans.filter((p) => p.price_cents > 0);
-}
-
-/**
- * Where a locked exam's "Get access" link points: the featured paid plan,
- * else the cheapest. Checkout then offers a "Change plan" link back to
- * /#pricing, so the loop closes without a separate plan-picker route.
- *
- * Lives here rather than in a page because both /tests/new and /resources
- * put the same CTA on a locked exam and must point at the same plan.
- */
-export function upsellPlan(plans: Plan[]): Plan | null {
-  const buyable = paidPlans(plans).filter((p) => p.duration_months !== null);
-  return (
-    [...buyable].sort(
-      (a, b) =>
-        Number(b.featured) - Number(a.featured) || a.price_cents - b.price_cents
-    )[0] ?? null
-  );
-}
+// The pure picking rules live in lib/plans-core.ts so the expiry email and
+// the expiry banner share one renew link; re-exported here for the pages that
+// already import them from this module.
+export { paidPlans, renewHref, renewPlan, upsellPlan } from "@/lib/plans-core";

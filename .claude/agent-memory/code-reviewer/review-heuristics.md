@@ -197,3 +197,87 @@ looking?" signal keyed on the popup's `open` alone is wrong on the full page.
 Also, moving an in-flight fetch from a page component into a layout provider
 silently drops the page's unmount-abort — check whether the old abort's
 rationale (billing) still holds for the provider's own unmount.
+
+---
+
+Added from the email-notifications review (2026-09-09).
+
+**supabase-js bulk insert/upsert with heterogeneous keys NULLs the missing
+columns.** postgrest-js builds `?columns=` from the UNION of every object's
+keys and, with the default `defaultToNull: true`, omits `Prefer: missing=default`
+— so a row lacking a key gets NULL, not the column default. Any helper that
+spreads an optional field (`...(x ? { col: x } : {})`) into a chunked array
+will violate `not null` for the whole chunk the first time one element sets
+it. Verified in node_modules/@supabase/postgrest-js/dist/index.mjs.
+**How to apply:** in any `.insert([...])`/`.upsert([...])` over a mapped array,
+check every object has the same keys, or demand `defaultToNull: false`.
+
+**`daysUntil` (subscriptions-core) is `Math.ceil` over a timestamp**, and
+period ends carry the purchase time-of-day (`computePeriodEnd` preserves it).
+So `daysLeft === 1` means "0–24h left"; at the 08:00 Guyana daily scan that is
+the day OF expiry for any purchase made after 08:00 local. The in-app banner
+says "N days left" and is fine; any copy that translates daysLeft into
+"tomorrow"/"today" must use civil-day arithmetic (`guyanaDay` + `dayDiff` in
+orgs-core), not `daysUntil`.
+
+**`handleCaptureRefunded` replay does NOT retry the revoke.** `recordRefund`
+returns null on a redelivery and the handler returns before
+`revokeSubscriptionForOrder`, despite the older comment claiming the
+revocation retries. Anything placed AFTER the revoke (audit rows already are
+before; the new refund email is after) is lost for good if the revoke throws
+once. Pre-existing; flagged 2026-09-09.
+
+**Norms verified OK here (don't re-flag):**
+- 20260718000004 `grant select ... on all tables in schema public to
+  service_role` covers views created BEFORE it (user_daily_activity,
+  user_stats); views created later grant service_role explicitly
+  (subject_accuracy does). `lib/admin/users.ts` already reads
+  user_daily_activity through the admin client.
+- `CREATE OR REPLACE VIEW` appending a column at the END with the same
+  `with (security_invoker = …)` option is valid; the user_emails `confirmed`
+  column follows this.
+- The cron block (`do $$ … perform cron.schedule(name, expr, $job$…$job$)`
+  with `net.http_post(url := …, headers := …, body := …)` guarded by
+  `where exists (vault…)`) is byte-for-byte the reconcile precedent; the
+  shared bearer is Vault `reconcile_cron_secret` = env `CRON_SECRET`.
+- Radix Checkbox (`radix-ui` package) renders a hidden `<input type=checkbox
+  name value="on">` when inside a form, so `formData.get(name) === "on"`
+  works; the `shown_<key>` hidden-marker pattern in notifications-card is
+  how "hidden toggle ≠ switched off" is handled.
+- The `questions → subjects → specialties → exams` embed has exactly one FK
+  per hop (topic_id was dropped in 20260730000001), so no `!fkey` hint needed.
+- `question_reports` are never reopened (no `resolved_at: null` write), so a
+  dedupe key anchored on the lowest report id is stable.
+
+---
+
+Added from the platform-admin email review (2026-09-09).
+
+**Page-level `maxDuration` governs that page's Server Actions.** Precedent and
+rationale: app/admin/translations/page.tsx (`export const maxDuration = 60`
+because the platform default "would kill it mid-call"). Any admin page whose
+action runs a budgeted worker (`deliverOutbox`/`runNotificationScan` budget
+against `EMAIL_BUDGET_MS` = 45s, sized for the cron route's 60s) needs the
+same export or the action is cut off mid-loop — for the outbox that reopens
+the exact claim-then-resend duplicate path the budget guard exists to close.
+**How to apply:** when a page's action calls anything that takes `budgetMs`,
+check the page file for `maxDuration`.
+
+**PostgREST returns 416/PGRST103 when `count: "exact"` is requested and the
+range offset exceeds the total** (`rangeStatus`: `lower > total → 416`).
+supabase-js surfaces it as `error`, so a pager that throws on `error`
+(lib/admin/emails.ts listOutbox) 500s on `?page=<beyond last>`. The house
+pagers (bookmarks, orgs roster) ignore `error` and render empty instead; the
+id tiebreak rule from lib/site-reviews.ts still applies (`created_at` is
+shared by every row of one fan-out upsert).
+
+**`deliverOutbox` applies the recipient's own preferences at send time to
+EVERY row, including admin "send me a test" rows** — `weekly_digest` defaults
+OFF, so a test of it is skipped with `preference` unless the admin opted in.
+Recipient lists (`platformAdminRecipients`) are a snapshot at enqueue; the
+worker never re-checks role, so a row queued/retried for an ex-admin still
+delivers. Flag any new "send to self" or role-scoped template against both.
+
+**Contact form (`submitContact`) has a honeypot and zod only — no rate
+limit.** Any hook that turns a row into outbound mail there is an
+amplification vector.

@@ -10,6 +10,7 @@ import {
   parseCertificateCode,
 } from "@/lib/certificates-core";
 import { getCourseTree } from "@/lib/courses";
+import { notifyCertificateIssued } from "@/lib/notifications";
 import type { SessionUser } from "@/lib/auth";
 import type { CourseCertificate } from "@/lib/supabase/types";
 
@@ -85,7 +86,12 @@ export async function mintCertificate(
       .select("*")
       .single();
 
-    if (!error) return data;
+    if (!error) {
+      // Only the row THIS call inserted: a concurrent winner's row comes back
+      // through getCertificateForCourse below and is never re-announced.
+      await notifyCertificateIssued(admin, { certificate: data, credentialName });
+      return data;
+    }
     if (error.code !== "23505") return null;
 
     // Code collision — mint a new one. Any other unique violation is the
