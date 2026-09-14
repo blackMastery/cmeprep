@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, UsersRound } from "lucide-react";
-import type { AdminUserRow } from "@/lib/admin/users";
+import type { AdminUserRow, UserSortKey } from "@/lib/admin/users";
+import { cn } from "@/lib/utils";
 import type { Subscription } from "@/lib/supabase/types";
 import { ROLE_LABEL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +88,56 @@ function ViewLink({ row }: { row: AdminUserRow }) {
   );
 }
 
-export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
+function SortableHead({
+  label,
+  sortKey,
+  sort,
+  desc,
+  sortHref,
+  className,
+}: {
+  label: string;
+  sortKey: UserSortKey;
+  sort: UserSortKey;
+  desc: boolean;
+  sortHref: (key: UserSortKey) => string;
+  className?: string;
+}) {
+  const active = sort === sortKey;
+  return (
+    <TableHead className={className}>
+      <Link
+        href={sortHref(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 hover:underline",
+          active && "text-foreground"
+        )}
+        aria-sort={
+          active ? (desc ? "descending" : "ascending") : undefined
+        }
+      >
+        {label}
+        {active && (
+          <span className="text-xs" aria-hidden="true">
+            {desc ? "↓" : "↑"}
+          </span>
+        )}
+      </Link>
+    </TableHead>
+  );
+}
+
+export function UsersTable({
+  rows,
+  sort,
+  desc,
+  sortHref,
+}: {
+  rows: AdminUserRow[];
+  sort: UserSortKey;
+  desc: boolean;
+  sortHref: (key: UserSortKey) => string;
+}) {
   if (rows.length === 0) {
     return (
       <Card className="[--card-spacing:--spacing(5)]">
@@ -138,13 +188,57 @@ export function UsersTable({ rows }: { rows: AdminUserRow[] }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead className="text-right">Questions</TableHead>
-                <TableHead className="text-right">Tests</TableHead>
-                <TableHead>Joined</TableHead>
+                <SortableHead
+                  label="Name"
+                  sortKey="name"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                />
+                <SortableHead
+                  label="Email"
+                  sortKey="email"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                />
+                <SortableHead
+                  label="Role"
+                  sortKey="role"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                />
+                <SortableHead
+                  label="Plan"
+                  sortKey="plan"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                />
+                <SortableHead
+                  label="Questions"
+                  sortKey="questions"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                  className="text-right"
+                />
+                <SortableHead
+                  label="Tests"
+                  sortKey="tests"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                  className="text-right"
+                />
+                <SortableHead
+                  label="Joined"
+                  sortKey="joined"
+                  sort={sort}
+                  desc={desc}
+                  sortHref={sortHref}
+                />
                 <TableHead className="text-right">
                   <span className="sr-only">Actions</span>
                 </TableHead>

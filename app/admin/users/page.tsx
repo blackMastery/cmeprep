@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { listUsers, USERS_PAGE_SIZE } from "@/lib/admin/users";
+import {
+  listUsers,
+  USER_SORTS,
+  USERS_PAGE_SIZE,
+  type UserSortKey,
+} from "@/lib/admin/users";
 import { ROLE_LABEL } from "@/lib/format";
 import { USER_ROLES } from "@/lib/validation";
 import type { UserRole } from "@/lib/supabase/types";
@@ -28,11 +33,55 @@ export default async function AdminUsersPage(props: PageProps<"/admin/users">) {
     ? (rawRole as UserRole)
     : undefined;
 
+  const sort: UserSortKey = USER_SORTS.includes(one(sp.sort) as UserSortKey)
+    ? (one(sp.sort) as UserSortKey)
+    : "joined";
+  const desc =
+    sort === "joined" ? one(sp.dir) !== "asc" : one(sp.dir) === "desc";
+
   const result = await listUsers({
     search: one(sp.q),
     role,
     page: Number(one(sp.page) ?? 1) || 1,
+    sort,
+    dir: desc ? "desc" : "asc",
   });
+
+  /** Rebuild the query string with one key changed, dropping defaults. */
+  const href = (over: Partial<Record<string, string | undefined>>) => {
+    const params = new URLSearchParams();
+    const merged: Record<string, string | undefined> = {
+      q: one(sp.q),
+      role,
+      sort: sort === "joined" ? undefined : sort,
+      dir:
+        sort === "joined"
+          ? desc
+            ? undefined
+            : "asc"
+          : desc
+            ? "desc"
+            : undefined,
+      ...over,
+    };
+    for (const [k, v] of Object.entries(merged)) {
+      if (v !== undefined && v !== "") params.set(k, v);
+    }
+    const qs = params.toString();
+    return qs === "" ? "/admin/users" : `/admin/users?${qs}`;
+  };
+
+  /** Header link: click to sort; click again to flip direction. */
+  const sortHref = (key: UserSortKey) => {
+    const resetPage = { page: undefined as string | undefined };
+    if (sort === key) {
+      if (sort === "joined") {
+        return href({ ...resetPage, sort: key, dir: desc ? "asc" : undefined });
+      }
+      return href({ ...resetPage, sort: key, dir: desc ? undefined : "desc" });
+    }
+    return href({ ...resetPage, sort: key, dir: undefined });
+  };
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
@@ -80,6 +129,11 @@ export default async function AdminUsersPage(props: PageProps<"/admin/users">) {
           ))}
         </select>
 
+        {sort !== "joined" && <input type="hidden" name="sort" value={sort} />}
+        {sort === "joined"
+          ? !desc && <input type="hidden" name="dir" value="asc" />
+          : desc && <input type="hidden" name="dir" value="desc" />}
+
         <Button type="submit" size="sm">
           Filter
         </Button>
@@ -88,7 +142,7 @@ export default async function AdminUsersPage(props: PageProps<"/admin/users">) {
         </Button>
       </form>
 
-      <UsersTable rows={result.rows} />
+      <UsersTable rows={result.rows} sort={sort} desc={desc} sortHref={sortHref} />
 
       {result.total > 0 && (
         <Pager
