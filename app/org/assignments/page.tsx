@@ -1,71 +1,29 @@
 import type { Metadata } from "next";
 import {
   listAssignmentProgress,
-  listOrgDepartments,
-  listOrgMembers,
-  listOrgSubscriptions,
   requireOrgAdmin,
 } from "@/lib/orgs";
 import { listExamCatalogTree } from "@/lib/catalog";
-import { orgAccessOf } from "@/lib/entitlements-core";
+import { loadAssignmentFormOptions } from "@/lib/org-assignment-options";
 import {
   AssignmentsManager,
-  type AssignmentExamOption,
   type AssignmentRow,
-  type MemberOption,
 } from "@/components/org/assignments-manager";
+import { FlashToast } from "@/components/flash-toast";
 
 export const metadata: Metadata = { title: "Assignments" };
 
-export default async function OrgAssignmentsPage() {
+export default async function OrgAssignmentsPage(
+  props: PageProps<"/org/assignments">
+) {
   const session = await requireOrgAdmin();
+  const sp = await props.searchParams;
 
-  // RLS narrows the catalogue to public + own bank; the entitlement filter
-  // below narrows further to what the org's per-exam plan actually covers —
-  // offering an unentitled exam would only fail at the action.
-  const [tree, members, progress, orgSubs, departments] = await Promise.all([
+  const [options, tree, progress] = await Promise.all([
+    loadAssignmentFormOptions(session),
     listExamCatalogTree(),
-    listOrgMembers(session.org.id),
     listAssignmentProgress(session.org.id),
-    listOrgSubscriptions(session.org.id),
-    listOrgDepartments(session.org.id),
   ]);
-  const orgAccess = orgAccessOf(
-    {
-      org_id: session.org.id,
-      suspended_at: session.org.suspended_at,
-      subs: orgSubs,
-    },
-    new Date()
-  );
-
-  const exams: AssignmentExamOption[] = tree
-    .filter(
-      (exam) =>
-        exam.orgId !== null ||
-        (orgAccess !== null &&
-          (orgAccess.allAccess || orgAccess.examIds.includes(exam.id)))
-    )
-    .map((exam) => ({
-      id: exam.id,
-      name: exam.name,
-      isPrivate: exam.orgId !== null,
-      subjects: exam.specialties.flatMap((sp) =>
-        sp.subjects
-          .filter((s) => s.questionCount > 0)
-          .map((s) => ({
-            id: s.id,
-            name: `${sp.name} · ${s.name}`,
-            questionCount: s.questionCount,
-          }))
-      ),
-    }))
-    .filter((exam) => exam.subjects.length > 0);
-
-  const memberOptions: MemberOption[] = members.map((row) => ({
-    userId: row.member.user_id,
-    label: row.profile?.full_name ?? row.email ?? row.member.user_id,
-  }));
 
   // Names for the locked-config summary come from the full tree, not the
   // entitlement-filtered `exams`: a lapsed plan must not turn a locked
@@ -73,8 +31,8 @@ export default async function OrgAssignmentsPage() {
   const examName = new Map(tree.map((exam) => [exam.id, exam.name]));
   const subjectName = new Map(
     tree.flatMap((exam) =>
-      exam.specialties.flatMap((sp) =>
-        sp.subjects.map((s) => [s.id, `${sp.name} · ${s.name}`] as const)
+      exam.specialties.flatMap((sp2) =>
+        sp2.subjects.map((s) => [s.id, `${sp2.name} · ${s.name}`] as const)
       )
     )
   );
@@ -121,11 +79,18 @@ export default async function OrgAssignmentsPage() {
   );
 
   return (
-    <AssignmentsManager
-      exams={exams}
-      members={memberOptions}
-      departments={departments.map((d) => ({ id: d.id, name: d.name }))}
-      rows={rows}
-    />
+    <>
+      {/* The create page redirects here on success; this is where the
+          confirmation surfaces, matching the toast an edit already gets. */}
+      {sp.created !== undefined && (
+        <FlashToast message="Assignment created." />
+      )}
+      <AssignmentsManager
+        exams={options.exams}
+        members={options.members}
+        departments={options.departments}
+        rows={rows}
+      />
+    </>
   );
 }

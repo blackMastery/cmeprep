@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { listOrgSubscriptions, requireOrgAdmin, type OrgAdminSession } from "@/lib/orgs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/admin/audit";
@@ -246,8 +247,13 @@ export async function createAssignment(
   );
   // After the target rows exist: the audience helper reads them.
   await notifyAssignmentCreated(admin, created as OrgAssignment);
+  // Both BEFORE redirect(), which throws NEXT_REDIRECT — anything after it
+  // never runs, and the list would render stale.
   revalidateAssignments();
-  return { success: "Assignment created." };
+  // Creating happens on its own page (/org/assignments/new), so success
+  // means leaving it: back to the list, where ?created toasts once. The
+  // form's own success path is for the edit dialog, which stays put.
+  redirect("/org/assignments?created=1");
 }
 
 /**
