@@ -448,8 +448,14 @@ export async function updateAssignment(
     },
     session.org.id
   );
+  // Before redirect(), which throws NEXT_REDIRECT — anything after it
+  // never runs, and the list would render stale.
   revalidateAssignments();
-  return { success: "Assignment updated." };
+  // Editing has its own page, so success means leaving it: back to the
+  // list, where ?updated toasts once. The "No changes to save" return
+  // above deliberately does NOT redirect — nothing happened, and the
+  // admin is probably mid-edit.
+  redirect("/org/assignments?updated=1");
 }
 
 export async function deleteAssignment(

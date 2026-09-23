@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useActionState, useMemo, useState } from "react";
 import {
   createAssignment,
   updateAssignment,
@@ -17,7 +16,6 @@ import {
 import { FormMessage } from "@/components/auth/form-parts";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -57,8 +55,15 @@ export type AssignmentRow = {
   targetIds: string[];
   examId: string;
   examName: string;
-  subjectIds: string[];
-  subjectNames: string[];
+  /** The prescribed subjects, resolved against the FULL catalogue so a
+   * lapsed plan still names them. A subject deleted since is kept as a
+   * placeholder rather than dropped — the prescription still holds its id. */
+  subjects: {
+    id: string;
+    name: string;
+    specialty: string;
+    questionCount: number;
+  }[];
   difficulty: "easy" | "medium" | "hard" | "mixed";
   numQuestions: number;
   mode: Mode;
@@ -86,19 +91,16 @@ function dateInputValue(iso: string): string {
 }
 
 /**
- * One form for both creating and editing, on two surfaces: the edit dialog
- * in the manager, and /org/assignments/new. Field ids default to field
- * names (AdminSelect has no id prop), so only ONE instance may exist at a
- * time — the dialog and the page never coexist.
+ * One form for both creating and editing, on /org/assignments/new and
+ * /org/assignments/[id]/edit. Field ids default to field names (AdminSelect
+ * has no id prop), so only ONE instance may exist per page — each of those
+ * routes mounts exactly one.
  *
- * The action state lives HERE, not in the parent: the dialog unmounts the
- * form on close, so every open starts with a clean form and no stale
- * message from the last save. Errors stay inline next to the fields they
- * concern. How success is reported differs by surface, and that is what
- * `onDone` selects: the DIALOG passes it and closes + toasts (the list
- * behind it re-renders from the revalidated page), while the PAGE passes
- * nothing because createAssignment ends in a redirect back to the list —
- * a server redirect, so nothing here runs afterwards.
+ * Success is a server redirect back to the list, which is why there is no
+ * success handler here: the action throws NEXT_REDIRECT and nothing below
+ * runs. The one success that STAYS is "No changes to save", which is why
+ * FormMessage renders both halves of the state. Errors stay inline next to
+ * the fields they concern.
  *
  * When `editing.started > 0` the prescription is locked (SPEC §7 Editing):
  * the config fields render as a read-only summary plus hidden inputs, so
@@ -110,32 +112,16 @@ export function AssignmentForm({
   members,
   departments,
   editing,
-  onDone,
 }: {
   exams: AssignmentExamOption[];
   members: MemberOption[];
   departments: DepartmentOption[];
   editing: AssignmentRow | null;
-  /** Dialog only. Absent = the page, where the action redirects instead. */
-  onDone?: () => void;
 }) {
   const [state, submit] = useActionState<OrgActionState, FormData>(
     editing ? updateAssignment : createAssignment,
     null
   );
-  // Fires once per success: the revalidated page can re-render the parent
-  // (new onDone identity) before the close commits, and without the guard
-  // that second pass would toast again.
-  const finished = useRef(false);
-  useEffect(() => {
-    if (!onDone) return;
-    if (state?.success && !finished.current) {
-      finished.current = true;
-      toast.success(state.success);
-      onDone();
-    }
-  }, [state, onDone]);
-
   const configLocked = editing !== null && editing.started > 0;
   const initialExamId = editing?.examId ?? exams[0]?.id ?? "";
 
@@ -154,7 +140,7 @@ export function AssignmentForm({
     [editing]
   );
   const initialSubjects = useMemo(
-    () => new Set(editing?.subjectIds ?? []),
+    () => new Set((editing?.subjects ?? []).map((s) => s.id)),
     [editing]
   );
 
@@ -246,11 +232,18 @@ export function AssignmentForm({
             · {editing.difficulty} difficulty
           </p>
           <p className="text-muted-foreground">
-            {editing.subjectNames.join(", ")}
+            {editing.subjects
+              .map((s) => `${s.specialty} · ${s.name}`)
+              .join(", ")}
           </p>
           <input type="hidden" name="examId" value={editing.examId} />
-          {editing.subjectIds.map((id) => (
-            <input key={id} type="hidden" name="subjectIds" value={id} />
+          {editing.subjects.map((subject) => (
+            <input
+              key={subject.id}
+              type="hidden"
+              name="subjectIds"
+              value={subject.id}
+            />
           ))}
           <input type="hidden" name="difficulty" value={editing.difficulty} />
           <input type="hidden" name="numQuestions" value={editing.numQuestions} />
@@ -477,26 +470,21 @@ export function AssignmentForm({
         )}
       </fieldset>
 
-      <FormMessage error={state?.error} />
-      {onDone ? (
-        <DialogFooter className="gap-2 sm:gap-2">
-          <DialogClose asChild>
-            <Button type="button" variant="outline-muted">
-              Cancel
-            </Button>
-          </DialogClose>
-          <AdminSubmit>Save changes</AdminSubmit>
-        </DialogFooter>
-      ) : (
-        // The page has no dialog to close: Cancel is a link back to the
-        // list, the same place a successful create lands.
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline-muted" asChild>
-            <Link href="/org/assignments">Cancel</Link>
-          </Button>
-          <AdminSubmit>Create assignment</AdminSubmit>
-        </div>
-      )}
+      {/* Success shows only when the action did NOT redirect, i.e. "No
+          changes to save" — worth saying in place rather than bouncing the
+          admin back to the list as though something had happened. */}
+      <FormMessage error={state?.error} success={state?.success} />
+      {/* Cancel goes where a successful save goes. */}
+      <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <Button type="button" variant="outline-muted" asChild>
+          <Link href={editing ? `/org/assignments/${editing.id}` : "/org/assignments"}>
+            Cancel
+          </Link>
+        </Button>
+        <AdminSubmit>
+          {editing ? "Save changes" : "Create assignment"}
+        </AdminSubmit>
+      </div>
     </form>
   );
 }

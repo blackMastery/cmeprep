@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireOrgAdmin } from "@/lib/orgs";
-import { loadAssignmentFormOptions } from "@/lib/org-assignment-options";
+import { loadAssignmentFormOptions } from "@/lib/org-assignments-view";
 import { AssignmentForm } from "@/components/org/assignment-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
